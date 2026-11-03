@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pinefall</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="menu" class="screen menu">
+  <div class="card">
+    <div class="logo">
+      <svg viewBox="0 0 64 64" aria-hidden="true"><polygon points="32,4 46,24 39,24 52,40 42,40 56,56 8,56 22,40 12,40 25,24 18,24" fill="#3b7a3f" stroke="#1d3f22" stroke-width="3" stroke-linejoin="round"/><rect x="28" y="56" width="8" height="6" fill="#5b3d24"/><circle cx="46" cy="14" r="5" fill="#d9463e"/></svg>
+      <h1>PINEFALL</h1>
+    </div>
+    <p class="tagline">Top-down battle royale. Loot the cabins, grab a jeep, outlast the red fog.</p>
+    <label class="field"><span>Name</span><input id="name" maxlength="16" placeholder="Player" autocomplete="off" spellcheck="false"></label>
+    <div class="field"><span>Skin</span><div id="skins" class="skins"></div></div>
+    <div class="field"><span>Bots</span><div class="range"><input type="range" id="bots" min="1" max="49" value="29"><b id="botsv">29</b></div></div>
+    <div class="field"><span>Bot skill</span><div class="seg" id="diff"><button data-v="easy">Easy</button><button data-v="normal" class="on">Normal</button><button data-v="hard">Hard</button></div></div>
+    <button id="playSolo" class="btn primary">Play vs Bots</button>
+    <button id="playLan" class="btn" hidden>Join LAN Match</button>
+    <p id="lanNote" class="note"></p>
+    <p id="menuNote" class="note warn"></p>
+    <details class="controls">
+      <summary>Controls</summary>
+      <table>
+        <tr><td>WASD / Arrows</td><td>Move (drive when in a vehicle)</td></tr>
+        <tr><td>Mouse</td><td>Aim, left click to fire / swing / throw</td></tr>
+        <tr><td>1 2 3 4</td><td>Primary, secondary, melee, grenades</td></tr>
+        <tr><td>Q / Wheel</td><td>Swap to last weapon / cycle weapons</td></tr>
+        <tr><td>R</td><td>Reload</td></tr>
+        <tr><td>F or E</td><td>Pick up, swap gun, enter or exit vehicle</td></tr>
+        <tr><td>5 6 7 / H</td><td>Bandage, Med Kit, Energy Drink / best heal</td></tr>
+        <tr><td>X</td><td>Cancel heal or reload</td></tr>
+        <tr><td>V</td><td>Cycle scopes you own</td></tr>
+        <tr><td>Space</td><td>Handbrake while driving</td></tr>
+        <tr><td>M</td><td>Full map</td></tr>
+        <tr><td>Esc</td><td>Pause / menu</td></tr>
+      </table>
+    </details>
+  </div>
+</div>
+
+<div id="overlay" class="screen dim" hidden>
+  <div class="card result">
+    <h2 id="ovTitle"></h2>
+    <p id="ovSub"></p>
+    <div id="ovStats" class="stats"></div>
+    <div class="btns">
+      <button id="ovSpectate" class="btn">Spectate</button>
+      <button id="ovAgain" class="btn primary">Play Again</button>
+      <button id="ovMenu" class="btn">Main Menu</button>
+    </div>
+  </div>
+</div>
+
+<div id="pause" class="screen dim" hidden>
+  <div class="card small">
+    <h2 id="pauseTitle">Paused</h2>
+    <button id="pauseResume" class="btn primary">Resume</button>
+    <button id="pauseSound" class="btn">Sound: On</button>
+    <button id="pauseQuit" class="btn">Quit to Main Menu</button>
+  </div>
+</div>
+
+<div id="lobby" class="screen dim" hidden>
+  <div class="card small">
+    <h2>LAN Match</h2>
+    <p id="lobbyText">Connecting...</p>
+    <button id="lobbyLeave" class="btn">Back to Menu</button>
+  </div>
+</div>
+
+<div id="specbar" class="specbar" hidden>
+  <span>Click or press Next to watch another player</span>
+  <button id="specNext" class="btn">Next</button>
+  <button id="specAgain" class="btn primary">Play Again</button>
+  <button id="specMenu" class="btn">Menu</button>
+</div>
+
+<div id="lobbyBanner" class="banner" hidden></div>
+
+<script src="js/data.js"></script>
+<script src="js/sim.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/render.js"></script>
+<script src="js/client.js"></script>
+</body>
+</html>

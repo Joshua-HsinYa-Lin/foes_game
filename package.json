@@ -1,0 +1,14 @@
+{
+  "name": "pinefall",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Top-down browser battle royale with bots and LAN multiplayer. No dependencies.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node tests/sim_test.js"
+  },
+  "engines": {
+    "node": ">=16"
+  }
+}

@@ -1,0 +1,367 @@
+'use strict';
+// LAN server: serves the game files and runs authoritative matches over WebSockets.
+// Uses only Node.js built-in modules (no npm install needed).
+const http = require('http');
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
+const os = require('os');
+const D = require('./js/data.js');
+const { Sim } = require('./js/sim.js');
+
+const ARGS = process.argv.slice(2);
+function arg(name, def) {
+  const i = ARGS.indexOf('--' + name);
+  return i >= 0 && ARGS[i + 1] ? ARGS[i + 1] : def;
+}
+
+const PORT = Number(process.env.PORT || arg('port', 8080));
+const HOST = arg('host', '0.0.0.0');
+const MATCH_SIZE = Math.max(2, Math.min(60, Number(arg('players', 30))));
+const DIFFICULTY = arg('difficulty', 'normal');
+const LOBBY_SECONDS = Number(arg('lobby', 15));
+const ROOT = __dirname;
+const MAX_FRAME = 64 * 1024;
+const MAX_CLIENTS = 64;
+
+const MIME = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'application/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.png': 'image/png',
+  '.svg': 'image/svg+xml',
+  '.ico': 'image/x-icon'
+};
+const ALLOWED_DIRS = ['', 'js', 'css'];
+
+function serveFile(req, res) {
+  let urlPath;
+  try {
+    urlPath = decodeURIComponent(new URL(req.url, 'http://x').pathname);
+  } catch (e) {
+    res.writeHead(400);
+    res.end('Bad request');
+    return;
+  }
+  if (urlPath === '/') urlPath = '/index.html';
+  const rel = path.normalize(urlPath).replace(/^([/\\])+/, '');
+  const full = path.join(ROOT, rel);
+  const ext = path.extname(full).toLowerCase();
+  const dir = path.dirname(rel) === '.' ? '' : path.dirname(rel);
+  if (!full.startsWith(ROOT + path.sep) || !MIME[ext] || ALLOWED_DIRS.indexOf(dir) < 0 || rel.startsWith('server')) {
+    res.writeHead(404);
+    res.end('Not found');
+    return;
+  }
+  fs.readFile(full, (err, data) => {
+    if (err) {
+      res.writeHead(404);
+      res.end('Not found');
+      return;
+    }
+    res.writeHead(200, { 'Content-Type': MIME[ext], 'Cache-Control': 'no-cache' });
+    res.end(data);
+  });
+}
+
+class WsConn {
+  constructor(socket, onMessage, onClose) {
+    this.socket = socket;
+    this.buf = Buffer.alloc(0);
+    this.frags = [];
+    this.open = true;
+    this.onMessage = onMessage;
+    this.onClose = onClose;
+    socket.setNoDelay(true);
+    socket.on('data', d => this.onData(d));
+    socket.on('close', () => this.closed());
+    socket.on('error', () => this.closed());
+  }
+
+  closed() {
+    if (!this.open) return;
+    this.open = false;
+    this.onClose(this);
+  }
+
+  onData(chunk) {
+    this.buf = Buffer.concat([this.buf, chunk]);
+    while (this.open) {
+      const b = this.buf;
+      if (b.length < 2) return;
+      const fin = (b[0] & 0x80) !== 0;
+      const op = b[0] & 0x0f;
+      const masked = (b[1] & 0x80) !== 0;
+      let len = b[1] & 0x7f;
+      let off = 2;
+      if (len === 126) {
+        if (b.length < 4) return;
+        len = b.readUInt16BE(2);
+        off = 4;
+      } else if (len === 127) {
+        if (b.length < 10) return;
+        const big = b.readBigUInt64BE(2);
+        if (big > BigInt(MAX_FRAME)) {
+          this.close();
+          return;
+        }
+        len = Number(big);
+        off = 10;
+      }
+      if (len > MAX_FRAME || !masked) {
+        this.close();
+        return;
+      }
+      if (b.length < off + 4 + len) return;
+      const mask = b.subarray(off, off + 4);
+      const payload = Buffer.from(b.subarray(off + 4, off + 4 + len));
+      for (let i = 0; i < payload.length; i++) payload[i] ^= mask[i & 3];
+      this.buf = this.buf.subarray(off + 4 + len);
+      if (op === 0x8) {
+        this.close();
+        return;
+      }
+      if (op === 0x9) {
+        this.sendFrame(0xA, payload);
+        continue;
+      }
+      if (op === 0xA) continue;
+      if (op === 0x1 || op === 0x2 || op === 0x0) {
+        this.frags.push(payload);
+        const total = this.frags.reduce((a, f) => a + f.length, 0);
+        if (total > MAX_FRAME) {
+          this.close();
+          return;
+        }
+        if (fin) {
+          const msg = Buffer.concat(this.frags).toString('utf8');
+          this.frags = [];
+          this.onMessage(this, msg);
+        }
+      }
+    }
+  }
+
+  sendFrame(op, payload) {
+    if (!this.open) return;
+    const len = payload.length;
+    let header;
+    if (len < 126) {
+      header = Buffer.from([0x80 | op, len]);
+    } else if (len < 65536) {
+      header = Buffer.alloc(4);
+      header[0] = 0x80 | op;
+      header[1] = 126;
+      header.writeUInt16BE(len, 2);
+    } else {
+      header = Buffer.alloc(10);
+      header[0] = 0x80 | op;
+      header[1] = 127;
+      header.writeBigUInt64BE(BigInt(len), 2);
+    }
+    this.socket.write(Buffer.concat([header, payload]));
+  }
+
+  send(obj) {
+    if (!this.open) return;
+    if (this.socket.writableLength > 2 * 1024 * 1024) return;
+    this.sendFrame(0x1, Buffer.from(JSON.stringify(obj)));
+  }
+
+  close() {
+    if (this.open) {
+      try {
+        this.sendFrame(0x8, Buffer.alloc(0));
+        this.socket.end();
+      } catch (e) {
+        this.socket.destroy();
+      }
+    }
+    this.closed();
+  }
+}
+
+const clients = new Set();
+let sim = null;
+let mapData = null;
+let state = 'lobby';
+let lobbyTimer = LOBBY_SECONDS;
+let endTimer = 0;
+let matchNo = 0;
+
+function humanCount() {
+  let n = 0;
+  for (const c of clients) if (c.joined) n++;
+  return n;
+}
+
+function startMatch() {
+  matchNo++;
+  sim = new Sim({ difficulty: DIFFICULTY });
+  for (const c of clients) {
+    if (!c.joined) continue;
+    c.pid = sim.addPlayer(c.name, false, c.skin);
+    sim.setAspect(c.pid, c.aspect);
+    c.spec = 0;
+    c.spectator = false;
+  }
+  sim.fillBots(MATCH_SIZE);
+  mapData = sim.getMapData();
+  for (const c of clients) {
+    if (c.joined) c.send({ t: 'welcome', id: c.pid, map: mapData, match: matchNo });
+  }
+  state = 'playing';
+  console.log('Match ' + matchNo + ' started: ' + humanCount() + ' human(s), ' + (sim.players.length - humanCount()) + ' bot(s)');
+}
+
+function lateJoin(c) {
+  if (sim.zone.phase === 0 && sim.zone.state === 'wait' && sim.time < 45) {
+    c.pid = sim.addPlayer(c.name, false, c.skin);
+    sim.setAspect(c.pid, c.aspect);
+    c.spectator = false;
+  } else {
+    const alive = sim.players.filter(p => p.alive);
+    c.pid = alive.length ? alive[0].id : sim.players[0].id;
+    c.spectator = true;
+  }
+  c.spec = 0;
+  c.send({ t: 'welcome', id: c.pid, map: mapData, match: matchNo, spectator: c.spectator });
+}
+
+function aliveIds() {
+  return sim.players.filter(p => p.alive).map(p => p.id);
+}
+
+function nextAlive(after) {
+  const ids = aliveIds();
+  if (!ids.length) return 0;
+  const i = ids.indexOf(after);
+  return ids[(i + 1) % ids.length];
+}
+
+function onMessage(c, raw) {
+  let m;
+  try {
+    m = JSON.parse(raw);
+  } catch (e) {
+    return;
+  }
+  if (!m || typeof m !== 'object') return;
+  if (m.t === 'join' && !c.joined) {
+    c.joined = true;
+    c.name = String(m.name || 'Player').slice(0, 16);
+    c.skin = Number.isInteger(m.skin) ? m.skin : 0;
+    c.aspect = Number(m.aspect) || 1.7;
+    console.log('Player joined: ' + c.name + ' (' + c.addr + ')');
+    if (state === 'playing') lateJoin(c);
+    return;
+  }
+  if (!c.joined || !sim || !c.pid) return;
+  if (m.t === 'in') {
+    if (c.spectator) return;
+    sim.setInput(c.pid, m.i);
+    if (Array.isArray(m.a)) {
+      for (const a of m.a.slice(0, 10)) sim.pushAction(c.pid, a);
+    }
+  } else if (m.t === 'aspect') {
+    c.aspect = Number(m.a) || 1.7;
+    if (!c.spectator) sim.setAspect(c.pid, c.aspect);
+  } else if (m.t === 'spec') {
+    const id = Number(m.id);
+    if (sim.playerMap.has(id) && sim.playerMap.get(id).alive) {
+      if (c.spectator) c.pid = id;
+      else c.spec = id;
+    }
+  } else if (m.t === 'specnext') {
+    if (c.spectator) c.pid = nextAlive(c.pid) || c.pid;
+    else c.spec = nextAlive(c.spec || c.pid);
+  }
+}
+
+function onClose(c) {
+  if (!clients.has(c)) return;
+  clients.delete(c);
+  if (c.joined) console.log('Player left: ' + c.name);
+  if (sim && c.pid && !c.spectator && state === 'playing') sim.removePlayer(c.pid);
+}
+
+function tick() {
+  const dt = 1 / D.TICK_RATE;
+  if (state === 'lobby') {
+    const n = humanCount();
+    if (n === 0) {
+      lobbyTimer = LOBBY_SECONDS;
+    } else {
+      lobbyTimer -= dt;
+      if (lobbyTimer <= 0) {
+        startMatch();
+        return;
+      }
+    }
+    if (Math.round(lobbyTimer * D.TICK_RATE) % 6 === 0) {
+      for (const c of clients) if (c.joined) c.send({ t: 'lobby', tl: Math.max(0, lobbyTimer), n });
+    }
+    return;
+  }
+  sim.step(dt);
+  for (const c of clients) {
+    if (!c.joined || !c.pid) continue;
+    if (c.spectator) {
+      const p = sim.playerMap.get(c.pid);
+      if (!p || !p.alive) c.pid = nextAlive(c.pid) || c.pid;
+    } else if (c.spec) {
+      const p = sim.playerMap.get(c.spec);
+      if (!p || !p.alive) c.spec = nextAlive(c.spec) || 0;
+    }
+    const snap = sim.snapshotFor(c.pid, c.spec);
+    if (!snap) continue;
+    if (c.spectator) snap.spec = 1;
+    c.send({ t: 's', s: snap });
+  }
+  if (sim.state === 'ended') {
+    endTimer += dt;
+    if (endTimer > 10) {
+      endTimer = 0;
+      state = 'lobby';
+      lobbyTimer = LOBBY_SECONDS;
+      console.log('Match ' + matchNo + ' finished. Winner: ' + (sim.winner ? sim.winner.name : 'none'));
+    }
+  } else if (humanCount() === 0) {
+    state = 'lobby';
+    lobbyTimer = LOBBY_SECONDS;
+    console.log('All players left; match ' + matchNo + ' stopped.');
+  }
+}
+
+const server = http.createServer(serveFile);
+server.on('upgrade', (req, socket) => {
+  const key = req.headers['sec-websocket-key'];
+  const upgrade = String(req.headers.upgrade || '').toLowerCase();
+  if (upgrade !== 'websocket' || !key || req.url !== '/ws' || clients.size >= MAX_CLIENTS) {
+    socket.destroy();
+    return;
+  }
+  const accept = crypto.createHash('sha1').update(key + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11').digest('base64');
+  socket.write('HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ' + accept + '\r\n\r\n');
+  const c = new WsConn(socket, onMessage, onClose);
+  c.addr = socket.remoteAddress;
+  c.joined = false;
+  c.pid = 0;
+  c.spec = 0;
+  c.spectator = false;
+  clients.add(c);
+});
+
+server.listen(PORT, HOST, () => {
+  console.log(D.TITLE + ' LAN server running.');
+  console.log('  Local:   http://localhost:' + PORT);
+  const nets = os.networkInterfaces();
+  for (const name of Object.keys(nets)) {
+    for (const n of nets[name] || []) {
+      if (n.family === 'IPv4' && !n.internal) console.log('  Network: http://' + n.address + ':' + PORT + '   (share this with friends on your network)');
+    }
+  }
+  console.log('Match size ' + MATCH_SIZE + ' (bots fill empty slots), bot skill ' + DIFFICULTY + '. Press Ctrl+C to stop.');
+});
+
+setInterval(tick, 1000 / D.TICK_RATE);
