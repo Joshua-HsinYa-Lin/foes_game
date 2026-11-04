@@ -164,6 +164,24 @@ const url = 'file://' + path.join(__dirname, '..', 'index.html') + '?debug';
   await sim(() => {
     const s = PF_DEBUG.session.sim;
     const me = s.playerMap.get(PF_DEBUG.session.myId);
+    me.nslots = 4;
+    me.slots = [{ t: 'pan' }, { t: 'rifle', m: 30 }, { t: 'bowl', m: 6 }, { t: 'swordfish' }];
+    me.soups = 3;
+    me.hp = 40;
+    for (const p of s.players) if (p !== me) p.x = (me.x + 2000) % 4000;
+  });
+  await page.keyboard.press('KeyH');
+  await page.waitForTimeout(500);
+  await shot('s12b_four_slots_drinking.png');
+  await page.waitForTimeout(1500);
+  const pouch = await sim(() => {
+    const me = PF_DEBUG.view.me;
+    return { soups: me.so, cap: me.soc, hp: Math.round(me.hp), slots: me.sl.length };
+  });
+  notes.push('after H: ' + JSON.stringify(pouch));
+  await sim(() => {
+    const s = PF_DEBUG.session.sim;
+    const me = s.playerMap.get(PF_DEBUG.session.myId);
     const ring = ['pan', 'cleaver', 'rollingpin', 'wok', 'swordfish', 'chopsticks', 'bowl', 'soup', 'bao', 'bag', 'rifle', 'shotgun'];
     ring.forEach((t, i) => {
       const a = (i / ring.length) * Math.PI * 2;

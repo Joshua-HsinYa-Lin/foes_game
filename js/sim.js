@@ -253,7 +253,7 @@
   }
 
   const RANK = { fists: 0, knife: 1, pistol: 3, uzi: 4, shotgun: 4, pan: 5, cleaver: 5, rollingpin: 5, sniper: 5, rifle: 6, minigun: 6, wok: 6, chopsticks: 6, bowl: 6, harpoon: 7, swordfish: 8 };
-  const VALID_ACTIONS = { slot: 1, cycle: 1, reload: 1, interact: 1, drop: 1, jump: 1, skill: 1 };
+  const VALID_ACTIONS = { slot: 1, cycle: 1, reload: 1, interact: 1, drop: 1, jump: 1, skill: 1, heal: 1 };
   const ALLY_WEAPONS = { yunwang: 'shotgun', luap: 'uzi', auhsoj: 'rifle', meibao: 'chopsticks' };
 
   class Sim {
@@ -786,7 +786,8 @@
         slowT: 0,
         slowMul: 1,
         alive: true,
-        slots: [null, null, null],
+        slots: [null, null, null, null],
+        soups: 0,
         nslots: D.SLOTS,
         act: 0,
         cool: 0,
@@ -956,7 +957,7 @@
       const p = this.playerMap.get(id);
       if (!p || !act || !VALID_ACTIONS[act.a] || p.actions.length > 12) return;
       const a = { a: act.a };
-      if (act.i != null) a.i = clamp(Math.floor(Number(act.i) || 0), -1, 2);
+      if (act.i != null) a.i = clamp(Math.floor(Number(act.i) || 0), -1, 3);
       p.actions.push(a);
     }
 
@@ -990,7 +991,12 @@
       this.ev({ e: 'pick', to: p.id, k, a: args || [], ok: ok ? 1 : 0 });
     }
 
-    // Weapons and soup go into the held slot if empty, then any empty slot, otherwise they replace the held item.
+    soupCap(p) {
+      return D.SOUP_CAP[p.nslots > D.SLOTS ? 1 : 0];
+    }
+
+    // Weapons go into the held slot if empty, then any empty slot, otherwise they replace the held weapon.
+    // Healing items never use weapon slots: soup goes to the medical pouch, dumplings heal on the spot.
     tryPickup(p, it, manual) {
       if (it.t === 'coldbox') {
         if (!this.story || p.team !== 1) return false;
@@ -1017,6 +1023,17 @@
         p.nslots = D.SLOTS_BAG;
         this.removeItem(it);
         this.toPlayer(p, 'pick_bag', [], true);
+        return true;
+      }
+      if (it.t === 'soup') {
+        const cap = this.soupCap(p);
+        if (p.soups >= cap) {
+          if (manual) this.toPlayer(p, 'soupFull');
+          return false;
+        }
+        this.removeItem(it);
+        p.soups++;
+        this.toPlayer(p, 'pick_soup', [p.soups, cap], true);
         return true;
       }
       if (!manual) return false;
@@ -1254,6 +1271,9 @@
         case 'skill':
           this.useSkill(p);
           break;
+        case 'heal':
+          this.drinkSoup(p);
+          break;
       }
     }
 
@@ -1406,18 +1426,15 @@
         p.inject.t += dt;
         if (p.inject.t >= p.inject.total) {
           p.inject = null;
-          const s = p.slots[p.act];
-          if (s && s.t === 'soup') {
-            p.slots[p.act] = null;
+          if (p.soups > 0) {
+            p.soups--;
             this.heal(p, D.ITEMS.soup.heal);
           }
         }
       }
       if (!inp.shoot) p.triggerHeld = false;
-      if (inp.shoot && !p.veh && p.jumpT <= 0 && p.rushT <= 0) {
-        const t = this.activeType(p);
-        if (t === 'soup') this.useSoup(p);
-        else if (isGun(t)) this.fireGun(p);
+      if (inp.shoot && !p.veh && p.jumpT <= 0 && p.rushT <= 0 && !p.inject) {
+        if (isGun(this.activeType(p))) this.fireGun(p);
         else this.swingMelee(p);
       }
 
@@ -1426,7 +1443,7 @@
         const near = q.slice();
         q.length = 0;
         for (const it of near) {
-          if (it.t !== 'bao' && it.t !== 'bag' && it.t !== 'coldbox') continue;
+          if (it.t !== 'bao' && it.t !== 'bag' && it.t !== 'soup' && it.t !== 'coldbox') continue;
           const m = p.r + D.ITEM_R;
           if ((it.x - p.x) * (it.x - p.x) + (it.y - p.y) * (it.y - p.y) < m * m) this.tryPickup(p, it, false);
         }
@@ -1456,9 +1473,17 @@
       }
     }
 
-    useSoup(p) {
-      if (p.inject || p.triggerHeld || p.deploy > 0) return;
-      p.triggerHeld = true;
+    // Drinks one soup from the pouch; pressing again while drinking cancels.
+    drinkSoup(p) {
+      if (!p.alive || p.veh) return;
+      if (p.inject) {
+        p.inject = null;
+        return;
+      }
+      if (p.soups <= 0) {
+        this.toPlayer(p, 'noSoup');
+        return;
+      }
       if (p.hp >= p.maxHp) {
         this.toPlayer(p, 'fullHp');
         return;
@@ -1591,6 +1616,8 @@
         if (s && (p.kind === 'player' || this.rng() < (p.kind === 'boss' ? 1 : 0.35))) this.dropNear(p, s.t, s.m);
         p.slots[i] = null;
       }
+      for (let i = 0; i < p.soups; i++) this.dropNear(p, 'soup');
+      p.soups = 0;
       if (p.nslots > D.SLOTS) this.dropNear(p, 'bag');
       if (p.kind !== 'player' && this.rng() < 0.3) this.dropNear(p, 'bao');
       this.turrets = this.turrets.filter(t => t.owner !== p.id);
@@ -2086,7 +2113,7 @@
       let wr = Infinity;
       for (let i = 0; i < p.nslots; i++) {
         const s = p.slots[i];
-        if (!s || s.t === 'soup') continue;
+        if (!s) continue;
         if (RANK[s.t] < wr) {
           wr = RANK[s.t];
           worst = i;
@@ -2100,21 +2127,13 @@
       return false;
     }
 
-    countType(p, t) {
-      let n = 0;
-      for (let i = 0; i < p.nslots; i++) if (p.slots[i] && p.slots[i].t === t) n++;
-      return n;
-    }
-
     botWant(p, it) {
       if (it.t === 'coldbox') return p.team === 1 ? 9 : 0;
       if (it.t === 'bao') return p.hp < p.maxHp * 0.85 ? 2 + 7 * (1 - p.hp / p.maxHp) : 0;
       if (it.t === 'bag') return p.nslots < D.SLOTS_BAG ? 6 : 0;
-      if (it.t === 'soup') return this.hasEmptySlot(p) && this.countType(p, 'soup') < 2 && this.countType(p, 'soup') < p.nslots - 1 ? 4 : 0;
+      if (it.t === 'soup') return p.soups < this.soupCap(p) ? (p.hp < p.maxHp * 0.7 ? 6 : 3) : 0;
       const r = RANK[it.t] || 0;
-      let weapons = 0;
-      for (let i = 0; i < p.nslots; i++) if (p.slots[i] && p.slots[i].t !== 'soup') weapons++;
-      if (this.hasEmptySlot(p) && weapons < 2) return 6 + r;
+      if (this.hasEmptySlot(p)) return 5 + r;
       const w = this.worstWeaponSlot(p);
       if (w < 0) return 0;
       const wr = RANK[p.slots[w].t];
@@ -2147,14 +2166,11 @@
       let gunRank = -1;
       let meleeSlot = -1;
       let meleeRank = 0;
-      let soupSlot = -1;
       let emptySlot = -1;
       for (let i = 0; i < p.nslots; i++) {
         const s = p.slots[i];
         if (!s) {
           if (emptySlot < 0) emptySlot = i;
-        } else if (s.t === 'soup') {
-          if (soupSlot < 0) soupSlot = i;
         } else if (isGun(s.t)) {
           if (RANK[s.t] > gunRank) {
             gunRank = RANK[s.t];
@@ -2183,10 +2199,10 @@
       const tdist = tgt ? Math.hypot(tgt.x - p.x, tgt.y - p.y) : Infinity;
       const threat = tgt && ai.los && tdist < 600;
 
-      ai.heal = false;
-      if (soupSlot >= 0 && !threat && p.hp < p.maxHp * 0.6) {
+      ai.heal = !!p.inject;
+      if (p.soups > 0 && !threat && !p.inject && p.hp < p.maxHp * 0.6) {
         ai.heal = true;
-        if (p.act !== soupSlot) p.actions.push({ a: 'slot', i: soupSlot });
+        p.actions.push({ a: 'heal' });
       } else if (!p.inject) {
         let want = p.act;
         if (gunSlot >= 0 && (meleeSlot < 0 || tdist > 160 || meleeRank < 5)) want = gunSlot;
@@ -2298,7 +2314,7 @@
         if (cur) {
           ai.goal = [cur.x, cur.y];
           ai.goalKind = 'item';
-          if (Math.hypot(cur.x - p.x, cur.y - p.y) < 50 && isWeapon(cur.t) || (Math.hypot(cur.x - p.x, cur.y - p.y) < 50 && cur.t === 'soup')) {
+          if (Math.hypot(cur.x - p.x, cur.y - p.y) < 50 && isWeapon(cur.t)) {
             let slot = -1;
             for (let i = 0; i < p.nslots; i++) {
               if (!p.slots[i]) {
@@ -2450,9 +2466,7 @@
 
       let want = null;
       let shoot = false;
-      if (ai.heal && t === 'soup') {
-        shoot = !p.inject && !p.triggerHeld;
-      } else if (tgt && tgt.alive && ai.los) {
+      if (tgt && tgt.alive && ai.los) {
         const d = Math.hypot(tgt.x - p.x, tgt.y - p.y);
         const W = D.WEAPONS[t];
         const lead = isGun(t) ? (d / W.speed) * P.lead : 0;
@@ -2491,7 +2505,7 @@
       if (!tg) return null;
       if (tg.vehicle) return { k: 'drive', t: tg.vehicle.t };
       const it = tg.item;
-      if (it.t === 'bao' || it.t === 'bag') return { k: 'pickUp', t: it.t };
+      if (it.t === 'bao' || it.t === 'bag' || it.t === 'soup') return { k: 'pickUp', t: it.t };
       let free = !p.slots[p.act];
       for (let i = 0; i < p.nslots; i++) if (!p.slots[i]) free = true;
       return { k: free ? 'pickUp' : 'swapFor', t: it.t };
@@ -2550,6 +2564,8 @@
         mhp: p.maxHp,
         st: Math.round(p.stamina),
         sl: p.slots.slice(0, p.nslots).map(s => (s ? { t: s.t, m: s.m != null ? s.m : null } : null)),
+        so: p.soups,
+        soc: this.soupCap(p),
         act: p.act,
         rl: p.reload ? clamp(p.reload.t / p.reload.total, 0, 1) : -1,
         inj: p.inject ? clamp(p.inject.t / p.inject.total, 0, 1) : -1,

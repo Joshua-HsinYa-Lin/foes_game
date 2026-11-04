@@ -37,7 +37,7 @@
     bots: SIM.clamp(Number(store.get('bots', 13)) || 13, 1, 29),
     progress: SIM.clamp(Number(store.get('progress', 0)) || 0, 0, D.STORY.length)
   };
-  Sound.initMusic(window.YW_BGM_SRC || 'assets/bgm.mp3');
+  Sound.initMusic(window.YW_BGM_SRC || 'assets/yunwang_theme.mp3');
   Sound.setMusic(prefs.music);
   Sound.setSfx(prefs.sfx);
 
@@ -654,6 +654,8 @@
   function pickText(e) {
     const a = e.a || [];
     switch (e.k) {
+      case 'pick_soup':
+        return I.t('pick_soup', a[0], a[1]);
       case 'pick_heal':
         return I.t('pick_heal', a[0]);
       case 'pick_item':
@@ -768,6 +770,7 @@
     if (!me.sl.some(s => s && D.WEAPONS[s.t])) return I.t('tip_pick');
     if (view.obj.cur === 0) return I.t('tip_attack');
     if (me.su === 0) return I.t('tip_skill');
+    if (me.so > 0 && me.hp < me.mhp * 0.8) return I.t('tip_heal');
     return I.t('tip_crate');
   }
 
@@ -823,6 +826,12 @@
         break;
       case 'Digit3':
         act({ a: 'slot', i: 2 });
+        break;
+      case 'Digit4':
+        act({ a: 'slot', i: 3 });
+        break;
+      case 'KeyH':
+        act({ a: 'heal' });
         break;
       case 'KeyQ':
         act({ a: 'cycle', i: 1 });

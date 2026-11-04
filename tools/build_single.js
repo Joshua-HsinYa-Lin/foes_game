@@ -16,7 +16,7 @@ html = html.replace(linkTag, () => '<style>\n' + css + '</style>');
 const scriptRe = /<script src="(js\/[\w.-]+\.js)"><\/script>/g;
 let count = 0;
 let first = true;
-const musicPath = path.join(root, 'assets', 'bgm.mp3');
+const musicPath = path.join(root, 'assets', 'yunwang_theme.mp3');
 const music = fs.existsSync(musicPath) ? fs.readFileSync(musicPath).toString('base64') : '';
 html = html.replace(scriptRe, (m, rel) => {
   const code = fs.readFileSync(path.join(root, rel), 'utf8');

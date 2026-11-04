@@ -19,8 +19,11 @@
 
   D.ITEM_R = 22;
   D.PICKUP_RANGE = 70;
-  D.SLOTS = 2;
-  D.SLOTS_BAG = 3;
+  // Everyone carries a backpack (3 weapon slots); the thermal bag upgrades it to 4.
+  D.SLOTS = 3;
+  D.SLOTS_BAG = 4;
+  // Chicken soup lives in a separate medical pouch, not in weapon slots: [normal, with thermal bag].
+  D.SOUP_CAP = [3, 5];
 
   D.VIEW_H = 1000;
   D.MAX_ASPECT = 2.6;

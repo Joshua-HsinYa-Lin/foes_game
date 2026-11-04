@@ -85,6 +85,7 @@
     return t;
   }
 
+  const PACK_COL = { yunwang: '#8a5a30', luap: '#3a3a3a', auhsoj: '#4a6b8a', meibao: '#e56f9f' };
   const CAR_COL = ['#e0574a', '#4a8fe0', '#f0c043', '#5cc08a'];
   const BIKE_COL = ['#e07a2e', '#c43d7a', '#4f6fd0', '#2f2f2f'];
   const CONTAINER_COL = ['#c2563f', '#3f78b5', '#3f9a6b', '#d1932f', '#7c5aa6'];
@@ -1389,8 +1390,19 @@
       ctx.scale(sc, sc);
       ctx.rotate(aim);
       if (p.bp) {
-        roundRect(ctx, -PR - 8, -15, 20, 30, 6);
+        roundRect(ctx, -PR - 12, -18, 24, 36, 7);
         fillStroke(ctx, '#f0c043', 4);
+        ctx.fillStyle = '#c9533f';
+        ctx.fillRect(-PR - 9, -3, 18, 6);
+      } else if (PACK_COL[ch]) {
+        roundRect(ctx, -PR - 7, -14, 17, 28, 6);
+        fillStroke(ctx, PACK_COL[ch], 4);
+        ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(-PR - 4, -6);
+        ctx.lineTo(-PR + 6, -6);
+        ctx.stroke();
       }
       const t = p.w;
       const W = D.WEAPONS[t];
@@ -1447,17 +1459,17 @@
         this.hand(ctx, PR * 0.85, PR * 0.55, skin);
         ctx.restore();
         this.hand(ctx, PR * 0.7, -PR * 0.65, skin);
-      } else if (t === 'soup') {
-        this.hand(ctx, PR * 0.7, -PR * 0.65, skin);
-        ctx.save();
-        ctx.translate(PR * 1.05, PR * 0.55);
-        this.drawItemIcon(ctx, 'soup', 6, 0, 0.7);
-        ctx.restore();
-        this.hand(ctx, PR * 0.85, PR * 0.55, skin);
       } else {
         const ext = prog * PR * 0.8;
         this.hand(ctx, PR * 0.72 + (side > 0 ? ext : 0), PR * 0.65 - (side > 0 ? prog * 10 : 0), skin, handCh);
         this.hand(ctx, PR * 0.72 + (side < 0 ? ext : 0), -PR * 0.65 + (side < 0 ? prog * 10 : 0), skin, handCh);
+      }
+      if (p.inj) {
+        ctx.save();
+        ctx.translate(PR * 1.0, 0);
+        ctx.rotate(Math.PI / 2);
+        this.drawItemIcon(ctx, 'soup', 0, 0, 0.6);
+        ctx.restore();
       }
       ctx.restore();
       if (p.inj) {
@@ -1798,6 +1810,12 @@
       ctx.closePath();
       const shirt = { yunwang: '#ffffff', luap: '#d63a32', auhsoj: '#5c6b7a', meibao: '#ff9cc6', captain: '#1f2f4f' }[who] || '#777';
       fillStroke(ctx, shirt, 4);
+      if (PACK_COL[who]) {
+        for (const sx of [-1, 1]) {
+          roundRect(ctx, sx * 24 - 6, 30, 12, 34, 4);
+          fillStroke(ctx, PACK_COL[who], 3);
+        }
+      }
       if (who === 'meibao') {
         circle(ctx, 0, -4, 40);
         fillStroke(ctx, '#3b2418', 4);
@@ -2135,6 +2153,24 @@
           this.outlinedText(ctx, I.t('fists'), x + bw / 2, yy + bh / 2 + 6 * s, 13 * s, 'rgba(255,255,255,0.6)');
         }
         x += bw + gap;
+      }
+
+      if (hud.so != null) {
+        const px = W / 2 + total / 2 + 18 * s;
+        const pw = 72 * s;
+        roundRect(ctx, px, y, pw, bh, 12 * s);
+        ctx.fillStyle = 'rgba(30,30,28,0.55)';
+        ctx.fill();
+        if (hud.so > 0) {
+          ctx.strokeStyle = '#7be07b';
+          ctx.lineWidth = 3;
+          ctx.stroke();
+        }
+        ctx.globalAlpha = hud.so > 0 ? 1 : 0.4;
+        this.drawItemIcon(ctx, 'soup', px + pw / 2, y + bh * 0.42, 0.85 * s);
+        ctx.globalAlpha = 1;
+        this.outlinedText(ctx, 'H', px + 12 * s, y + 20 * s, 14 * s, '#ffffff');
+        this.outlinedText(ctx, I.t('medPouch') + ' ' + hud.so + '/' + hud.soc, px + pw / 2, y + bh - 10 * s, 12 * s, hud.so > 0 ? '#b8f5a0' : 'rgba(255,255,255,0.6)');
       }
 
       if (hud.ch) {

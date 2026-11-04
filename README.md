@@ -38,7 +38,8 @@ Difficulty applies to both modes. Easy is the relaxed way through the story; nor
 
 - Common: fists, knife, pistol, uzi, shotgun, assault rifle, sniper, machine gun.
 - Rare kitchen weapons (gold ring on the ground, extra damage): 平底鍋 frying pan (big knockback), 菜刀 cleaver, 擀麵棍 rolling pin (huge knockback), 中華炒鍋 wok (sets foes on fire), 飛筷 chopsticks (thrown, pierce one target), 飛碗 flying bowl (thrown, bounces off walls), and the legendary 冷凍旗魚 frozen swordfish (80 damage, slows). The captain drops his 魚叉槍 harpoon gun.
-- 小籠包 soup dumplings heal 40 when you walk over them. 雞湯 chicken soup takes a slot and heals 60 when used. 保溫外送袋 thermal bag gives a third slot. 「?」 ingredient crates break open for better loot.
+- Everyone carries a backpack with 3 weapon slots. The 保溫外送袋 thermal bag upgrades it to 4 weapon slots.
+- Healing items never take a weapon slot. 雞湯 chicken soup goes into a separate medical pouch when you walk over it (up to 3, or 5 with the thermal bag); press H to drink one and heal 60. 小籠包 soup dumplings heal 40 on the spot. 「?」 ingredient crates break open for better loot.
 - Delivery vans and scooters can be driven, and they hurt anyone they hit.
 
 ## Controls
@@ -46,13 +47,14 @@ Difficulty applies to both modes. Easy is the relaxed way through the story; nor
 | Key | Action |
 | --- | --- |
 | W A S D | Move; steer when driving |
-| Mouse | Aim; left click attacks or drinks soup |
+| Mouse | Aim; left click attacks |
+| H | Drink chicken soup from the medical pouch (press again to cancel) |
 | Right click / X | Character skill |
 | Space | Run (uses stamina); handbrake when driving |
 | Shift | Jump |
 | F / E | Pick up or swap items, get in or out of vehicles |
 | Q / wheel | Change weapon |
-| 1 2 3 | Select slot (slot 3 needs a thermal bag) |
+| 1 2 3 4 | Select weapon slot (slot 4 needs a thermal bag) |
 | R | Reload |
 | C | Drop the held item |
 | M | Full map |
@@ -83,7 +85,8 @@ Or double-click `start-lan-server.bat` (Windows) / run `./start-lan-server.sh` (
 | `js/render.js` | Canvas renderer, HUD and character portraits |
 | `js/audio.js` | Background music player and synthesized sound effects |
 | `js/client.js` | Menus, story flow, dialogue, input, solo and LAN sessions |
-| `assets/bgm.mp3` | Background music |
+| `assets/yunwang_theme.mp3` | 允望樓 theme, the background music |
+| `assets/bgm.mp3` | Earlier soundtrack, kept for a future feature (not played yet) |
 | `server.js` | LAN server: static files plus a minimal WebSocket implementation |
 | `tools/build_single.js` | Builds `yunwang_paradise.html` with everything inlined |
 | `tests/` | Automated checks |
@@ -100,6 +103,6 @@ node tools/build_single.js
 node tests/sim_test.js
 ```
 
-Runs without dependencies. It checks the map, three full Paradise Brawl rounds, every character skill and passive, the kitchen weapon effects (knockback, burn, slow, bounce, pierce), pickups, friendly fire, and plays each story chapter with an AI-controlled hero to confirm each chapter can be won.
+Runs without dependencies. It checks the map, three full Paradise Brawl rounds, every character skill and passive, the kitchen weapon effects (knockback, burn, slow, bounce, pierce), the backpack slots and medical pouch, pickups, friendly fire, and plays each story chapter with an AI-controlled hero to confirm each chapter can be won.
 
 The browser tests (`tests/browser_test.js`, `tests/scenario_test.js`, `tests/lan_test.js`) drive the real page with Playwright and save screenshots. They are optional and need Playwright, which this project does not install.

@@ -189,17 +189,36 @@ for (const [seed, diff] of [[1, 'normal'], [2, 'hard'], [3, 'easy']]) {
 // ---------- pickups, slots, teams ----------
 {
   const { sim, a } = duel('yunwang', 'luap', { dist: 900 });
-  sim.spawnItem(a.x, a.y, 'cleaver');
-  sim.pushAction(a.id, { a: 'interact' });
+  check(a.nslots === 3, 'everyone starts with a backpack: 3 weapon slots');
+  for (const t of ['cleaver', 'rifle', 'bowl']) {
+    sim.spawnItem(a.x, a.y, t);
+    sim.pushAction(a.id, { a: 'interact' });
+    steps(sim, 1);
+  }
+  check(a.slots[0].t === 'cleaver' && a.slots[1].t === 'rifle' && a.slots[2].t === 'bowl', 'three weapons fit in the backpack');
+  for (let i = 0; i < 4; i++) sim.spawnItem(a.x, a.y, 'soup');
   steps(sim, 1);
-  check(a.slots[0] && a.slots[0].t === 'cleaver', 'F picks up a kitchen weapon');
+  const soupsLeft = [...sim.items.values()].filter(it => it.t === 'soup' && Math.hypot(it.x - a.x, it.y - a.y) < 100).length;
+  check(a.soups === 3 && soupsLeft === 1 && a.slots.every(s => !s || s.t !== 'soup'), 'soup goes to the medical pouch (cap 3), not a weapon slot');
   sim.spawnItem(a.x, a.y, 'bag');
-  steps(sim, 1);
-  check(a.nslots === 3, 'thermal bag unlocks a third slot');
+  steps(sim, 2);
+  check(a.nslots === 4 && sim.soupCap(a) === 5 && a.soups === 4, 'thermal bag gives a 4th weapon slot and room for 5 soups');
+  a.hp = 5;
+  sim.setInput(a.id, { aim: 0, shoot: true });
+  sim.pushAction(a.id, { a: 'heal' });
+  steps(sim, 2);
+  const firedWhileDrinking = sim.bullets.length > 0;
+  steps(sim, 60);
+  sim.setInput(a.id, { aim: 0, shoot: false });
+  check(Math.round(a.hp) >= 5 + 60 * 1.5 && a.soups === 3, 'H drinks one soup and heals 60 (90 with the chef bonus)');
+  check(!firedWhileDrinking, 'attacking is paused while drinking');
   a.hp = 30;
   sim.spawnItem(a.x, a.y, 'bao');
   steps(sim, 1);
   check(Math.round(a.hp) === 30 + 60, 'soup dumplings heal 40, 60 with the chef bonus');
+  sim.killPlayer(a, 0, 'zone');
+  const drops = [...sim.items.values()].filter(it => Math.hypot(it.x - a.x, it.y - a.y) < 120);
+  check(drops.filter(it => it.t === 'soup').length === 3 && drops.some(it => it.t === 'bag'), 'death drops the soups and the thermal bag');
 }
 {
   const sim = new Sim({ mode: 'story', chapter: 'ch3' });
