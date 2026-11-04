@@ -20,8 +20,10 @@ const url = process.argv[3] || 'http://localhost:8099/';
     });
     await page.goto(url);
     await page.waitForTimeout(500);
+    await page.click('#btnLan');
+    await page.click(name === 'Alice' ? '.hero-card:nth-child(1)' : '.hero-card:nth-child(4)');
     await page.fill('#name', name);
-    await page.click('#playLan');
+    await page.click('#heroGo');
     pages.push(page);
   }
   await pages[0].waitForTimeout(1000);

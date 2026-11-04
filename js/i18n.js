@@ -1,0 +1,366 @@
+(function () {
+  'use strict';
+
+  const UI = {
+    zh: {
+      subtitle: '允望樓開幕夜，鹹水幫來搗亂了！',
+      story: '故事模式',
+      storySub: '五個章節，守護招牌食材「允望」',
+      royale: '樂園大亂鬥',
+      royaleSub: '最後站著的人獲勝',
+      lan: '區網對戰',
+      lanSub: '和同一個網路的朋友一起玩',
+      controls: '操作說明',
+      chooseHero: '選擇角色',
+      chooseChapter: '選擇章節',
+      skill: '技能',
+      passive: '被動',
+      name: '名字',
+      bots: '電腦玩家',
+      diff: '難度',
+      easy: '簡單',
+      normal: '普通',
+      hard: '困難',
+      lang: 'Language',
+      music: '音樂',
+      sfx: '音效',
+      on: '開',
+      off: '關',
+      back: '返回',
+      start: '出發！',
+      locked: '尚未解鎖',
+      cleared: '已完成',
+      next: '下一章',
+      retry: '再試一次',
+      menu: '主選單',
+      spectate: '觀戰',
+      playAgain: '再玩一次',
+      nextMatch: '下一場',
+      resume: '繼續',
+      paused: '暫停',
+      quit: '回主選單',
+      leave: '離開對戰',
+      tapContinue: '點擊或按空白鍵繼續',
+      skip: '跳過',
+      lanNoteServed: '同一個網路的朋友打開 {0} 就能加入。',
+      lanNoteLocal: '想和朋友連線？執行 node server.js，再打開它顯示的網址。',
+      connecting: '連線中…',
+      waitingNext: '等待下一場…',
+      lobbyCount: '{0} 秒後開始，已有 {1} 位玩家',
+      disconnected: '與伺服器的連線中斷了。',
+      matchInProgress: '對戰進行中，下一場就會加入你。正在觀看 {0}',
+      spectating: '觀戰中：{0}',
+      specHint: '點擊或按「下一位」觀看其他玩家',
+      nextPlayer: '下一位',
+      alive: '{0} 人存活',
+      kills: '{0} 擊殺',
+      leaderboard: '排行榜',
+      healing: '回復中',
+      fists: '空手',
+      pickUp: '撿起 {0}',
+      swapFor: '交換 {0}',
+      drive: '駕駛 {0}',
+      getOut: '下車',
+      mapClose: '按 M 關閉地圖',
+      skillReady: '技能',
+      obj_kill: '擊退鹹水幫嘍囉 {0}/{1}',
+      obj_collect: '回收冷鏈箱 {0}/{1}',
+      obj_survive: '守住允望樓',
+      obj_eliminate: '剩餘敵人 {0}',
+      obj_boss: '擊敗鹹魚船長',
+      timeLeft: '剩餘 {0}',
+      thawIn: '退冰倒數 {0}',
+      tip_move: 'WASD 移動，空白鍵奔跑，Shift 跳躍',
+      tip_pick: '走到武器上，按 F 撿起來',
+      tip_attack: '左鍵攻擊。廚房的平底鍋特別痛！',
+      tip_skill: '右鍵或 X 施放角色技能',
+      tip_crate: '打破「?」食材箱可以拿到好東西',
+      msg_zone: '冷鏈正在失溫！冷鏈圈開始縮小！',
+      msg_wave: '鹹水幫第 {0} 波來襲！',
+      msg_boss: '鹹魚船長登場！',
+      msg_box: '冷鏈箱 {0}/{1}',
+      pick_heal: '+{0} 生命',
+      pick_bag: '保溫外送袋：可以帶 3 樣東西',
+      pick_item: '{0}',
+      drop: '丟下 {0}',
+      fullHp: '生命已經是滿的',
+      haveBag: '已經有保溫外送袋了',
+      driving: '駕駛 {0}，按 F 下車',
+      kill_by: '{0} 用{2}擊倒了 {1}',
+      kill_zone: '{0} 在退冰區倒下了',
+      kill_left: '{0} 離開了',
+      kill_other: '{0} 倒下了',
+      youKilled: '你擊倒了 {0}',
+      streak2: '雙殺！',
+      streak3: '三殺！',
+      streak4: '大殺特殺！',
+      victory: '勝利！最後站著的人！',
+      outlasted: '你撐過了其他 {0} 位玩家。',
+      placed: '第 {0} 名',
+      eliminatedBy: '被 {0} 擊倒。',
+      chapterClear: '章節完成！',
+      chapterFail: '任務失敗',
+      fail_dead: '你被擊倒了，再來一次！',
+      fail_time: '時間到了，冷鏈箱退冰了……',
+      storyEnd: '全劇終',
+      st_kills: '擊殺',
+      st_damage: '傷害',
+      st_time: '時間',
+      st_place: '名次（共 {0} 人）',
+      vehicleBlast: '爆炸',
+      ctl_move: '移動（開車時控制方向）',
+      ctl_mouse: '瞄準，左鍵攻擊或使用雞湯',
+      ctl_skill: '角色技能',
+      ctl_run: '奔跑（消耗體力）；開車時手煞車',
+      ctl_jump: '跳躍',
+      ctl_f: '撿起／交換物品、上下車',
+      ctl_q: '切換武器',
+      ctl_num: '選擇欄位（第 3 格需要保溫外送袋）',
+      ctl_r: '換彈',
+      ctl_c: '丟下手上的物品',
+      ctl_m: '大地圖',
+      ctl_esc: '暫停／選單',
+      cause_flame: '爆炒烈焰',
+      cause_rush: '旋風連打',
+      cause_turret: '自動砲台',
+      cause_burn: '火焰',
+      cause_vehicle: '車子',
+      cause_explosion: '爆炸',
+      newChapter: '新章節解鎖！',
+      replay: '重玩本章',
+      heroLabel: '主角'
+    },
+    en: {
+      subtitle: 'Opening night at Yunwang Tower, and the Brine Gang is here to ruin it!',
+      story: 'Story Mode',
+      storySub: 'Five chapters to protect the signature ingredient "Yunwang"',
+      royale: 'Paradise Brawl',
+      royaleSub: 'Last one standing wins',
+      lan: 'LAN Battle',
+      lanSub: 'Play with friends on the same network',
+      controls: 'Controls',
+      chooseHero: 'Choose your character',
+      chooseChapter: 'Choose a chapter',
+      skill: 'Skill',
+      passive: 'Passive',
+      name: 'Name',
+      bots: 'Bots',
+      diff: 'Difficulty',
+      easy: 'Easy',
+      normal: 'Normal',
+      hard: 'Hard',
+      lang: '語言',
+      music: 'Music',
+      sfx: 'Sound',
+      on: 'On',
+      off: 'Off',
+      back: 'Back',
+      start: "Let's go!",
+      locked: 'Locked',
+      cleared: 'Cleared',
+      next: 'Next Chapter',
+      retry: 'Try Again',
+      menu: 'Main Menu',
+      spectate: 'Spectate',
+      playAgain: 'Play Again',
+      nextMatch: 'Next Match',
+      resume: 'Resume',
+      paused: 'Paused',
+      quit: 'Quit to Menu',
+      leave: 'Leave Match',
+      tapContinue: 'Click or press Space to continue',
+      skip: 'Skip',
+      lanNoteServed: 'Friends on the same network can open {0} to join.',
+      lanNoteLocal: 'To play with friends, run node server.js and open the address it prints.',
+      connecting: 'Connecting...',
+      waitingNext: 'Waiting for the next match...',
+      lobbyCount: 'Starting in {0}s, {1} player(s) connected',
+      disconnected: 'Lost connection to the server.',
+      matchInProgress: 'Match in progress, you will join the next one. Watching {0}',
+      spectating: 'Spectating {0}',
+      specHint: 'Click or press Next to watch another player',
+      nextPlayer: 'Next',
+      alive: '{0} alive',
+      kills: '{0} kills',
+      leaderboard: 'Leaderboard',
+      healing: 'Healing',
+      fists: 'Fists',
+      pickUp: 'Pick up {0}',
+      swapFor: 'Swap for {0}',
+      drive: 'Drive {0}',
+      getOut: 'Get out',
+      mapClose: 'Press M to close the map',
+      skillReady: 'Skill',
+      obj_kill: 'Defeat the Brine Gang thugs {0}/{1}',
+      obj_collect: 'Recover the cold-chain crates {0}/{1}',
+      obj_survive: 'Defend Yunwang Tower',
+      obj_eliminate: 'Enemies left: {0}',
+      obj_boss: 'Defeat Captain Salted Fish',
+      timeLeft: '{0} left',
+      thawIn: 'Thawing in {0}',
+      tip_move: 'WASD to move, Space to run, Shift to jump',
+      tip_pick: 'Walk onto a weapon and press F to pick it up',
+      tip_attack: 'Left click to attack. Kitchen frying pans hit extra hard!',
+      tip_skill: 'Right click or X uses your character skill',
+      tip_crate: 'Break "?" ingredient crates for good loot',
+      msg_zone: 'The cold chain is failing! The zone is shrinking!',
+      msg_wave: 'Brine Gang wave {0} incoming!',
+      msg_boss: 'Captain Salted Fish has arrived!',
+      msg_box: 'Cold-chain crate {0}/{1}',
+      pick_heal: '+{0} health',
+      pick_bag: 'Thermal Bag: carry 3 items',
+      pick_item: '{0}',
+      drop: 'Dropped {0}',
+      fullHp: 'Already at full health',
+      haveBag: 'You already have a thermal bag',
+      driving: 'Driving the {0}, press F to get out',
+      kill_by: '{0} took out {1} · {2}',
+      kill_zone: '{0} melted in the thaw zone',
+      kill_left: '{0} left',
+      kill_other: '{0} went down',
+      youKilled: 'You took out {0}',
+      streak2: 'Double KO!',
+      streak3: 'Triple KO!',
+      streak4: 'Unstoppable!',
+      victory: 'Victory! Last one standing!',
+      outlasted: 'You outlasted {0} other players.',
+      placed: 'You placed #{0}',
+      eliminatedBy: 'Taken out by {0}.',
+      chapterClear: 'Chapter Clear!',
+      chapterFail: 'Mission Failed',
+      fail_dead: 'You were knocked out. Try again!',
+      fail_time: 'Time ran out and the crates thawed...',
+      storyEnd: 'The End',
+      st_kills: 'Kills',
+      st_damage: 'Damage',
+      st_time: 'Time',
+      st_place: 'Place of {0}',
+      vehicleBlast: 'an explosion',
+      ctl_move: 'Move (steer when driving)',
+      ctl_mouse: 'Aim; left click attacks or drinks soup',
+      ctl_skill: 'Character skill',
+      ctl_run: 'Run (uses stamina); handbrake when driving',
+      ctl_jump: 'Jump',
+      ctl_f: 'Pick up or swap items, get in or out of vehicles',
+      ctl_q: 'Change weapon',
+      ctl_num: 'Select slot (slot 3 needs a thermal bag)',
+      ctl_r: 'Reload',
+      ctl_c: 'Drop the held item',
+      ctl_m: 'Full map',
+      ctl_esc: 'Pause / menu',
+      cause_flame: 'Wok Flame',
+      cause_rush: 'Whirlwind Rush',
+      cause_turret: 'Sentry Turret',
+      cause_burn: 'fire',
+      cause_vehicle: 'a vehicle',
+      cause_explosion: 'an explosion',
+      newChapter: 'New chapter unlocked!',
+      replay: 'Replay Chapter',
+      heroLabel: 'Hero'
+    }
+  };
+
+  // Speakers: narrator, captain, or a character id.
+  const L = (who, zh, en) => ({ who, zh, en });
+
+  const STORY = {
+    titles: {
+      ch1: { zh: '第一章　後廚試煉', en: 'Chapter 1 · The Kitchen Trial' },
+      ch2: { zh: '第二章　冷鏈告急', en: 'Chapter 2 · Cold Chain Emergency' },
+      ch3: { zh: '第三章　價格風暴', en: 'Chapter 3 · The Price Storm' },
+      ch4: { zh: '第四章　跨越雲海', en: 'Chapter 4 · Across the Sea of Clouds' },
+      ch5: { zh: '終章　鹹魚翻身？', en: 'Finale · The Salted Fish Strikes Back?' }
+    },
+    blurbs: {
+      ch1: { zh: '開幕夜的後門有人鬼鬼祟祟。', en: 'Someone is sneaking around the back door on opening night.' },
+      ch2: { zh: '五個冷鏈箱散落樂園，退冰前全部找回來！', en: 'Five cold-chain crates are scattered across the park. Find them before they thaw!' },
+      ch3: { zh: '假客人圍住了允望樓，守住兩分鐘！', en: 'Fake customers surround Yunwang Tower. Hold out for two minutes!' },
+      ch4: { zh: '冷鏈圈正在縮小，擊倒所有鹹水幫！', en: 'The cold-chain zone is shrinking. Take down the whole Brine Gang!' },
+      ch5: { zh: '貨櫃場決戰鹹魚船長！', en: 'Showdown with Captain Salted Fish at the container yard!' }
+    },
+    prologue: [
+      L('narrator', '二〇二六年五月，允望樓貼出了一張公告……', 'May 2026. Yunwang Tower put up a notice...'),
+      L('narrator', '「尋遍天下珍味，方入允望之筵。」招牌食材「允望」，從此全面升級為——全程冷鏈空運直達台灣！', '"Search the world for rare delicacies before they reach the Yunwang feast." The signature ingredient "Yunwang" would now arrive by full cold-chain air freight, direct to Taiwan!'),
+      L('narrator', '據說「允望」是天下最珍貴的食材。也有人說……那其實是一位正在搭飛機回家的年輕主廚。', 'Some say "Yunwang" is the rarest delicacy under heaven. Others say... it is actually a young chef on a flight home.'),
+      L('yunwang', '別管那些傳言了。今晚是允望樂園的開幕夜，大家準備開工！', "Never mind the rumors. Tonight is the grand opening of Yunwang Paradise. Let's get cooking!"),
+      L('captain', '哼……三十年的海運合約，就這樣換成飛機？允望樓，我要讓你們的冷鏈……徹底退冰！', 'Hmph... thirty years of sea-freight contracts, swapped for airplanes? Yunwang Tower, I will make your cold chain thaw for good!')
+    ],
+    ch1: {
+      intro: [
+        L('luap', '後門有幾個穿條紋衫的傢伙鬼鬼祟祟的。', 'A few guys in striped shirts are sneaking around the back door.'),
+        L('auhsoj', '是鹹水幫，鹹魚船長的手下。先熱身一下吧——走到武器上按 F 撿起來。', "That's the Brine Gang, Captain Salted Fish's crew. Warm up first: walk onto a weapon and press F."),
+        L('meibao', '聽說廚房的平底鍋打人特別痛哦。', 'I heard the kitchen frying pans hit extra hard.')
+      ],
+      outro: [
+        L('yunwang', '熱身完畢。這些人可不是來吃飯的。', "Warm-up done. These guys didn't come for dinner."),
+        L('auhsoj', '糟了！冷鏈貨機的追蹤訊號斷了，貨箱掉在樂園各處！', "Uh-oh! The cold-chain cargo plane's tracker cut out. The crates came down all over the park!")
+      ]
+    },
+    ch2: {
+      intro: [
+        L('auhsoj', '一共五個冷鏈箱，每一箱都裝著「允望」。時間一到就會退冰！', 'Five cold-chain crates, each one holding "Yunwang". When the timer runs out, they thaw!'),
+        L('meibao', '退冰的允望……口感會差很多耶。', 'Thawed Yunwang... the texture would be ruined.'),
+        L('yunwang', '那就快點！箱子會發出藍光，小地圖上也看得到。', 'Then hurry! The crates glow blue, and they show up on the minimap.')
+      ],
+      outro: [
+        L('yunwang', '五箱全數回收，溫度完美。', 'All five crates recovered. Temperature: perfect.'),
+        L('captain', '你們以為這樣就贏了？我已經在網路上放話：允望樓漲價是騙局！', "You think you've won? I've already told the whole internet that Yunwang Tower's price hike is a scam!"),
+        L('luap', '……門口怎麼突然排了這麼多人？等等，那些都是鹹水幫假扮的！', '...Why is there suddenly a huge line at the door? Wait, those are Brine Gang in disguise!')
+      ]
+    },
+    ch3: {
+      intro: [
+        L('luap', '我是允望樓的保鑣，這扇門交給我們。', "I'm Yunwang Tower's bouncer. Leave this door to us."),
+        L('yunwang', '撐住兩分鐘！等真正的客人到了，謠言就不攻自破。', 'Hold out for two minutes! Once the real guests arrive, the rumor falls apart by itself.')
+      ],
+      outro: [
+        L('narrator', '真正的饕客陸續入座。第一口「允望」入口，全場安靜了三秒。', 'The real food lovers took their seats. At the first bite of "Yunwang", the whole hall went silent for three seconds.'),
+        L('meibao', '然後大家都說：這個價錢，值得！', 'And then everyone said: worth every penny!'),
+        L('auhsoj', '可是有人切斷了冷凍庫的電源，冷鏈圈正在縮小！', "But someone cut the freezer's power. The cold-chain zone is shrinking!")
+      ]
+    },
+    ch4: {
+      intro: [
+        L('auhsoj', '待在藍色的冷鏈圈裡面。外面是退冰區，會一直扣血。', 'Stay inside the blue cold-chain zone. Outside is the thaw zone, and it keeps draining your health.'),
+        L('yunwang', '鹹水幫全員出動了。一個都別放過！', "The whole Brine Gang is out. Don't let a single one get away!")
+      ],
+      outro: [
+        L('luap', '嘍囉全倒了。船長本人呢？', "The thugs are all down. Where's the captain himself?"),
+        L('captain', '在貨櫃場等你們！來吧，讓你們見識什麼叫「鹹魚翻身」！', "Waiting for you at the container yard! Come on, I'll show you what a salted fish comeback looks like!")
+      ]
+    },
+    ch5: {
+      intro: [
+        L('meibao', '他拿著魚叉槍耶……而且那些貨櫃，都是以前海運用的。', "He's got a harpoon gun... and those containers are all from the old sea-freight days."),
+        L('auhsoj', '他打不過我們四個的。全員集合！', "He can't take all four of us. Everyone, together!"),
+        L('yunwang', '允望樓團隊，開飯了！', 'Yunwang Tower team, dinner is served!')
+      ],
+      outro: [
+        L('captain', '……其實，我只是想再嚐一口「允望」。', '...Truth is, I just wanted one more taste of "Yunwang".'),
+        L('yunwang', '早說嘛。允望樓永遠歡迎客人，乖乖排隊就好。', 'You should have just said so. Yunwang Tower always welcomes guests. Just wait in line like everyone else.'),
+        L('narrator', '那一晚，允望樓高朋滿座，大家共同品嚐了這份跨越雲海的頂級鮮美。', 'That night Yunwang Tower was packed, and everyone shared a taste of that top-grade delicacy that had crossed the sea of clouds.'),
+        L('narrator', '—— 全劇終 ——　感謝遊玩《允望樂園》！', '— The End — Thank you for playing Yunwang Paradise!')
+      ]
+    },
+    speakers: {
+      narrator: { zh: '旁白', en: 'Narrator' },
+      captain: { zh: '鹹魚船長', en: 'Captain Salted Fish' }
+    }
+  };
+
+  const I18N = { UI, STORY, lang: 'zh' };
+
+  I18N.t = function (key) {
+    const table = UI[I18N.lang] || UI.zh;
+    let s = table[key] != null ? table[key] : UI.en[key] != null ? UI.en[key] : key;
+    for (let i = 1; i < arguments.length; i++) s = s.split('{' + (i - 1) + '}').join(String(arguments[i]));
+    return s;
+  };
+
+  I18N.pick = function (obj) {
+    if (!obj) return '';
+    return obj[I18N.lang] != null ? obj[I18N.lang] : obj.en;
+  };
+
+  globalThis.YW_I18N = I18N;
+})();

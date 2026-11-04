@@ -2,16 +2,18 @@
   'use strict';
   const D = globalThis.PF_DATA;
   const SIM = globalThis.PF_SIM;
+  const I = globalThis.YW_I18N;
   const Sound = globalThis.PF_Sound;
+  const Renderer = globalThis.PF_Renderer;
   const $ = id => document.getElementById(id);
 
   const canvas = $('game');
-  const renderer = new globalThis.PF_Renderer(canvas);
+  const renderer = new Renderer(canvas);
 
   const store = {
     get(k, d) {
       try {
-        const v = window.localStorage.getItem('pinefall.' + k);
+        const v = window.localStorage.getItem('yw.' + k);
         return v == null ? d : v;
       } catch (e) {
         return d;
@@ -19,14 +21,27 @@
     },
     set(k, v) {
       try {
-        window.localStorage.setItem('pinefall.' + k, String(v));
+        window.localStorage.setItem('yw.' + k, String(v));
       } catch (e) {
         return;
       }
     }
   };
 
-  const ui = { killfeed: [], notices: [], pickups: [], bigMap: false, mouseX: null, mouseY: null, aim: null, noHud: false };
+  I.lang = store.get('lang', 'zh') === 'en' ? 'en' : 'zh';
+  const prefs = {
+    music: store.get('music', '1') === '1',
+    sfx: store.get('sfx', '1') === '1',
+    char: D.CHARS[store.get('char', 'yunwang')] ? store.get('char', 'yunwang') : 'yunwang',
+    diff: D.BOT_SKILL[store.get('diff', 'normal')] ? store.get('diff', 'normal') : 'normal',
+    bots: SIM.clamp(Number(store.get('bots', 13)) || 13, 1, 29),
+    progress: SIM.clamp(Number(store.get('progress', 0)) || 0, 0, D.STORY.length)
+  };
+  Sound.initMusic(window.YW_BGM_SRC || 'assets/bgm.mp3');
+  Sound.setMusic(prefs.music);
+  Sound.setSfx(prefs.sfx);
+
+  const ui = { killfeed: [], notices: [], pickups: [], bigMap: false, mouseX: null, mouseY: null, aim: null, noHud: false, tip: '' };
   const keys = new Set();
   let mouseDown = false;
   let lastAim = 0;
@@ -38,12 +53,25 @@
   let lastWheel = 0;
   let gameOver = { shown: false, deathAt: 0, startAt: 0, spectating: false };
   let lastOpts = null;
+  let pickMode = 'story';
+  let flow = null;
+  let dlg = null;
+  let lastView = null;
 
-  function weaponName(w) {
-    if (D.WEAPONS[w]) return D.WEAPONS[w].name;
-    if (w === 'explosion') return 'an explosion';
-    if (w === 'vehicle') return 'a vehicle';
-    return w || '';
+  function who(name, nk) {
+    if (nk) {
+      const [k, id] = nk.split(':');
+      if (k === 'foe' && D.FOES[id]) return I.pick(D.FOES[id].name);
+      if (k === 'char' && D.CHARS[id]) return I.pick(D.CHARS[id].name);
+    }
+    return name || '';
+  }
+
+  function causeName(w) {
+    if (D.WEAPONS[w]) return I.pick(D.WEAPONS[w].name);
+    const key = 'cause_' + w;
+    const s = I.t(key);
+    return s === key ? w : s;
   }
 
   // ---------- sessions ----------
@@ -54,13 +82,18 @@
       this.id = ++sessionSeq;
       this.demo = !!o.demo;
       this.opts = o;
-      this.sim = new SIM.Sim({ difficulty: o.difficulty });
-      if (this.demo) {
-        this.sim.fillBots(o.bots);
-        this.myId = this.sim.players[0].id;
+      if (o.mode === 'story') {
+        this.sim = new SIM.Sim({ mode: 'story', chapter: o.chapter, difficulty: o.difficulty });
+        this.myId = this.sim.startStory(o.name, o.char);
       } else {
-        this.myId = this.sim.addPlayer(o.name, false, o.skin);
-        this.sim.fillBots(o.bots + 1);
+        this.sim = new SIM.Sim({ difficulty: o.difficulty });
+        if (this.demo) {
+          this.sim.fillBots(o.bots);
+          this.myId = this.sim.players[0].id;
+        } else {
+          this.myId = this.sim.addPlayer(o.name, false, { char: o.char });
+          this.sim.fillBots(o.bots + 1);
+        }
       }
       this.map = this.sim.getMapData();
       this.mapVersion = 1;
@@ -72,7 +105,7 @@
     }
 
     update(dt, input, actions) {
-      if (this.paused) return;
+      if (this.paused) return null;
       const sim = this.sim;
       if (!this.demo) {
         sim.setInput(this.myId, input);
@@ -83,8 +116,7 @@
         const st = Math.min(rem, 1 / 30);
         sim.step(st);
         rem -= st;
-        const ev = sim.eventsFor(this.myId, this.spec);
-        for (const e of ev) this.events.push(e);
+        for (const e of sim.eventsFor(this.myId, this.spec)) this.events.push(e);
       }
       if (this.demo) {
         const me = sim.playerMap.get(this.myId);
@@ -149,6 +181,7 @@
     out.pl = list(a.pl, b.pl, true);
     out.ve = list(a.ve, b.ve, true);
     out.bu = list(a.bu, b.bu, false);
+    out.tu = list(a.tu || [], b.tu || [], false);
     if (a.cam === b.cam) {
       out.cx = a.cx + (b.cx - a.cx) * f;
       out.cy = a.cy + (b.cy - a.cy) * f;
@@ -169,11 +202,10 @@
       this.myId = 0;
       this.lastSend = 0;
       this.lobby = null;
-      this.closed = false;
       this.handlers = handlers;
       const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       this.ws = new WebSocket(proto + '//' + window.location.host + '/ws');
-      this.ws.onopen = () => this.send({ t: 'join', name: o.name, skin: o.skin, aspect: window.innerWidth / window.innerHeight });
+      this.ws.onopen = () => this.send({ t: 'join', name: o.name, char: o.char, aspect: window.innerWidth / window.innerHeight });
       this.ws.onmessage = m => {
         let msg;
         try {
@@ -184,7 +216,6 @@
         this.onMsg(msg);
       };
       this.ws.onclose = () => {
-        this.closed = true;
         if (this.handlers.onClose) this.handlers.onClose(this);
       };
       this.ws.onerror = () => {};
@@ -283,9 +314,191 @@
 
   // ---------- screens ----------
 
+  const SCREENS = ['title', 'heroes', 'chapters', 'dialogue', 'overlay', 'pause', 'lobby'];
+
   function show(id, on) {
     $(id).hidden = !on;
   }
+
+  function onlyScreen(id) {
+    for (const s of SCREENS) show(s, s === id);
+  }
+
+  function blurFocus() {
+    if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+  }
+
+  function onOff(on) {
+    return on ? I.t('on') : I.t('off');
+  }
+
+  function applyI18n() {
+    document.documentElement.lang = I.lang === 'zh' ? 'zh-Hant' : 'en';
+    for (const el of document.querySelectorAll('[data-i18n]')) el.textContent = I.t(el.dataset.i18n);
+    $('tMusic').textContent = '♪ ' + I.t('music') + ': ' + onOff(prefs.music);
+    $('tSfx').textContent = '🔊 ' + I.t('sfx') + ': ' + onOff(prefs.sfx);
+    $('pauseMusic').textContent = I.t('music') + ': ' + onOff(prefs.music);
+    $('pauseSfx').textContent = I.t('sfx') + ': ' + onOff(prefs.sfx);
+    const served = window.location.protocol === 'http:' || window.location.protocol === 'https:';
+    $('lanNote').textContent = served ? I.t('lanNoteServed', window.location.host) : I.t('lanNoteLocal');
+    renderHeroCards();
+    renderChapters();
+  }
+
+  function renderHeroCards() {
+    const box = $('heroCards');
+    box.innerHTML = '';
+    for (const id of D.CHAR_IDS) {
+      const C = D.CHARS[id];
+      const b = document.createElement('button');
+      b.className = 'hero-card' + (prefs.char === id ? ' on' : '');
+      const cv = document.createElement('canvas');
+      cv.width = 220;
+      cv.height = 220;
+      renderer.drawPortrait(cv.getContext('2d'), id, 0, 0, 220);
+      const name = document.createElement('b');
+      name.textContent = I.pick(C.name);
+      const role = document.createElement('div');
+      role.className = 'role';
+      role.textContent = I.pick(C.role);
+      const desc = document.createElement('div');
+      desc.className = 'desc';
+      const p1 = document.createElement('div');
+      const e1 = document.createElement('em');
+      e1.textContent = I.t('passive') + '｜';
+      p1.appendChild(e1);
+      p1.appendChild(document.createTextNode(I.pick(C.passive)));
+      const p2 = document.createElement('div');
+      const e2 = document.createElement('em');
+      e2.textContent = I.t('skill') + '｜';
+      p2.appendChild(e2);
+      p2.appendChild(document.createTextNode(I.pick(C.skillText)));
+      desc.appendChild(p1);
+      desc.appendChild(p2);
+      b.appendChild(cv);
+      b.appendChild(name);
+      b.appendChild(role);
+      b.appendChild(desc);
+      b.addEventListener('click', () => {
+        prefs.char = id;
+        store.set('char', id);
+        Sound.play('click');
+        renderHeroCards();
+      });
+      box.appendChild(b);
+    }
+  }
+
+  function renderChapters() {
+    const box = $('chapterList');
+    box.innerHTML = '';
+    D.STORY.forEach((ch, i) => {
+      const b = document.createElement('button');
+      b.className = 'chapter';
+      const open = i <= prefs.progress;
+      b.disabled = !open;
+      const num = document.createElement('div');
+      num.className = 'num';
+      num.textContent = String(i + 1);
+      const txt = document.createElement('div');
+      txt.className = 'txt';
+      const t = document.createElement('b');
+      t.textContent = I.pick(I.STORY.titles[ch.id]);
+      const s = document.createElement('span');
+      s.textContent = I.pick(I.STORY.blurbs[ch.id]);
+      txt.appendChild(t);
+      txt.appendChild(s);
+      const st = document.createElement('div');
+      st.className = 'state' + (i < prefs.progress ? ' done' : '');
+      st.textContent = i < prefs.progress ? '✔ ' + I.t('cleared') : open ? '' : '🔒 ' + I.t('locked');
+      b.appendChild(num);
+      b.appendChild(txt);
+      b.appendChild(st);
+      b.addEventListener('click', () => {
+        Sound.play('click');
+        startChapter(i);
+      });
+      box.appendChild(b);
+    });
+  }
+
+  function heroOpts() {
+    const name = $('name').value.trim().slice(0, 16) || I.pick(D.CHARS[prefs.char].name);
+    store.set('name', $('name').value.trim().slice(0, 16));
+    return { name, char: prefs.char, difficulty: prefs.diff, bots: prefs.bots };
+  }
+
+  function openHeroSelect(mode) {
+    pickMode = mode;
+    $('botsRow').hidden = mode !== 'royale';
+    onlyScreen('heroes');
+    renderHeroCards();
+  }
+
+  // ---------- dialogue ----------
+
+  function playDialogue(lines, done) {
+    if (!lines || !lines.length) {
+      if (done) done();
+      return;
+    }
+    dlg = { lines, i: 0, done, shown: 0, full: '' , timer: 0 };
+    show('dialogue', true);
+    Sound.duckMusic(0.6);
+    renderLine();
+  }
+
+  function renderLine() {
+    const L = dlg.lines[dlg.i];
+    const speaker = L.who === 'narrator' || L.who === 'captain' ? I.pick(I.STORY.speakers[L.who]) : I.pick(D.CHARS[L.who].name);
+    $('speaker').textContent = speaker;
+    const pc = $('portrait').getContext('2d');
+    pc.clearRect(0, 0, 240, 240);
+    renderer.drawPortrait(pc, L.who, 10, 14, 220);
+    dlg.full = L[I.lang] || L.en;
+    dlg.shown = 0;
+    $('line').textContent = '';
+    Sound.play('blip');
+    clearInterval(dlg.timer);
+    dlg.timer = setInterval(() => {
+      if (!dlg) return;
+      dlg.shown = Math.min(dlg.full.length, dlg.shown + (I.lang === 'zh' ? 1 : 2));
+      $('line').textContent = dlg.full.slice(0, dlg.shown);
+      if (dlg.shown >= dlg.full.length) clearInterval(dlg.timer);
+    }, 28);
+  }
+
+  function advanceDialogue() {
+    if (!dlg) return;
+    if (dlg.shown < dlg.full.length) {
+      dlg.shown = dlg.full.length;
+      $('line').textContent = dlg.full;
+      clearInterval(dlg.timer);
+      return;
+    }
+    dlg.i++;
+    if (dlg.i >= dlg.lines.length) endDialogue();
+    else renderLine();
+  }
+
+  function endDialogue() {
+    if (!dlg) return;
+    clearInterval(dlg.timer);
+    const done = dlg.done;
+    dlg = null;
+    show('dialogue', false);
+    Sound.duckMusic(1);
+    blurFocus();
+    if (done) done();
+  }
+
+  $('dialogue').addEventListener('click', e => {
+    if (e.target.id === 'dlgSkip') return;
+    advanceDialogue();
+  });
+  $('dlgSkip').addEventListener('click', () => endDialogue());
+
+  // ---------- game flow ----------
 
   function startDemo() {
     if (demo) demo.destroy();
@@ -293,22 +506,18 @@
   }
 
   function resetUi() {
-    if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+    blurFocus();
     ui.killfeed.length = 0;
     ui.notices.length = 0;
     ui.pickups.length = 0;
     ui.bigMap = false;
+    ui.tip = '';
     pendingActions = [];
     gameOver = { shown: false, deathAt: 0, startAt: performance.now(), spectating: false };
     show('overlay', false);
     show('pause', false);
     show('specbar', false);
-  }
-
-  function menuOptions() {
-    const name = $('name').value.trim().slice(0, 16) || 'Player';
-    store.set('name', name);
-    return { name, skin: currentSkin, bots: Number($('bots').value), difficulty: currentDiff };
+    $('lobbyBanner').hidden = true;
   }
 
   function startSolo(opts) {
@@ -321,15 +530,30 @@
     lastOpts = opts;
     resetUi();
     session = new OfflineSession(opts);
-    show('menu', false);
-    show('lobby', false);
+    onlyScreen(null);
     canvas.classList.add('playing');
+  }
+
+  function startChapter(idx) {
+    const ch = D.STORY[idx];
+    const opts = Object.assign(heroOpts(), { mode: 'story', chapter: ch.id });
+    flow = { idx, endAt: 0, handled: false, result: '' };
+    startSolo(opts);
+    session.paused = true;
+    const lines = (idx === 0 ? I.STORY.prologue : []).concat(I.STORY[ch.id].intro);
+    playDialogue(lines, () => {
+      if (!session) return;
+      session.paused = false;
+      renderer.banner(I.pick(I.STORY.titles[ch.id]), '#ffd75e');
+      if (session.sim.players.some(p => p.kind === 'boss')) Sound.play('boss');
+    });
   }
 
   function startOnline(opts) {
     Sound.init();
     if (session) session.destroy();
     lastOpts = opts;
+    flow = null;
     resetUi();
     session = new OnlineSession(opts, {
       onWelcome: () => {
@@ -343,52 +567,45 @@
       onClose: s => {
         if (session !== s) return;
         session = null;
-        backToMenu('Disconnected from the LAN server.');
+        backToMenu(I.t('disconnected'));
       }
     });
-    show('menu', false);
-    show('lobby', true);
-    $('lobbyText').textContent = 'Connecting to server...';
+    onlyScreen('lobby');
+    $('lobbyText').textContent = I.t('connecting');
     canvas.classList.add('playing');
   }
 
   function backToMenu(note) {
     if (session) session.destroy();
     session = null;
+    flow = null;
+    if (dlg) {
+      clearInterval(dlg.timer);
+      dlg = null;
+    }
     resetUi();
-    show('lobby', false);
-    show('menu', true);
+    onlyScreen('title');
     canvas.classList.remove('playing');
     $('menuNote').textContent = note || '';
     Sound.setEngine(false, 0);
+    Sound.duckMusic(1);
+    renderChapters();
     startDemo();
   }
 
   function togglePause() {
-    if (!session) return;
+    if (!session || dlg) return;
     const open = $('pause').hidden;
     show('pause', open);
     if (session.kind === 'offline') session.paused = open;
-    $('pauseTitle').textContent = session.kind === 'offline' ? 'Paused' : 'Menu';
-    $('pauseQuit').textContent = session.kind === 'offline' ? 'Quit to Main Menu' : 'Leave Match';
-    $('pauseSound').textContent = Sound.muted ? 'Sound: Off' : 'Sound: On';
+    $('pauseTitle').textContent = session.kind === 'offline' ? I.t('paused') : I.t('menu');
+    $('pauseQuit').textContent = session.kind === 'offline' ? I.t('quit') : I.t('leave');
+    applyI18n();
   }
 
-  function showGameOver(view, won) {
-    const me = view.me;
-    gameOver.shown = true;
-    const survived = Math.round(((gameOver.deathAt || performance.now()) - gameOver.startAt) / 1000);
-    $('ovTitle').textContent = won ? 'Victory - last one standing!' : 'You placed #' + me.plc;
-    $('ovTitle').className = won ? 'win' : '';
-    let sub = '';
-    if (won) sub = 'You outlasted ' + (view.tot - 1) + ' other players.';
-    else if (me.killer) sub = 'Eliminated by ' + me.killer + '.';
-    $('ovSub').textContent = sub;
-    const mm = Math.floor(survived / 60);
-    const ss = survived % 60;
+  function statCells(rows) {
     $('ovStats').innerHTML = '';
-    const stats = [['Kills', me.k], ['Damage dealt', me.dd], ['Time survived', mm + ':' + (ss < 10 ? '0' : '') + ss], ['Place of ' + view.tot, '#' + (won ? 1 : me.plc)]];
-    for (const [k, v] of stats) {
+    for (const [k, v] of rows) {
       const d = document.createElement('div');
       const b = document.createElement('b');
       b.textContent = String(v);
@@ -398,13 +615,57 @@
       d.appendChild(sp);
       $('ovStats').appendChild(d);
     }
+  }
+
+  function fmt(sec) {
+    sec = Math.max(0, Math.round(sec));
+    return Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0');
+  }
+
+  function showGameOver(view, won) {
+    const me = view.me;
+    gameOver.shown = true;
+    const survived = ((gameOver.deathAt || performance.now()) - gameOver.startAt) / 1000;
+    $('ovTitle').textContent = won ? I.t('victory') : I.t('placed', me.plc);
+    $('ovTitle').className = won ? 'win' : '';
+    $('ovSub').textContent = won ? I.t('outlasted', view.tot - 1) : me.killer || me.killerNk ? I.t('eliminatedBy', me.killerNk === 'zone' ? I.t('kill_zone', '').trim() : who(me.killer, me.killerNk)) : '';
+    statCells([[I.t('st_kills'), me.k], [I.t('st_damage'), me.dd], [I.t('st_time'), fmt(survived)], [I.t('st_place', view.tot), '#' + (won ? 1 : me.plc)]]);
     $('ovSpectate').hidden = won || view.st === 'ended' || view.al === 0;
-    $('ovAgain').textContent = session && session.kind === 'online' ? 'Next Match' : 'Play Again';
+    $('ovAgain').textContent = session && session.kind === 'online' ? I.t('nextMatch') : I.t('playAgain');
     show('overlay', true);
     show('specbar', false);
   }
 
+  function showStoryResult(view) {
+    const won = view.res === 'win';
+    const last = flow.idx === D.STORY.length - 1;
+    flow.result = view.res;
+    $('ovTitle').textContent = won ? (last ? I.t('storyEnd') : I.t('chapterClear')) : I.t('chapterFail');
+    $('ovTitle').className = won ? 'win' : '';
+    $('ovSub').textContent = won ? I.pick(I.STORY.titles[D.STORY[flow.idx].id]) : view.why === 'time' ? I.t('fail_time') : I.t('fail_dead');
+    statCells([[I.t('st_kills'), view.me.k], [I.t('st_damage'), view.me.dd], [I.t('st_time'), fmt(view.t)], [I.t('heroLabel'), I.pick(D.CHARS[prefs.char].name)]]);
+    $('ovSpectate').hidden = true;
+    $('ovAgain').textContent = won ? (last ? I.t('replay') : I.t('next')) : I.t('retry');
+    show('overlay', true);
+  }
+
   // ---------- events ----------
+
+  function pickText(e) {
+    const a = e.a || [];
+    switch (e.k) {
+      case 'pick_heal':
+        return I.t('pick_heal', a[0]);
+      case 'pick_item':
+        return Renderer.itemName(a[0]);
+      case 'drop':
+        return I.t('drop', Renderer.itemName(a[0]));
+      case 'driving':
+        return I.t('driving', I.pick(D.VEHICLES[a[0]].name));
+      default:
+        return I.t(e.k);
+    }
+  }
 
   function handleEvents(view, events) {
     const myId = view.you;
@@ -415,12 +676,21 @@
       const dx = e.x != null ? e.x - cx : 0;
       const dy = e.y != null ? e.y - cy : 0;
       const dist = Math.hypot(dx, dy);
+      const W = D.WEAPONS[e.w];
       switch (e.e) {
         case 'shot':
-          Sound.play('gun', { w: e.w, dist, dx });
+          if (e.w === 'chopsticks') Sound.play('throwChop', { dist, dx });
+          else if (e.w === 'bowl') Sound.play('throwBowl', { dist, dx });
+          else if (e.w === 'harpoon') Sound.play('harpoon', { dist, dx });
+          else if (e.w === 'turret') Sound.play('turret', { dist, dx });
+          else Sound.play('gun', { w: e.w, dist, dx });
           break;
         case 'hit':
-          Sound.play(e.ty === 'p' ? 'hitPlayer' : e.ty === 'v' ? 'hitVeh' : 'hitObj', { dist, dx });
+          if (e.ty === 'p' && (e.w === 'pan' || e.w === 'wok')) Sound.play('bonk', { dist, dx });
+          else if (e.ty === 'p' && (e.w === 'cleaver' || e.w === 'swordfish' || e.w === 'knife')) Sound.play('chop', { dist, dx });
+          else if (e.ty === 'p' && e.w === 'rollingpin') Sound.play('thud', { dist, dx });
+          else if (e.w === 'bowl') Sound.play('ceramic', { dist, dx });
+          else Sound.play(e.ty === 'p' ? 'hitPlayer' : e.ty === 'v' ? 'hitVeh' : 'hitObj', { dist, dx });
           break;
         case 'break':
           Sound.play('break', { dist, dx });
@@ -431,45 +701,74 @@
         case 'swing':
           Sound.play('swing', { dist, dx });
           break;
+        case 'jump':
+          Sound.play('jump', { dist, dx });
+          break;
+        case 'skill':
+          if (e.s === 'flame') Sound.play('flame', { dist, dx });
+          else if (e.s === 'rush') Sound.play('rush', { dist, dx });
+          else if (e.s === 'turret') Sound.play('deploy', { dist, dx });
+          else if (e.s === 'boba' && e.i === myId) Sound.play('boba');
+          break;
+        case 'got':
+          if (e.i === myId && W && W.rare) {
+            renderer.banner('★ ' + Renderer.itemName(e.t) + ' ★', W.legendary ? '#7fd3ff' : '#ffcf3a');
+            Sound.play('rare');
+          }
+          break;
         case 'reload':
           if (e.i === myId) Sound.play('reload');
           break;
         case 'heal':
           if (e.i === myId) Sound.play('heal');
           break;
-        case 'throw':
-          Sound.play('throw', { dist, dx });
-          break;
         case 'crash':
           Sound.play('crash', { dist, dx });
           break;
         case 'pick':
-          ui.pickups.push({ txt: e.txt, t: renderer.time });
+          ui.pickups.push({ txt: pickText(e), t: renderer.time });
           if (ui.pickups.length > 5) ui.pickups.shift();
-          if (e.ok) Sound.play('pickup');
-          else Sound.play('empty');
+          Sound.play(e.ok ? 'pickup' : 'empty');
           break;
-        case 'msg':
-          ui.notices.push({ txt: e.txt, t: renderer.time, col: '#ffb3a8' });
+        case 'streak':
+          renderer.banner(I.t(e.n >= 4 ? 'streak4' : e.n === 3 ? 'streak3' : 'streak2'), '#ff8a5a');
+          Sound.play('streak');
+          break;
+        case 'msg': {
+          const txt = I.t(e.k, ...(e.a || []));
+          ui.notices.push({ txt, t: renderer.time, col: e.k === 'msg_box' ? '#9fdcff' : e.k === 'msg_zone' ? '#ffb38a' : '#ffd75e' });
           if (ui.notices.length > 3) ui.notices.shift();
-          Sound.play('zone');
+          Sound.play(e.k === 'msg_box' ? 'coldbox' : e.k === 'msg_wave' ? 'wave' : e.k === 'msg_boss' ? 'boss' : 'zone');
           break;
+        }
         case 'kill': {
           let txt;
-          if (e.k) txt = e.k + ' eliminated ' + e.v + ' with ' + weaponName(e.w);
-          else if (e.w === 'zone') txt = e.v + ' was caught in the red zone';
-          else if (e.w === 'left') txt = e.v + ' left the match';
-          else txt = e.v + ' was eliminated';
+          const kn = who(e.k, e.knk);
+          const vn = who(e.v, e.vnk);
+          if (kn) txt = I.t('kill_by', kn, vn, causeName(e.w));
+          else if (e.w === 'zone') txt = I.t('kill_zone', vn);
+          else if (e.w === 'left') txt = I.t('kill_left', vn);
+          else txt = I.t('kill_other', vn);
           ui.killfeed.push({ txt, t: renderer.time, mine: e.kid === myId || e.vid === myId });
           if (ui.killfeed.length > 6) ui.killfeed.shift();
           if (e.kid === myId && e.vid !== myId) {
-            ui.notices.push({ txt: 'You eliminated ' + e.v, t: renderer.time, col: '#ffd75e' });
+            ui.notices.push({ txt: I.t('youKilled', vn), t: renderer.time, col: '#ffd75e' });
             Sound.play('kill');
           }
           break;
         }
       }
     }
+  }
+
+  function tipFor(view) {
+    if (view.chap !== 'ch1' || !view.obj || view.st !== 'playing') return '';
+    const me = view.me;
+    if (view.t < 6) return I.t('tip_move');
+    if (!me.sl.some(s => s && D.WEAPONS[s.t])) return I.t('tip_pick');
+    if (view.obj.cur === 0) return I.t('tip_attack');
+    if (me.su === 0) return I.t('tip_skill');
+    return I.t('tip_crate');
   }
 
   // ---------- input ----------
@@ -481,33 +780,33 @@
     if (keys.has('KeyS') || keys.has('ArrowDown')) my += 1;
     if (keys.has('KeyA') || keys.has('ArrowLeft')) mx -= 1;
     if (keys.has('KeyD') || keys.has('ArrowRight')) mx += 1;
-    const cx = renderer.W / 2;
-    const cy = renderer.H / 2;
     let aim = lastAim;
-    let aimDist = 300;
     if (ui.mouseX != null) {
-      aim = Math.atan2(ui.mouseY - cy, ui.mouseX - cx);
-      aimDist = Math.hypot(ui.mouseX - cx, ui.mouseY - cy) / (renderer.zoom || 1);
+      aim = Math.atan2(ui.mouseY - renderer.H / 2, ui.mouseX - renderer.W / 2);
       lastAim = aim;
     }
-    return { mx, my, aim, shoot: mouseDown && !ui.bigMap, aimDist, sprint: keys.has('Space'), brake: keys.has('Space') };
+    return { mx, my, aim, shoot: mouseDown && !ui.bigMap, sprint: keys.has('Space'), brake: keys.has('Space') };
   }
 
   function act(a) {
-    if (!session) return;
-    pendingActions.push(a);
+    if (session) pendingActions.push(a);
   }
 
   function inGame() {
-    return session && $('menu').hidden && $('pause').hidden;
+    return session && !dlg && $('pause').hidden && $('overlay').hidden;
   }
 
   window.addEventListener('keydown', e => {
-    if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT')) {
-      if (e.code === 'Enter' && !$('menu').hidden) $('playSolo').click();
+    if (e.target && e.target.tagName === 'INPUT') {
+      if (e.code === 'Enter' && !$('heroes').hidden) $('heroGo').click();
       return;
     }
     if (e.code === 'Space' || e.code === 'Tab') e.preventDefault();
+    if (dlg) {
+      if (e.code === 'Space' || e.code === 'Enter') advanceDialogue();
+      if (e.code === 'Escape') endDialogue();
+      return;
+    }
     if (e.code === 'Escape') {
       if (session && $('overlay').hidden) togglePause();
       return;
@@ -538,6 +837,9 @@
       case 'KeyC':
         act({ a: 'drop' });
         break;
+      case 'KeyX':
+        act({ a: 'skill' });
+        break;
       case 'ShiftLeft':
       case 'ShiftRight':
         act({ a: 'jump' });
@@ -557,6 +859,8 @@
     mouseDown = false;
   });
 
+  document.addEventListener('pointerdown', () => Sound.init(), { once: false });
+
   canvas.addEventListener('mousemove', e => {
     ui.mouseX = e.clientX;
     ui.mouseY = e.clientY;
@@ -565,7 +869,8 @@
   canvas.addEventListener('mousedown', e => {
     Sound.init();
     if (e.button === 0) mouseDown = true;
-    if (gameOver.spectating && session) session.spectateNext();
+    if (e.button === 2 && inGame()) act({ a: 'skill' });
+    if (gameOver.spectating && session && e.button === 0) session.spectateNext();
   });
 
   window.addEventListener('mouseup', e => {
@@ -592,58 +897,86 @@
 
   // ---------- menu wiring ----------
 
-  let currentSkin = SIM.clamp(Number(store.get('skin', 1)) || 0, 0, D.SKINS.length - 1);
-  let currentDiff = store.get('diff', 'normal');
-  if (!D.BOT_SKILL[currentDiff]) currentDiff = 'normal';
   $('name').value = store.get('name', '');
-  const botsSaved = Number(store.get('botcount', 13));
-  $('bots').value = String(SIM.clamp(botsSaved || 13, 1, 29));
-  $('botsv').textContent = $('bots').value;
+  $('bots').value = String(prefs.bots);
+  $('botsv').textContent = String(prefs.bots);
   $('bots').addEventListener('input', () => {
+    prefs.bots = Number($('bots').value);
     $('botsv').textContent = $('bots').value;
-    store.set('botcount', $('bots').value);
-  });
-  D.SKINS.forEach((c, i) => {
-    const b = document.createElement('button');
-    b.className = 'skin' + (i === currentSkin ? ' on' : '');
-    b.style.background = c;
-    b.title = 'Skin ' + (i + 1);
-    b.addEventListener('click', () => {
-      currentSkin = i;
-      store.set('skin', i);
-      for (const el of document.querySelectorAll('.skin')) el.classList.remove('on');
-      b.classList.add('on');
-    });
-    $('skins').appendChild(b);
+    store.set('bots', prefs.bots);
   });
   for (const b of document.querySelectorAll('#diff button')) {
-    if (b.dataset.v === currentDiff) b.classList.add('on');
-    else b.classList.remove('on');
+    b.classList.toggle('on', b.dataset.v === prefs.diff);
     b.addEventListener('click', () => {
-      currentDiff = b.dataset.v;
-      store.set('diff', currentDiff);
-      for (const el of document.querySelectorAll('#diff button')) el.classList.remove('on');
-      b.classList.add('on');
+      prefs.diff = b.dataset.v;
+      store.set('diff', prefs.diff);
+      for (const el of document.querySelectorAll('#diff button')) el.classList.toggle('on', el === b);
     });
   }
-  $('playSolo').addEventListener('click', () => startSolo(menuOptions()));
   const served = window.location.protocol === 'http:' || window.location.protocol === 'https:';
-  if (served && window.PINEFALL_SERVER !== false) {
-    $('playLan').hidden = false;
-    $('lanNote').textContent = 'Friends on the same network can open ' + window.location.host + ' in their browser and press Join LAN Match.';
-  } else {
-    $('lanNote').textContent = 'For LAN multiplayer, run "node server.js" and open the address it prints.';
-  }
-  $('playLan').addEventListener('click', () => startOnline(menuOptions()));
+  $('btnLan').hidden = !served;
+  $('btnStory').addEventListener('click', () => {
+    Sound.init();
+    Sound.play('click');
+    openHeroSelect('story');
+  });
+  $('btnRoyale').addEventListener('click', () => {
+    Sound.init();
+    Sound.play('click');
+    openHeroSelect('royale');
+  });
+  $('btnLan').addEventListener('click', () => {
+    Sound.init();
+    Sound.play('click');
+    openHeroSelect('lan');
+  });
+  $('heroBack').addEventListener('click', () => onlyScreen('title'));
+  $('heroGo').addEventListener('click', () => {
+    Sound.play('click');
+    if (pickMode === 'story') {
+      onlyScreen('chapters');
+      renderChapters();
+    } else if (pickMode === 'royale') {
+      flow = null;
+      startSolo(Object.assign(heroOpts(), { mode: 'royale' }));
+    } else {
+      startOnline(heroOpts());
+    }
+  });
+  $('chapBack').addEventListener('click', () => openHeroSelect('story'));
+  $('tLang').addEventListener('click', () => {
+    I.lang = I.lang === 'zh' ? 'en' : 'zh';
+    store.set('lang', I.lang);
+    applyI18n();
+  });
+  const toggleMusic = () => {
+    prefs.music = !prefs.music;
+    store.set('music', prefs.music ? 1 : 0);
+    Sound.setMusic(prefs.music);
+    applyI18n();
+  };
+  const toggleSfx = () => {
+    prefs.sfx = !prefs.sfx;
+    store.set('sfx', prefs.sfx ? 1 : 0);
+    Sound.setSfx(prefs.sfx);
+    applyI18n();
+  };
+  $('tMusic').addEventListener('click', toggleMusic);
+  $('tSfx').addEventListener('click', toggleSfx);
+  $('pauseMusic').addEventListener('click', toggleMusic);
+  $('pauseSfx').addEventListener('click', toggleSfx);
   $('ovAgain').addEventListener('click', () => {
     if (!session) return;
-    if (session.kind === 'offline') {
+    if (flow) {
+      const next = flow.result === 'win' && flow.idx < D.STORY.length - 1 ? flow.idx + 1 : flow.idx;
+      startChapter(next);
+    } else if (session.kind === 'offline') {
       startSolo(lastOpts);
     } else {
       show('overlay', false);
       show('specbar', false);
       show('lobby', true);
-      $('lobbyText').textContent = 'Waiting for the next match...';
+      $('lobbyText').textContent = I.t('waitingNext');
       gameOver.spectating = false;
     }
   });
@@ -651,33 +984,26 @@
   $('ovSpectate').addEventListener('click', () => {
     if (!session || !lastView) return;
     const k = lastView.me.killerId;
-    const killerAlive = k && lastView.pl.some(p => p.i === k && !p.d);
-    if (killerAlive) session.spectate(k);
+    if (k && lastView.pl.some(p => p.i === k && !p.d)) session.spectate(k);
     else session.spectateNext();
     gameOver.spectating = true;
     show('overlay', false);
     show('specbar', true);
-    if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+    $('specAgain').textContent = session.kind === 'online' ? I.t('nextMatch') : I.t('playAgain');
+    blurFocus();
   });
   $('specNext').addEventListener('click', () => session && session.spectateNext());
   $('specAgain').addEventListener('click', () => $('ovAgain').click());
   $('specMenu').addEventListener('click', () => backToMenu(''));
   $('pauseResume').addEventListener('click', () => {
     togglePause();
-    if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+    blurFocus();
   });
   $('pauseQuit').addEventListener('click', () => backToMenu(''));
-  $('pauseSound').addEventListener('click', () => {
-    Sound.setMuted(!Sound.muted);
-    store.set('muted', Sound.muted ? 1 : 0);
-    $('pauseSound').textContent = Sound.muted ? 'Sound: Off' : 'Sound: On';
-  });
   $('lobbyLeave').addEventListener('click', () => backToMenu(''));
-  Sound.setMuted(store.get('muted', '0') === '1');
 
   // ---------- main loop ----------
 
-  let lastView = null;
   let last = performance.now();
 
   function frame(now) {
@@ -689,7 +1015,7 @@
       const input = buildInput();
       const actions = pendingActions;
       pendingActions = [];
-      const res = active.update(dt, input, isDemo ? [] : actions);
+      const res = active.update(dt, input, isDemo || dlg ? [] : actions);
       if (res === 'restart' && isDemo) startDemo();
       const cur = session || demo;
       const view = cur.map ? cur.view(now) : null;
@@ -708,15 +1034,14 @@
             o.dead = ob[1] <= 0;
           }
         }
-        if (view.cam !== view.you) {
+        if (view.cam !== view.you || view.spec) {
           const c = view.pl.find(p => p.i === view.cam);
-          view.specName = c ? c.n : '';
-        } else if (view.spec) {
-          view.specName = view.me && view.pl.find(p => p.i === view.cam) ? view.pl.find(p => p.i === view.cam).n : '';
+          view.specName = c ? Renderer.nameOf(c) : '';
         }
         if (!isDemo) handleEvents(view, view.ev);
         ui.noHud = isDemo;
         ui.aim = !isDemo && view.me.alive && !view.me.veh ? input.aim : null;
+        ui.tip = isDemo ? '' : tipFor(view);
         renderer.draw(view, ui, cur.paused ? 0 : dt);
         if (!isDemo) {
           afterFrame(view);
@@ -725,12 +1050,12 @@
       } else if (!isDemo) {
         const ctx = renderer.ctx;
         ctx.setTransform(1, 0, 0, 1, 0, 0);
-        ctx.fillStyle = '#22331d';
+        ctx.fillStyle = '#1d2a18';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
       }
       if (session && session.kind === 'online' && session.lobby && !$('lobby').hidden) {
         const l = session.lobby;
-        $('lobbyText').textContent = l.msg || ('Next match starts in ' + Math.ceil(l.tl) + 's - ' + l.n + ' player' + (l.n === 1 ? '' : 's') + ' connected');
+        $('lobbyText').textContent = I.t('lobbyCount', Math.ceil(l.tl), l.n);
       }
     }
     requestAnimationFrame(frame);
@@ -744,11 +1069,32 @@
     } else {
       Sound.setEngine(false, 0);
     }
+    if (view.mode === 'story' && flow) {
+      if (view.st === 'ended' && !flow.handled) {
+        const now = performance.now();
+        if (!flow.endAt) {
+          flow.endAt = now;
+          Sound.play(view.res === 'win' ? 'win' : 'lose');
+        }
+        if (now - flow.endAt > 1400) {
+          flow.handled = true;
+          if (view.res === 'win') {
+            const chId = D.STORY[flow.idx].id;
+            prefs.progress = Math.max(prefs.progress, flow.idx + 1);
+            store.set('progress', prefs.progress);
+            playDialogue(I.STORY[chId].outro, () => showStoryResult(lastView || view));
+          } else {
+            showStoryResult(view);
+          }
+        }
+      }
+      return;
+    }
     if (view.spec) {
       show('specbar', false);
       if (!gameOver.shown) {
         $('lobbyBanner').hidden = false;
-        $('lobbyBanner').textContent = 'Match in progress - you will join the next one. Spectating ' + (view.specName || '');
+        $('lobbyBanner').textContent = I.t('matchInProgress', view.specName || '');
       }
       return;
     }
@@ -756,10 +1102,14 @@
     if (!me.alive && !gameOver.deathAt) gameOver.deathAt = performance.now();
     const won = view.st === 'ended' && view.winId === view.you;
     if (!gameOver.shown) {
-      if (won && renderer.time > 0) {
-        if (!gameOver.wonAt) gameOver.wonAt = performance.now();
+      if (won) {
+        if (!gameOver.wonAt) {
+          gameOver.wonAt = performance.now();
+          Sound.play('win');
+        }
         if (performance.now() - gameOver.wonAt > 1200) showGameOver(view, true);
       } else if (!me.alive && performance.now() - gameOver.deathAt > 1400) {
+        Sound.play('lose');
         showGameOver(view, false);
       }
     } else if (gameOver.spectating && view.st === 'ended') {
@@ -779,10 +1129,18 @@
       },
       get view() {
         return lastView;
-      }
+      },
+      get dialogue() {
+        return dlg;
+      },
+      startChapter,
+      advanceDialogue,
+      endDialogue
     };
   }
 
+  applyI18n();
+  onlyScreen('title');
   startDemo();
   requestAnimationFrame(frame);
 })();

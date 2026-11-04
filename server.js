@@ -1,5 +1,5 @@
 'use strict';
-// LAN server: serves the game files and runs authoritative matches over WebSockets.
+// LAN server for Yunwang Paradise: serves the game files and runs Paradise Brawl matches over WebSockets.
 // Uses only Node.js built-in modules (no npm install needed).
 const http = require('http');
 const fs = require('fs');
@@ -30,9 +30,10 @@ const MIME = {
   '.css': 'text/css; charset=utf-8',
   '.png': 'image/png',
   '.svg': 'image/svg+xml',
-  '.ico': 'image/x-icon'
+  '.ico': 'image/x-icon',
+  '.mp3': 'audio/mpeg'
 };
-const ALLOWED_DIRS = ['', 'js', 'css'];
+const ALLOWED_DIRS = ['', 'js', 'css', 'assets'];
 
 function serveFile(req, res) {
   let urlPath;
@@ -200,7 +201,7 @@ function startMatch() {
   sim = new Sim({ difficulty: DIFFICULTY });
   for (const c of clients) {
     if (!c.joined) continue;
-    c.pid = sim.addPlayer(c.name, false, c.skin);
+    c.pid = sim.addPlayer(c.name, false, { char: c.char });
     sim.setAspect(c.pid, c.aspect);
     c.spec = 0;
     c.spectator = false;
@@ -216,7 +217,7 @@ function startMatch() {
 
 function lateJoin(c) {
   if (sim.time < 40) {
-    c.pid = sim.addPlayer(c.name, false, c.skin);
+    c.pid = sim.addPlayer(c.name, false, { char: c.char });
     sim.setAspect(c.pid, c.aspect);
     c.spectator = false;
   } else {
@@ -250,7 +251,7 @@ function onMessage(c, raw) {
   if (m.t === 'join' && !c.joined) {
     c.joined = true;
     c.name = String(m.name || 'Player').slice(0, 16);
-    c.skin = Number.isInteger(m.skin) ? m.skin : 0;
+    c.char = D.CHARS[m.char] ? m.char : 'yunwang';
     c.aspect = Number(m.aspect) || 1.7;
     console.log('Player joined: ' + c.name + ' (' + c.addr + ')');
     if (state === 'playing') lateJoin(c);

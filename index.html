@@ -1,45 +1,95 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-Hant">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Pinefall</title>
+<title>允望樂園 Yunwang Paradise</title>
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
 <canvas id="game"></canvas>
 
-<div id="menu" class="screen menu">
-  <div class="card">
+<div id="title" class="screen menu">
+  <div class="card wide">
     <div class="logo">
-      <svg viewBox="0 0 64 64" aria-hidden="true"><polygon points="32,4 46,24 39,24 52,40 42,40 56,56 8,56 22,40 12,40 25,24 18,24" fill="#3b7a3f" stroke="#1d3f22" stroke-width="3" stroke-linejoin="round"/><rect x="28" y="56" width="8" height="6" fill="#5b3d24"/><circle cx="46" cy="14" r="5" fill="#d9463e"/></svg>
-      <h1>PINEFALL</h1>
+      <div class="seal">允望<br>樓</div>
+      <div>
+        <h1>允望樂園</h1>
+        <div class="logo-en">YUNWANG PARADISE</div>
+      </div>
     </div>
-    <p class="tagline">Grab a weapon, take out your foes, stay out of the red zone. Last one standing wins the round.</p>
-    <label class="field"><span>Name</span><input id="name" maxlength="16" placeholder="Player" autocomplete="off" spellcheck="false"></label>
-    <div class="field"><span>Skin</span><div id="skins" class="skins"></div></div>
-    <div class="field"><span>Bots</span><div class="range"><input type="range" id="bots" min="1" max="29" value="13"><b id="botsv">13</b></div></div>
-    <div class="field"><span>Bot skill</span><div class="seg" id="diff"><button data-v="easy">Easy</button><button data-v="normal" class="on">Normal</button><button data-v="hard">Hard</button></div></div>
-    <button id="playSolo" class="btn primary">Play vs Bots</button>
-    <button id="playLan" class="btn" hidden>Join LAN Match</button>
+    <p class="tagline" data-i18n="subtitle"></p>
+    <div class="modes">
+      <button id="btnStory" class="mode primary"><b data-i18n="story"></b><span data-i18n="storySub"></span></button>
+      <button id="btnRoyale" class="mode"><b data-i18n="royale"></b><span data-i18n="royaleSub"></span></button>
+      <button id="btnLan" class="mode" hidden><b data-i18n="lan"></b><span data-i18n="lanSub"></span></button>
+    </div>
+    <div class="toggles">
+      <button id="tLang" class="chip">中文 / EN</button>
+      <button id="tMusic" class="chip"></button>
+      <button id="tSfx" class="chip"></button>
+    </div>
     <p id="lanNote" class="note"></p>
     <p id="menuNote" class="note warn"></p>
     <details class="controls">
-      <summary>Controls</summary>
+      <summary data-i18n="controls"></summary>
       <table>
-        <tr><td>WASD / Arrows</td><td>Move (drive when in a vehicle)</td></tr>
-        <tr><td>Mouse</td><td>Aim, left click to attack or use a syringe</td></tr>
-        <tr><td>Space</td><td>Run (uses stamina); handbrake when driving</td></tr>
-        <tr><td>Shift</td><td>Jump</td></tr>
-        <tr><td>F or E</td><td>Pick up, swap item, get in or out of a vehicle</td></tr>
-        <tr><td>Q / Wheel</td><td>Change weapon</td></tr>
-        <tr><td>1 2 3</td><td>Select slot (slot 3 needs a backpack)</td></tr>
-        <tr><td>R</td><td>Reload</td></tr>
-        <tr><td>C</td><td>Drop held item</td></tr>
-        <tr><td>M</td><td>Full map</td></tr>
-        <tr><td>Esc</td><td>Pause / menu</td></tr>
+        <tr><td>W A S D</td><td data-i18n="ctl_move"></td></tr>
+        <tr><td>Mouse</td><td data-i18n="ctl_mouse"></td></tr>
+        <tr><td>Right click / X</td><td data-i18n="ctl_skill"></td></tr>
+        <tr><td>Space</td><td data-i18n="ctl_run"></td></tr>
+        <tr><td>Shift</td><td data-i18n="ctl_jump"></td></tr>
+        <tr><td>F / E</td><td data-i18n="ctl_f"></td></tr>
+        <tr><td>Q / Wheel</td><td data-i18n="ctl_q"></td></tr>
+        <tr><td>1 2 3</td><td data-i18n="ctl_num"></td></tr>
+        <tr><td>R</td><td data-i18n="ctl_r"></td></tr>
+        <tr><td>C</td><td data-i18n="ctl_c"></td></tr>
+        <tr><td>M</td><td data-i18n="ctl_m"></td></tr>
+        <tr><td>Esc</td><td data-i18n="ctl_esc"></td></tr>
       </table>
     </details>
+  </div>
+</div>
+
+<div id="heroes" class="screen menu" hidden>
+  <div class="card wide">
+    <h2 data-i18n="chooseHero"></h2>
+    <div id="heroCards" class="hero-cards"></div>
+    <div class="form">
+      <label class="field"><span data-i18n="name"></span><input id="name" maxlength="16" placeholder="Player" autocomplete="off" spellcheck="false"></label>
+      <div class="field"><span data-i18n="diff"></span><div class="seg" id="diff"><button data-v="easy" data-i18n="easy"></button><button data-v="normal" data-i18n="normal"></button><button data-v="hard" data-i18n="hard"></button></div></div>
+      <div class="field" id="botsRow"><span data-i18n="bots"></span><div class="range"><input type="range" id="bots" min="1" max="29" value="13"><b id="botsv">13</b></div></div>
+    </div>
+    <div class="btns">
+      <button id="heroBack" class="btn" data-i18n="back"></button>
+      <button id="heroGo" class="btn primary" data-i18n="start"></button>
+    </div>
+  </div>
+</div>
+
+<div id="chapters" class="screen menu" hidden>
+  <div class="card wide">
+    <h2 data-i18n="chooseChapter"></h2>
+    <div id="chapterList" class="chapter-list"></div>
+    <div class="btns">
+      <button id="chapBack" class="btn" data-i18n="back"></button>
+    </div>
+  </div>
+</div>
+
+<div id="dialogue" class="screen dim" hidden>
+  <div class="scroll">
+    <div class="scroll-inner">
+      <canvas id="portrait" width="240" height="240"></canvas>
+      <div class="speech">
+        <div id="speaker" class="speaker"></div>
+        <div id="line" class="line"></div>
+        <div class="dlg-foot">
+          <span class="hint" data-i18n="tapContinue"></span>
+          <button id="dlgSkip" class="chip" data-i18n="skip"></button>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -49,40 +99,42 @@
     <p id="ovSub"></p>
     <div id="ovStats" class="stats"></div>
     <div class="btns">
-      <button id="ovSpectate" class="btn">Spectate</button>
-      <button id="ovAgain" class="btn primary">Play Again</button>
-      <button id="ovMenu" class="btn">Main Menu</button>
+      <button id="ovSpectate" class="btn" data-i18n="spectate"></button>
+      <button id="ovAgain" class="btn primary"></button>
+      <button id="ovMenu" class="btn" data-i18n="menu"></button>
     </div>
   </div>
 </div>
 
 <div id="pause" class="screen dim" hidden>
   <div class="card small">
-    <h2 id="pauseTitle">Paused</h2>
-    <button id="pauseResume" class="btn primary">Resume</button>
-    <button id="pauseSound" class="btn">Sound: On</button>
-    <button id="pauseQuit" class="btn">Quit to Main Menu</button>
+    <h2 id="pauseTitle"></h2>
+    <button id="pauseResume" class="btn primary" data-i18n="resume"></button>
+    <button id="pauseMusic" class="btn"></button>
+    <button id="pauseSfx" class="btn"></button>
+    <button id="pauseQuit" class="btn"></button>
   </div>
 </div>
 
 <div id="lobby" class="screen dim" hidden>
   <div class="card small">
-    <h2>LAN Match</h2>
-    <p id="lobbyText">Connecting...</p>
-    <button id="lobbyLeave" class="btn">Back to Menu</button>
+    <h2 data-i18n="lan"></h2>
+    <p id="lobbyText"></p>
+    <button id="lobbyLeave" class="btn" data-i18n="back"></button>
   </div>
 </div>
 
 <div id="specbar" class="specbar" hidden>
-  <span>Click or press Next to watch another player</span>
-  <button id="specNext" class="btn">Next</button>
-  <button id="specAgain" class="btn primary">Play Again</button>
-  <button id="specMenu" class="btn">Menu</button>
+  <span data-i18n="specHint"></span>
+  <button id="specNext" class="btn" data-i18n="nextPlayer"></button>
+  <button id="specAgain" class="btn primary"></button>
+  <button id="specMenu" class="btn" data-i18n="menu"></button>
 </div>
 
 <div id="lobbyBanner" class="banner" hidden></div>
 
 <script src="js/data.js"></script>
+<script src="js/i18n.js"></script>
 <script src="js/sim.js"></script>
 <script src="js/audio.js"></script>
 <script src="js/render.js"></script>

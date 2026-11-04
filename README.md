@@ -1,92 +1,105 @@
-# Pinefall
+# 允望樂園 Yunwang Paradise
 
-A simple top-down shooter that runs in the browser. Everyone spawns with their fists, grabs weapons lying around the map, and fights to be the last one standing while a red zone closes in. When you die, you wait for the next round.
+A top-down browser shooter set on the opening night of 允望樓 (Yunwang Tower), the restaurant whose signature ingredient 「允望」 is now flown in by full cold-chain air freight, direct to Taiwan. The old sea-freight contractor, 鹹魚船長 (Captain Salted Fish), lost the shipping deal and sends his Brine Gang to ruin the night. Play as the restaurant team, fight through five story chapters, or jump into a last-one-standing brawl.
 
-Pinefall is an original game in the same style as the 2017 browser .io shooters: the name, map generator, art, sounds and code are all new, and it does not copy any specific existing game's look or assets.
+允望樓開幕夜，鹹水幫來搗亂了！選一位角色，打完五個章節的故事，或是在樂園大亂鬥裡當最後站著的人。
 
 ## Play (no install)
 
-Download `pinefall.html` (open it on GitHub and use the **Download raw file** button) and double-click it. It is the whole game in one file and runs fully offline.
+Download `yunwang_paradise.html` (open it on GitHub and use **Download raw file**) and double-click it. It is the whole game in one file, music included, and runs offline in Chrome, Edge or Firefox.
 
-Alternatively, download the repository (green **Code** button, then **Download ZIP**), unzip it, and double-click `index.html`.
+Or download the repository and double-click `index.html`.
 
-Enter a name, pick a color, choose the number of bots (13 by default, so 14 players per round) and their skill, and press **Play vs Bots**.
+Music and sound start after your first click (browsers block audio until then). The language button on the title screen switches between 中文 and English.
 
-`pinefall.html` is generated from the source files. After changing anything in `js/`, `css/` or `index.html`, rebuild it with:
+## Characters
 
-```bash
-node tools/build_single.js
-```
+| Character | Role | Passive | Skill (right click or X) |
+| --- | --- | --- | --- |
+| 允望 Yunwang | Head chef | All food and healing +50% | Wok Flame Burst: ring of fire, 40 damage, burns foes, heals you |
+| Luap | Boxer, the restaurant's bouncer | Double fist damage, faster punches, 125 health | Whirlwind Rush: charge forward, knock foes aside for 45 |
+| Auhsoj | Engineer who runs the cold chain | Reloads 40% faster | Sentry Turret: auto-shoots nearby foes for 10 seconds |
+| Meibao | Pastry chef | +12% move speed, +50% stamina regeneration | Boba Boost: heal 30, refill stamina, run faster for 5 seconds |
 
-Chrome, Edge and Firefox are supported. Nothing is installed on your computer, and the game makes no network requests in this mode.
+## Modes
 
-## LAN multiplayer (optional)
+- **故事模式 Story Mode**: five chapters with dialogue between them. Progress is saved in your browser.
+  1. 後廚試煉 The Kitchen Trial: tutorial, defeat 3 thugs.
+  2. 冷鏈告急 Cold Chain Emergency: recover 5 cold-chain crates before they thaw.
+  3. 價格風暴 The Price Storm: defend Yunwang Tower for two minutes against waves of fake customers.
+  4. 跨越雲海 Across the Sea of Clouds: the cold-chain zone shrinks; take down the whole gang.
+  5. 鹹魚翻身？ The Salted Fish Strikes Back?: boss fight against the captain at the container yard, with the whole team.
+- **樂園大亂鬥 Paradise Brawl**: free-for-all against bots (13 by default). The shrinking cold-chain zone pushes everyone together.
+- **區網對戰 LAN Battle**: Paradise Brawl with friends on the same network (see below).
 
-Requires [Node.js](https://nodejs.org) 16 or newer. The server uses only Node's built-in modules, so there is no `npm install` step.
+Difficulty applies to both modes. Easy is the relaxed way through the story; normal makes the finale a real fight.
 
-```bash
-node server.js
-```
+## Weapons and items
 
-Or double-click `start-lan-server.bat` (Windows) / run `./start-lan-server.sh` (macOS, Linux).
-
-The server prints two addresses. Open the `Local` one yourself, and give the `Network` one to friends on the same Wi-Fi or LAN. Everyone presses **Join LAN Match**. A round starts 15 seconds after the first player joins, and bots fill the empty spots. People who join during the first 40 seconds of a round are dropped in; later arrivals spectate until the next round.
-
-Server options:
-
-```bash
-node server.js --port 8080 --players 14 --difficulty normal --lobby 15
-```
-
-`--players` is the round size (humans plus bots, 2 to 30), `--difficulty` is `easy`, `normal` or `hard`, and `--lobby` is the countdown in seconds. Your operating system may ask whether to allow Node.js through the firewall; allow it on private networks for friends to connect. Playing over the internet needs port forwarding on your router and is not covered here.
+- Common: fists, knife, pistol, uzi, shotgun, assault rifle, sniper, machine gun.
+- Rare kitchen weapons (gold ring on the ground, extra damage): 平底鍋 frying pan (big knockback), 菜刀 cleaver, 擀麵棍 rolling pin (huge knockback), 中華炒鍋 wok (sets foes on fire), 飛筷 chopsticks (thrown, pierce one target), 飛碗 flying bowl (thrown, bounces off walls), and the legendary 冷凍旗魚 frozen swordfish (80 damage, slows). The captain drops his 魚叉槍 harpoon gun.
+- 小籠包 soup dumplings heal 40 when you walk over them. 雞湯 chicken soup takes a slot and heals 60 when used. 保溫外送袋 thermal bag gives a third slot. 「?」 ingredient crates break open for better loot.
+- Delivery vans and scooters can be driven, and they hurt anyone they hit.
 
 ## Controls
 
 | Key | Action |
 | --- | --- |
-| W A S D / arrow keys | Move; in a vehicle W/S is gas and reverse, A/D steer |
-| Mouse | Aim; left click attacks, or uses a syringe you are holding |
-| Space | Run (drains the blue stamina bar); handbrake while driving |
-| Shift | Jump (a quick leap, short cooldown) |
-| F or E | Pick up or swap the item you are standing on, get in or out of a vehicle |
-| Q / mouse wheel | Change weapon |
-| 1 2 3 | Select a slot (slot 3 needs a backpack) |
+| W A S D | Move; steer when driving |
+| Mouse | Aim; left click attacks or drinks soup |
+| Right click / X | Character skill |
+| Space | Run (uses stamina); handbrake when driving |
+| Shift | Jump |
+| F / E | Pick up or swap items, get in or out of vehicles |
+| Q / wheel | Change weapon |
+| 1 2 3 | Select slot (slot 3 needs a thermal bag) |
 | R | Reload |
 | C | Drop the held item |
 | M | Full map |
-| Esc | Pause (solo) or menu |
+| Esc | Pause / menu |
 
-## How it plays
+## LAN multiplayer (optional)
 
-- **Slots**: you carry 2 items, or 3 after picking up a backpack. An empty slot means fists. Picking something up puts it in your held slot if it is empty, then in any empty slot, and otherwise swaps it with what you are holding.
-- **Weapons**: Fists, Knife and Sword for close range; Pistol, Uzi, Shotgun, Assault Rifle, Sniper and Machine Gun for range. Guns have magazines and reload automatically when empty; there is no separate ammo to collect.
-- **Healing**: Syringes take up a slot and heal 60 when used. Health packs heal 40 as soon as you walk over them.
-- **Mystery crates**: the boxes marked "?" break when you hit or shoot them and drop better-than-average loot.
-- **Vehicles**: cars and motorbikes. Cars shield the driver from bullets, while motorbike riders take part of the damage. Hitting players at speed hurts them, and wrecked vehicles explode.
-- **Red zone**: the safe circle shrinks as players are eliminated, and after 90 seconds it also closes in over time. Standing in the red area costs 20 health per second.
-- **Bots**: loot weapons, break crates, fight, heal with syringes when it is safe, jump to dodge, and run from the red zone. Skill changes reaction time, aim error, turn speed and sight range.
+Requires [Node.js](https://nodejs.org) 16 or newer. There is no `npm install` step; the server uses only Node's built-in modules.
+
+```bash
+node server.js
+```
+
+Or double-click `start-lan-server.bat` (Windows) / run `./start-lan-server.sh` (macOS, Linux). Open the `Local` address it prints, give the `Network` address to friends on the same Wi-Fi, and everyone picks **區網對戰 LAN Battle**. Options: `--port 8080 --players 14 --difficulty normal --lobby 15`.
+
+## Prototype
+
+`prototype/pinefall.html` is the earlier Foes.io-style prototype (Pinefall), kept as a single playable file. The `main` branch holds that prototype's full source.
 
 ## Project layout
 
 | File | Purpose |
 | --- | --- |
-| `index.html`, `css/style.css` | Page, menus and overlays |
-| `js/data.js` | Weapon, item, vehicle, zone and bot tuning tables |
-| `js/sim.js` | Game simulation: map generation, movement, combat, vehicles, red zone, bots, snapshots. Runs in the browser (solo) and in Node (LAN server) |
-| `js/render.js` | Canvas renderer and HUD |
-| `js/audio.js` | Sound effects synthesized with the Web Audio API (no audio files) |
-| `js/client.js` | Menus, input, solo and LAN sessions, network interpolation |
-| `server.js` | LAN server: static files plus a minimal WebSocket implementation, 30 ticks per second |
+| `index.html`, `css/style.css` | Page, menus, dialogue box and overlays |
+| `js/data.js` | Characters, weapons, items, enemies, zone, bot skill and story chapter tables |
+| `js/i18n.js` | Chinese and English text, including the story script |
+| `js/sim.js` | Game simulation: map, combat, skills, vehicles, zone, bots, story objectives. Runs in the browser and in the LAN server |
+| `js/render.js` | Canvas renderer, HUD and character portraits |
+| `js/audio.js` | Background music player and synthesized sound effects |
+| `js/client.js` | Menus, story flow, dialogue, input, solo and LAN sessions |
+| `assets/bgm.mp3` | Background music |
+| `server.js` | LAN server: static files plus a minimal WebSocket implementation |
+| `tools/build_single.js` | Builds `yunwang_paradise.html` with everything inlined |
 | `tests/` | Automated checks |
 
-## Tests
+After changing anything in `js/`, `css/`, `assets/` or `index.html`, rebuild the single-file version:
 
-Headless simulation test (no dependencies):
+```bash
+node tools/build_single.js
+```
+
+## Tests
 
 ```bash
 node tests/sim_test.js
 ```
 
-It generates maps, plays three full bot rounds, and checks pickups, slot swapping, backpacks, syringes, health packs, reloading, running, jumping, vehicles, the shrinking zone, melee kills and win detection.
+Runs without dependencies. It checks the map, three full Paradise Brawl rounds, every character skill and passive, the kitchen weapon effects (knockback, burn, slow, bounce, pierce), pickups, friendly fire, and plays each story chapter with an AI-controlled hero to confirm each chapter can be won.
 
-The browser tests (`tests/browser_test.js`, `tests/scenario_test.js`, `tests/lan_test.js`) drive the real page with Playwright and save screenshots. They are optional and need Playwright, which this project does not install for you.
+The browser tests (`tests/browser_test.js`, `tests/scenario_test.js`, `tests/lan_test.js`) drive the real page with Playwright and save screenshots. They are optional and need Playwright, which this project does not install.

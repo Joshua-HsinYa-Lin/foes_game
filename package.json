@@ -1,8 +1,8 @@
 {
-  "name": "pinefall",
+  "name": "yunwang-paradise",
   "version": "1.0.0",
   "private": true,
-  "description": "Top-down browser battle royale with bots and LAN multiplayer. No dependencies.",
+  "description": "允望樂園 Yunwang Paradise: top-down browser shooter with a story mode, bots and LAN multiplayer. No dependencies.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
