@@ -22,7 +22,7 @@
     <div class="modes">
       <button id="btnStory" class="mode primary"><b data-i18n="story"></b><span data-i18n="storySub"></span></button>
       <button id="btnRoyale" class="mode"><b data-i18n="royale"></b><span data-i18n="royaleSub"></span></button>
-      <button id="btnLan" class="mode" hidden><b data-i18n="lan"></b><span data-i18n="lanSub"></span></button>
+      <button id="btnLan" class="mode"><b data-i18n="lan"></b><span data-i18n="lanSub"></span></button>
     </div>
     <div class="toggles">
       <button id="tLang" class="chip">中文 / EN</button>
@@ -60,6 +60,7 @@
       <label class="field"><span data-i18n="name"></span><input id="name" maxlength="16" placeholder="Player" autocomplete="off" spellcheck="false"></label>
       <div class="field"><span data-i18n="diff"></span><div class="seg" id="diff"><button data-v="easy" data-i18n="easy"></button><button data-v="normal" data-i18n="normal"></button><button data-v="hard" data-i18n="hard"></button></div></div>
       <div class="field" id="botsRow"><span data-i18n="bots"></span><div class="range"><input type="range" id="bots" min="1" max="29" value="13"><b id="botsv">13</b></div></div>
+      <label class="field" id="serverRow" hidden><span data-i18n="serverAddr"></span><input id="server" maxlength="80" autocomplete="off" spellcheck="false"></label>
     </div>
     <div class="btns">
       <button id="heroBack" class="btn" data-i18n="back"></button>
@@ -118,10 +119,21 @@
 </div>
 
 <div id="lobby" class="screen dim" hidden>
-  <div class="card small">
-    <h2 data-i18n="lan"></h2>
-    <p id="lobbyText"></p>
-    <button id="lobbyLeave" class="btn" data-i18n="back"></button>
+  <div class="card wide">
+    <h2 data-i18n="waitingRoom"></h2>
+    <p id="lobbyText" class="room-status"></p>
+    <p id="lobbyShare" class="note"></p>
+    <div id="roomPlayers" class="room-players"></div>
+    <div class="field room-chars-row"><span data-i18n="changeHero"></span><div id="roomChars" class="room-chars"></div></div>
+    <div id="roomHost" class="form">
+      <div class="field"><span data-i18n="bots"></span><div class="range"><input type="range" id="roomBots" min="0" max="29" value="13"><b id="roomBotsV">13</b></div></div>
+      <div class="field"><span data-i18n="diff"></span><div class="seg" id="roomDiff"><button data-v="easy" data-i18n="easy"></button><button data-v="normal" data-i18n="normal"></button><button data-v="hard" data-i18n="hard"></button></div></div>
+    </div>
+    <p id="roomSummary" class="note"></p>
+    <div class="btns">
+      <button id="lobbyLeave" class="btn" data-i18n="leave"></button>
+      <button id="roomStart" class="btn primary" data-i18n="startMatch"></button>
+    </div>
   </div>
 </div>
 

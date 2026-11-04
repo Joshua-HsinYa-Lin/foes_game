@@ -37,7 +37,8 @@
     bots: SIM.clamp(Number(store.get('bots', 13)) || 13, 1, 29),
     progress: SIM.clamp(Number(store.get('progress', 0)) || 0, 0, D.STORY.length)
   };
-  Sound.initMusic(window.YW_BGM_SRC || 'assets/yunwang_theme.mp3');
+  Sound.initMusic(window.YW_MUSIC || { theme: 'assets/yunwang_theme.mp3', quiet: 'assets/quiet_room.mp3' });
+  const SERVED = window.location.protocol === 'http:' || window.location.protocol === 'https:';
   Sound.setMusic(prefs.music);
   Sound.setSfx(prefs.sfx);
 
@@ -201,10 +202,17 @@
       this.mapVersion = 0;
       this.myId = 0;
       this.lastSend = 0;
-      this.lobby = null;
+      this.room = null;
+      this.everRoom = false;
+      this.addr = o.server || window.location.host;
       this.handlers = handlers;
-      const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      this.ws = new WebSocket(proto + '//' + window.location.host + '/ws');
+      try {
+        this.ws = new WebSocket(wsUrl(o.server));
+      } catch (e) {
+        this.ws = { readyState: 3, send() {}, close() {} };
+        setTimeout(() => this.handlers.onClose && this.handlers.onClose(this), 0);
+        return;
+      }
       this.ws.onopen = () => this.send({ t: 'join', name: o.name, char: o.char, aspect: window.innerWidth / window.innerHeight });
       this.ws.onmessage = m => {
         let msg;
@@ -233,10 +241,12 @@
         this.myId = msg.id;
         this.snaps = [];
         this.offset = null;
-        this.lobby = null;
         if (this.handlers.onWelcome) this.handlers.onWelcome(this);
-      } else if (msg.t === 'lobby') {
-        this.lobby = msg;
+      } else if (msg.t === 'room') {
+        const prev = this.room ? this.room.state : '';
+        this.room = msg;
+        this.everRoom = true;
+        if (this.handlers.onRoom) this.handlers.onRoom(this, prev);
       } else if (msg.t === 's') {
         const s = msg.s;
         const now = performance.now() / 1000;
@@ -302,6 +312,18 @@
       this.send({ t: 'specnext' });
     }
 
+    configure(bots, diff) {
+      this.send({ t: 'cfg', bots, diff });
+    }
+
+    startMatch() {
+      this.send({ t: 'start' });
+    }
+
+    setChar(char) {
+      this.send({ t: 'char', char });
+    }
+
     destroy() {
       this.handlers = {};
       try {
@@ -310,6 +332,14 @@
         return;
       }
     }
+  }
+
+  // Accepts "192.168.1.23", "192.168.1.23:8080" or a pasted http:// link; empty means the server that served this page.
+  function wsUrl(addr) {
+    if (!addr) return (window.location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + window.location.host + '/ws';
+    let a = addr.trim().replace(/^(https?|wss?):\/\//i, '').replace(/\/.*$/, '');
+    if (!/:\d+$/.test(a)) a += ':8080';
+    return 'ws://' + a + '/ws';
   }
 
   // ---------- screens ----------
@@ -341,6 +371,9 @@
     $('pauseSfx').textContent = I.t('sfx') + ': ' + onOff(prefs.sfx);
     const served = window.location.protocol === 'http:' || window.location.protocol === 'https:';
     $('lanNote').textContent = served ? I.t('lanNoteServed', window.location.host) : I.t('lanNoteLocal');
+    $('server').placeholder = I.t('serverHint');
+    roomKey = '';
+    if (!$('lobby').hidden) renderRoom();
     renderHeroCards();
     renderChapters();
   }
@@ -431,6 +464,7 @@
   function openHeroSelect(mode) {
     pickMode = mode;
     $('botsRow').hidden = mode !== 'royale';
+    $('serverRow').hidden = !(mode === 'lan' && !SERVED);
     onlyScreen('heroes');
     renderHeroCards();
   }
@@ -559,20 +593,124 @@
       onWelcome: () => {
         resetUi();
         show('lobby', false);
+        canvas.classList.add('playing');
+        Sound.setMusicMode('playlist', true);
         if (demo) {
           demo.destroy();
           demo = null;
         }
       },
+      onRoom: (s, prev) => {
+        if (session !== s) return;
+        if (prev === 'playing' && s.room.state === 'lobby') {
+          s.map = null;
+          s.snaps = [];
+          showLobby();
+        }
+        renderRoom();
+      },
       onClose: s => {
         if (session !== s) return;
         session = null;
-        backToMenu(I.t('disconnected'));
+        backToMenu(s.everRoom ? I.t('disconnected') : I.t('connectFail', s.addr));
       }
     });
+    showLobby();
+  }
+
+  function showLobby() {
+    gameOver = { shown: false, deathAt: 0, startAt: performance.now(), spectating: false };
+    $('lobbyBanner').hidden = true;
+    show('specbar', false);
     onlyScreen('lobby');
-    $('lobbyText').textContent = I.t('connecting');
-    canvas.classList.add('playing');
+    canvas.classList.remove('playing');
+    Sound.setEngine(false, 0);
+    Sound.setMusicMode('lobby');
+    blurFocus();
+    renderRoom();
+  }
+
+  let roomKey = '';
+  let lastCfgSend = 0;
+
+  function renderRoom() {
+    if (!session || session.kind !== 'online') return;
+    const r = session.room;
+    $('lobbyShare').textContent = I.t('shareAddr', session.addr);
+    if (!r) {
+      $('lobbyText').textContent = I.t('connecting');
+      $('roomPlayers').innerHTML = '';
+      $('roomHost').hidden = true;
+      $('roomStart').hidden = true;
+      $('roomSummary').textContent = '';
+      roomKey = '';
+      return;
+    }
+    const isHost = r.you === r.host;
+    let status = r.state === 'playing' ? I.t('matchRunning') : isHost ? I.t('youAreHost') : I.t('waitingHost');
+    if (r.state === 'lobby' && r.tl >= 0) status += '  ' + I.t('autoStartIn', Math.ceil(r.tl));
+    $('lobbyText').textContent = status;
+    const key = JSON.stringify([r.players, r.host, r.you, I.lang]);
+    if (key !== roomKey) {
+      roomKey = key;
+      const box = $('roomPlayers');
+      box.innerHTML = '';
+      for (const pl of r.players) {
+        const d = document.createElement('div');
+        d.className = 'room-player';
+        const cv = document.createElement('canvas');
+        cv.width = 80;
+        cv.height = 80;
+        renderer.drawPortrait(cv.getContext('2d'), D.CHARS[pl.char] ? pl.char : 'yunwang', 0, 0, 80);
+        const nm = document.createElement('span');
+        nm.className = 'nm';
+        nm.textContent = pl.name;
+        d.appendChild(cv);
+        d.appendChild(nm);
+        for (const [cond, txt, cls] of [[pl.cid === r.host, I.t('hostTag'), 'tag'], [pl.cid === r.you, I.t('youTag'), 'tag you']]) {
+          if (!cond) continue;
+          const t = document.createElement('span');
+          t.className = cls;
+          t.textContent = txt;
+          d.appendChild(t);
+        }
+        box.appendChild(d);
+      }
+      const mine = r.players.find(pl => pl.cid === r.you);
+      const chars = $('roomChars');
+      chars.innerHTML = '';
+      for (const id of D.CHAR_IDS) {
+        const b = document.createElement('button');
+        b.className = mine && mine.char === id ? 'on' : '';
+        b.title = I.pick(D.CHARS[id].name);
+        const cv = document.createElement('canvas');
+        cv.width = 72;
+        cv.height = 72;
+        renderer.drawPortrait(cv.getContext('2d'), id, 0, 0, 72);
+        b.appendChild(cv);
+        b.disabled = r.state !== 'lobby';
+        b.addEventListener('click', () => {
+          prefs.char = id;
+          store.set('char', id);
+          Sound.play('click');
+          if (session && session.kind === 'online') session.setChar(id);
+        });
+        chars.appendChild(b);
+      }
+    }
+    $('roomHost').hidden = false;
+    const slider = $('roomBots');
+    slider.max = String(Math.max(0, r.max - r.players.length));
+    slider.disabled = !isHost || r.state !== 'lobby';
+    if (document.activeElement !== slider) slider.value = String(Math.min(r.bots, Number(slider.max)));
+    $('roomBotsV').textContent = slider.value;
+    for (const b of document.querySelectorAll('#roomDiff button')) {
+      b.classList.toggle('on', b.dataset.v === r.diff);
+      b.disabled = !isHost || r.state !== 'lobby';
+    }
+    $('roomDiff').classList.toggle('locked', !isHost);
+    $('roomSummary').textContent = I.t('roomSummary', r.players.length, r.effBots, r.players.length + r.effBots);
+    $('roomStart').hidden = !isHost || r.state !== 'lobby';
   }
 
   function backToMenu(note) {
@@ -590,7 +728,8 @@
     Sound.setEngine(false, 0);
     Sound.duckMusic(1);
     renderChapters();
-    startDemo();
+    Sound.setMusicMode('playlist');
+    if (!demo) startDemo();
   }
 
   function togglePause() {
@@ -631,7 +770,7 @@
     $('ovSub').textContent = won ? I.t('outlasted', view.tot - 1) : me.killer || me.killerNk ? I.t('eliminatedBy', me.killerNk === 'zone' ? I.t('kill_zone', '').trim() : who(me.killer, me.killerNk)) : '';
     statCells([[I.t('st_kills'), me.k], [I.t('st_damage'), me.dd], [I.t('st_time'), fmt(survived)], [I.t('st_place', view.tot), '#' + (won ? 1 : me.plc)]]);
     $('ovSpectate').hidden = won || view.st === 'ended' || view.al === 0;
-    $('ovAgain').textContent = session && session.kind === 'online' ? I.t('nextMatch') : I.t('playAgain');
+    $('ovAgain').textContent = session && session.kind === 'online' ? I.t('backToLobby') : I.t('playAgain');
     show('overlay', true);
     show('specbar', false);
   }
@@ -811,7 +950,7 @@
       return;
     }
     if (e.code === 'Escape') {
-      if (session && $('overlay').hidden) togglePause();
+      if (session && $('overlay').hidden && $('lobby').hidden) togglePause();
       return;
     }
     if (!inGame()) return;
@@ -922,8 +1061,27 @@
       for (const el of document.querySelectorAll('#diff button')) el.classList.toggle('on', el === b);
     });
   }
-  const served = window.location.protocol === 'http:' || window.location.protocol === 'https:';
-  $('btnLan').hidden = !served;
+  $('server').value = store.get('server', '');
+  $('roomBots').addEventListener('input', () => {
+    $('roomBotsV').textContent = $('roomBots').value;
+    const now = performance.now();
+    if (session && session.kind === 'online' && session.room && now - lastCfgSend > 120) {
+      lastCfgSend = now;
+      session.configure(Number($('roomBots').value), session.room.diff);
+    }
+  });
+  $('roomBots').addEventListener('change', () => {
+    if (session && session.kind === 'online' && session.room) session.configure(Number($('roomBots').value), session.room.diff);
+  });
+  for (const b of document.querySelectorAll('#roomDiff button')) {
+    b.addEventListener('click', () => {
+      if (session && session.kind === 'online' && session.room) session.configure(Number($('roomBots').value), b.dataset.v);
+    });
+  }
+  $('roomStart').addEventListener('click', () => {
+    Sound.play('click');
+    if (session && session.kind === 'online') session.startMatch();
+  });
   $('btnStory').addEventListener('click', () => {
     Sound.init();
     Sound.play('click');
@@ -949,7 +1107,14 @@
       flow = null;
       startSolo(Object.assign(heroOpts(), { mode: 'royale' }));
     } else {
-      startOnline(heroOpts());
+      const addr = SERVED ? '' : $('server').value.trim();
+      if (!SERVED && !addr) {
+        $('server').placeholder = I.t('needServer');
+        $('server').focus();
+        return;
+      }
+      store.set('server', addr);
+      startOnline(Object.assign(heroOpts(), { server: addr }));
     }
   });
   $('chapBack').addEventListener('click', () => openHeroSelect('story'));
@@ -982,11 +1147,7 @@
     } else if (session.kind === 'offline') {
       startSolo(lastOpts);
     } else {
-      show('overlay', false);
-      show('specbar', false);
-      show('lobby', true);
-      $('lobbyText').textContent = I.t('waitingNext');
-      gameOver.spectating = false;
+      showLobby();
     }
   });
   $('ovMenu').addEventListener('click', () => backToMenu(''));
@@ -998,7 +1159,7 @@
     gameOver.spectating = true;
     show('overlay', false);
     show('specbar', true);
-    $('specAgain').textContent = session.kind === 'online' ? I.t('nextMatch') : I.t('playAgain');
+    $('specAgain').textContent = session.kind === 'online' ? I.t('backToLobby') : I.t('playAgain');
     blurFocus();
   });
   $('specNext').addEventListener('click', () => session && session.spectateNext());
@@ -1018,15 +1179,16 @@
   function frame(now) {
     const dt = Math.min(0.1, Math.max(0, (now - last) / 1000));
     last = now;
-    const active = session || demo;
+    const isDemo = !session || (session.kind === 'online' && !session.map);
+    if (isDemo && !demo) startDemo();
+    const active = isDemo ? demo : session;
     if (active) {
-      const isDemo = !session;
       const input = buildInput();
       const actions = pendingActions;
       pendingActions = [];
       const res = active.update(dt, input, isDemo || dlg ? [] : actions);
       if (res === 'restart' && isDemo) startDemo();
-      const cur = session || demo;
+      const cur = isDemo ? demo : session;
       const view = cur.map ? cur.view(now) : null;
       if (cur.map) {
         const key = cur.id + ':' + cur.mapVersion;
@@ -1062,15 +1224,12 @@
         ctx.fillStyle = '#1d2a18';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
       }
-      if (session && session.kind === 'online' && session.lobby && !$('lobby').hidden) {
-        const l = session.lobby;
-        $('lobbyText').textContent = I.t('lobbyCount', Math.ceil(l.tl), l.n);
-      }
     }
     requestAnimationFrame(frame);
   }
 
   function afterFrame(view) {
+    if (session && session.kind === 'online' && !$('lobby').hidden) return;
     const me = view.me;
     if (me.veh) {
       const v = view.ve.find(q => q.d === view.you);

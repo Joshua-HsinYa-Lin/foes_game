@@ -44,17 +44,51 @@
       for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
     },
 
-    initMusic(src) {
-      if (this.music || !src) return;
+    // tracks: { theme, quiet }. Outside the lobby they alternate, theme first; the lobby loops the quiet track.
+    initMusic(tracks) {
+      if (this.music || !tracks || !tracks.theme) return;
       try {
-        this.music = new window.Audio(src);
+        this.music = new window.Audio();
       } catch (e) {
         this.music = null;
         return;
       }
-      this.music.loop = true;
+      this.tracks = tracks;
+      this.mode = 'playlist';
+      this.current = '';
       this.music.volume = this.musicVolume;
       this.music.preload = 'auto';
+      this.music.addEventListener('ended', () => this.onTrackEnded());
+      this.setTrack('theme');
+    },
+
+    setTrack(name) {
+      if (!this.music || !this.tracks[name] || this.current === name) return;
+      this.current = name;
+      this.music.src = this.tracks[name];
+      this.music.loop = false;
+    },
+
+    onTrackEnded() {
+      if (this.mode === 'lobby' || !this.tracks.quiet) {
+        this.music.currentTime = 0;
+      } else {
+        this.setTrack(this.current === 'theme' ? 'quiet' : 'theme');
+      }
+      this.playMusic();
+    },
+
+    // 'lobby' switches to the quiet track; 'playlist' resumes, and restart starts the theme from the top.
+    setMusicMode(mode, restart) {
+      if (!this.music) return;
+      const prev = this.mode;
+      this.mode = mode;
+      if (mode === 'lobby' && this.tracks.quiet) this.setTrack('quiet');
+      else if (mode === 'playlist' && (restart || prev === 'lobby')) {
+        this.setTrack('theme');
+        this.music.currentTime = 0;
+      }
+      this.playMusic();
     },
 
     playMusic() {

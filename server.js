@@ -17,9 +17,12 @@ function arg(name, def) {
 
 const PORT = Number(process.env.PORT || arg('port', 8080));
 const HOST = arg('host', '0.0.0.0');
-const MATCH_SIZE = Math.max(2, Math.min(30, Number(arg('players', 14))));
-const DIFFICULTY = arg('difficulty', 'normal');
-const LOBBY_SECONDS = Number(arg('lobby', 15));
+const MAX_TOTAL = 30;
+const LEGACY_PLAYERS = Number(arg('players', 0));
+const DEFAULT_BOTS = Math.max(0, Math.min(MAX_TOTAL - 1, Number(arg('bots', LEGACY_PLAYERS ? LEGACY_PLAYERS - 1 : 13)) || 0));
+const DIFFICULTY = D.BOT_SKILL[arg('difficulty', 'normal')] ? arg('difficulty', 'normal') : 'normal';
+// Seconds before a match starts on its own once someone is in the room; 0 means the host presses Start.
+const AUTOSTART = Math.max(0, Number(arg('autostart', arg('lobby', 0))) || 0);
 const ROOT = __dirname;
 const MAX_FRAME = 64 * 1024;
 const MAX_CLIENTS = 64;
@@ -186,33 +189,67 @@ const clients = new Set();
 let sim = null;
 let mapData = null;
 let state = 'lobby';
-let lobbyTimer = LOBBY_SECONDS;
+let lobbyTimer = AUTOSTART;
+let roomTick = 0;
 let endTimer = 0;
 let matchNo = 0;
+let nextCid = 1;
+let hostCid = 0;
+const room = { bots: DEFAULT_BOTS, diff: DIFFICULTY };
 
-function humanCount() {
-  let n = 0;
-  for (const c of clients) if (c.joined) n++;
-  return n;
+function joined() {
+  return [...clients].filter(c => c.joined).sort((a, b) => a.cid - b.cid);
+}
+
+function ensureHost() {
+  const list = joined();
+  if (!list.some(c => c.cid === hostCid)) hostCid = list.length ? list[0].cid : 0;
+}
+
+// Bots for the next match: at least one if only one person is in the room, and never past the cap.
+function matchBots() {
+  const humans = joined().length;
+  return Math.max(humans >= 2 ? 0 : 1, Math.min(room.bots, MAX_TOTAL - humans));
+}
+
+function roomInfo(c) {
+  return {
+    t: 'room',
+    you: c.cid,
+    host: hostCid,
+    state,
+    players: joined().map(h => ({ cid: h.cid, name: h.name, char: h.char, spec: state === 'playing' && h.spectator ? 1 : 0 })),
+    bots: room.bots,
+    effBots: matchBots(),
+    diff: room.diff,
+    max: MAX_TOTAL,
+    tl: AUTOSTART ? Math.max(0, lobbyTimer) : -1,
+    match: matchNo
+  };
+}
+
+function broadcastRoom() {
+  for (const c of clients) if (c.joined) c.send(roomInfo(c));
 }
 
 function startMatch() {
+  const humans = joined();
+  if (!humans.length) return;
   matchNo++;
-  sim = new Sim({ difficulty: DIFFICULTY });
-  for (const c of clients) {
-    if (!c.joined) continue;
+  sim = new Sim({ difficulty: room.diff });
+  for (const c of humans) {
     c.pid = sim.addPlayer(c.name, false, { char: c.char });
     sim.setAspect(c.pid, c.aspect);
     c.spec = 0;
     c.spectator = false;
   }
-  sim.fillBots(MATCH_SIZE);
+  sim.fillBots(humans.length + matchBots());
   mapData = sim.getMapData();
-  for (const c of clients) {
-    if (c.joined) c.send({ t: 'welcome', id: c.pid, map: mapData, match: matchNo });
-  }
+  for (const c of humans) c.send({ t: 'welcome', id: c.pid, map: mapData, match: matchNo });
   state = 'playing';
-  console.log('Match ' + matchNo + ' started: ' + humanCount() + ' human(s), ' + (sim.players.length - humanCount()) + ' bot(s)');
+  endTimer = 0;
+  broadcastRoom();
+  console.log('Match ' + matchNo + ' started: ' + humans.length + ' player(s), ' + (sim.players.length - humans.length) + ' bot(s), ' + room.diff);
 }
 
 function lateJoin(c) {
@@ -240,6 +277,18 @@ function nextAlive(after) {
   return ids[(i + 1) % ids.length];
 }
 
+function backToLobby(reason) {
+  state = 'lobby';
+  lobbyTimer = AUTOSTART;
+  for (const c of clients) {
+    c.pid = 0;
+    c.spec = 0;
+    c.spectator = false;
+  }
+  console.log(reason);
+  broadcastRoom();
+}
+
 function onMessage(c, raw) {
   let m;
   try {
@@ -250,14 +299,36 @@ function onMessage(c, raw) {
   if (!m || typeof m !== 'object') return;
   if (m.t === 'join' && !c.joined) {
     c.joined = true;
+    c.cid = nextCid++;
     c.name = String(m.name || 'Player').slice(0, 16);
     c.char = D.CHARS[m.char] ? m.char : 'yunwang';
     c.aspect = Number(m.aspect) || 1.7;
-    console.log('Player joined: ' + c.name + ' (' + c.addr + ')');
+    ensureHost();
+    console.log('Player joined: ' + c.name + ' (' + c.addr + ')' + (c.cid === hostCid ? ' [host]' : ''));
     if (state === 'playing') lateJoin(c);
+    broadcastRoom();
     return;
   }
-  if (!c.joined || !sim || !c.pid) return;
+  if (!c.joined) return;
+  if (m.t === 'cfg') {
+    if (c.cid !== hostCid || state !== 'lobby') return;
+    const bots = Math.floor(Number(m.bots));
+    if (Number.isFinite(bots)) room.bots = Math.max(0, Math.min(MAX_TOTAL - 1, bots));
+    if (D.BOT_SKILL[m.diff]) room.diff = m.diff;
+    broadcastRoom();
+    return;
+  }
+  if (m.t === 'start') {
+    if (c.cid === hostCid && state === 'lobby') startMatch();
+    return;
+  }
+  if (m.t === 'char') {
+    if (state !== 'lobby' || !D.CHARS[m.char]) return;
+    c.char = m.char;
+    broadcastRoom();
+    return;
+  }
+  if (!sim || !c.pid || state !== 'playing') return;
   if (m.t === 'in') {
     if (c.spectator) return;
     sim.setInput(c.pid, m.i);
@@ -282,25 +353,30 @@ function onMessage(c, raw) {
 function onClose(c) {
   if (!clients.has(c)) return;
   clients.delete(c);
-  if (c.joined) console.log('Player left: ' + c.name);
+  if (!c.joined) return;
+  console.log('Player left: ' + c.name);
   if (sim && c.pid && !c.spectator && state === 'playing') sim.removePlayer(c.pid);
+  ensureHost();
+  broadcastRoom();
 }
 
 function tick() {
   const dt = 1 / D.TICK_RATE;
+  roomTick += dt;
   if (state === 'lobby') {
-    const n = humanCount();
-    if (n === 0) {
-      lobbyTimer = LOBBY_SECONDS;
-    } else {
+    const n = joined().length;
+    if (AUTOSTART && n > 0) {
       lobbyTimer -= dt;
       if (lobbyTimer <= 0) {
         startMatch();
         return;
       }
+    } else {
+      lobbyTimer = AUTOSTART;
     }
-    if (Math.round(lobbyTimer * D.TICK_RATE) % 6 === 0) {
-      for (const c of clients) if (c.joined) c.send({ t: 'lobby', tl: Math.max(0, lobbyTimer), n });
+    if (roomTick >= 1) {
+      roomTick = 0;
+      broadcastRoom();
     }
     return;
   }
@@ -321,16 +397,9 @@ function tick() {
   }
   if (sim.state === 'ended') {
     endTimer += dt;
-    if (endTimer > 10) {
-      endTimer = 0;
-      state = 'lobby';
-      lobbyTimer = LOBBY_SECONDS;
-      console.log('Match ' + matchNo + ' finished. Winner: ' + (sim.winner ? sim.winner.name : 'none'));
-    }
-  } else if (humanCount() === 0) {
-    state = 'lobby';
-    lobbyTimer = LOBBY_SECONDS;
-    console.log('All players left; match ' + matchNo + ' stopped.');
+    if (endTimer > 8) backToLobby('Match ' + matchNo + ' finished. Winner: ' + (sim.winner ? sim.winner.name || sim.winner.char : 'none'));
+  } else if (joined().length === 0) {
+    backToLobby('All players left; match ' + matchNo + ' stopped.');
   }
 }
 
@@ -347,6 +416,7 @@ server.on('upgrade', (req, socket) => {
   const c = new WsConn(socket, onMessage, onClose);
   c.addr = socket.remoteAddress;
   c.joined = false;
+  c.cid = 0;
   c.pid = 0;
   c.spec = 0;
   c.spectator = false;
@@ -354,15 +424,15 @@ server.on('upgrade', (req, socket) => {
 });
 
 server.listen(PORT, HOST, () => {
-  console.log(D.TITLE + ' LAN server running.');
-  console.log('  Local:   http://localhost:' + PORT);
+  console.log(D.TITLE + ' ' + D.TITLE_EN + ' multiplayer server running.');
+  console.log('  This computer: http://localhost:' + PORT);
   const nets = os.networkInterfaces();
   for (const name of Object.keys(nets)) {
     for (const n of nets[name] || []) {
-      if (n.family === 'IPv4' && !n.internal) console.log('  Network: http://' + n.address + ':' + PORT + '   (share this with friends on your network)');
+      if (n.family === 'IPv4' && !n.internal) console.log('  Friends:       http://' + n.address + ':' + PORT + '   (or type ' + n.address + ':' + PORT + ' in the game)');
     }
   }
-  console.log('Match size ' + MATCH_SIZE + ' (bots fill empty slots), bot skill ' + DIFFICULTY + '. Press Ctrl+C to stop.');
+  console.log('The first player to join is the host and picks the bots (default ' + DEFAULT_BOTS + ') and difficulty. Press Ctrl+C to stop.');
 });
 
 setInterval(tick, 1000 / D.TICK_RATE);

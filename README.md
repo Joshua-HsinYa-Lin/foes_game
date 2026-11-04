@@ -4,13 +4,15 @@ A top-down browser shooter set on the opening night of 允望樓 (Yunwang Tower)
 
 允望樓開幕夜，鹹水幫來搗亂了！選一位角色，打完五個章節的故事，或是在樂園大亂鬥裡當最後站著的人。
 
-## Play (no install)
+## ⬇ Download and play (no install)
 
-Download `yunwang_paradise.html` (open it on GitHub and use **Download raw file**) and double-click it. It is the whole game in one file, music included, and runs offline in Chrome, Edge or Firefox.
+- **One click:** [**yunwang_paradise.zip**](yunwang_paradise.zip?raw=true) downloads straight from GitHub. Unzip it and double-click `yunwang_paradise.html`.
+- **Or the HTML itself:** open [yunwang_paradise.html](yunwang_paradise.html) on GitHub and press the **Download raw file** button (⬇) at the top right of the file view, then double-click the saved file.
+- **Or the whole repository:** green **Code** button → **Download ZIP**, unzip, double-click `index.html`.
 
-Or download the repository and double-click `index.html`.
+The single HTML file is the whole game, both music tracks included, and runs offline in Chrome, Edge or Firefox. Music and sound start after your first click (browsers block audio until then). The language button on the title screen switches between 中文 and English.
 
-Music and sound start after your first click (browsers block audio until then). The language button on the title screen switches between 中文 and English.
+Music: the 允望樓 theme plays first, then 「two halves of a quiet room」, and they keep alternating. The multiplayer waiting room plays 「two halves of a quiet room」.
 
 ## Characters
 
@@ -30,7 +32,7 @@ Music and sound start after your first click (browsers block audio until then). 
   4. 跨越雲海 Across the Sea of Clouds: the cold-chain zone shrinks; take down the whole gang.
   5. 鹹魚翻身？ The Salted Fish Strikes Back?: boss fight against the captain at the container yard, with the whole team.
 - **樂園大亂鬥 Paradise Brawl**: free-for-all against bots (13 by default). The shrinking cold-chain zone pushes everyone together.
-- **區網對戰 LAN Battle**: Paradise Brawl with friends on the same network (see below).
+- **區網對戰 LAN Battle**: Paradise Brawl with friends. Everyone meets in a waiting room where the host picks how many bots join (see Multiplayer below).
 
 Difficulty applies to both modes. Easy is the relaxed way through the story; normal makes the finale a real fight.
 
@@ -60,15 +62,24 @@ Difficulty applies to both modes. Easy is the relaxed way through the story; nor
 | M | Full map |
 | Esc | Pause / menu |
 
-## LAN multiplayer (optional)
+## Multiplayer
 
-Requires [Node.js](https://nodejs.org) 16 or newer. There is no `npm install` step; the server uses only Node's built-in modules.
+One computer hosts; everyone else only needs the game.
 
-```bash
-node server.js
-```
+1. **Host:** install [Node.js](https://nodejs.org) 16 or newer (no `npm install` needed), download the repository, and run the server from its folder:
 
-Or double-click `start-lan-server.bat` (Windows) / run `./start-lan-server.sh` (macOS, Linux). Open the `Local` address it prints, give the `Network` address to friends on the same Wi-Fi, and everyone picks **區網對戰 LAN Battle**. Options: `--port 8080 --players 14 --difficulty normal --lobby 15`.
+   ```bash
+   node server.js
+   ```
+
+   Or double-click `start-lan-server.bat` (Windows) / run `./start-lan-server.sh` (macOS, Linux). It prints an address such as `192.168.1.23:8080`. Allow Node.js through the firewall on private networks if your computer asks.
+2. **Everyone, including the host:** open the game, either by visiting `http://<that address>` in a browser or by opening the downloaded `yunwang_paradise.html` and typing the address in the **伺服器位址 Server address** box. Pick a character and press **區網對戰 LAN Battle**.
+3. **Waiting room:** the first person in is the host. The host picks **how many bots** join (0 to 29, as long as people plus bots stay at 30 or fewer) and the bot difficulty; everyone sees the settings and the player list, and anyone can switch character. The host presses **開始對戰 Start Match**. With only one person in the room at least one bot is added.
+4. After a match everyone returns to the waiting room for the next one. If the host leaves, the next person becomes host.
+
+The address works for anyone on the same Wi-Fi or LAN. Playing across the internet needs the host's router to forward the port, or a virtual LAN tool, and is not covered here.
+
+Server options: `node server.js --port 8080 --bots 13 --difficulty normal` sets the port and the starting bot count and difficulty (the host can still change them). `--autostart 15` starts matches on their own 15 seconds after someone joins, for a server nobody hosts from.
 
 ## Prototype
 
@@ -85,13 +96,15 @@ Or double-click `start-lan-server.bat` (Windows) / run `./start-lan-server.sh` (
 | `js/render.js` | Canvas renderer, HUD and character portraits |
 | `js/audio.js` | Background music player and synthesized sound effects |
 | `js/client.js` | Menus, story flow, dialogue, input, solo and LAN sessions |
-| `assets/yunwang_theme.mp3` | 允望樓 theme, the background music |
+| `assets/yunwang_theme.mp3` | 允望樓 theme, plays first |
+| `assets/quiet_room.mp3` | 「two halves of a quiet room」, plays after the theme and in the multiplayer waiting room |
 | `assets/bgm.mp3` | Earlier soundtrack, kept for a future feature (not played yet) |
+| `yunwang_paradise.html`, `yunwang_paradise.zip` | Single-file build of the game, and the same file zipped for one-click download |
 | `server.js` | LAN server: static files plus a minimal WebSocket implementation |
 | `tools/build_single.js` | Builds `yunwang_paradise.html` with everything inlined |
 | `tests/` | Automated checks |
 
-After changing anything in `js/`, `css/`, `assets/` or `index.html`, rebuild the single-file version:
+After changing anything in `js/`, `css/`, `assets/` or `index.html`, rebuild the single-file version and its zip:
 
 ```bash
 node tools/build_single.js
