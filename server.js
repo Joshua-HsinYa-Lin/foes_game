@@ -17,7 +17,7 @@ function arg(name, def) {
 
 const PORT = Number(process.env.PORT || arg('port', 8080));
 const HOST = arg('host', '0.0.0.0');
-const MATCH_SIZE = Math.max(2, Math.min(60, Number(arg('players', 30))));
+const MATCH_SIZE = Math.max(2, Math.min(30, Number(arg('players', 14))));
 const DIFFICULTY = arg('difficulty', 'normal');
 const LOBBY_SECONDS = Number(arg('lobby', 15));
 const ROOT = __dirname;
@@ -215,7 +215,7 @@ function startMatch() {
 }
 
 function lateJoin(c) {
-  if (sim.zone.phase === 0 && sim.zone.state === 'wait' && sim.time < 45) {
+  if (sim.time < 40) {
     c.pid = sim.addPlayer(c.name, false, c.skin);
     sim.setAspect(c.pid, c.aspect);
     c.spectator = false;

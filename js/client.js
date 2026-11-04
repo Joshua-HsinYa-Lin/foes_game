@@ -41,9 +41,6 @@
 
   function weaponName(w) {
     if (D.WEAPONS[w]) return D.WEAPONS[w].name;
-    if (D.MELEE[w]) return D.MELEE[w].name;
-    if (w === 'frag') return 'a grenade';
-    if (w === 'barrel') return 'an exploding barrel';
     if (w === 'explosion') return 'an explosion';
     if (w === 'vehicle') return 'a vehicle';
     return w || '';
@@ -152,12 +149,11 @@
     out.pl = list(a.pl, b.pl, true);
     out.ve = list(a.ve, b.ve, true);
     out.bu = list(a.bu, b.bu, false);
-    out.gr = list(a.gr, b.gr, false);
     if (a.cam === b.cam) {
       out.cx = a.cx + (b.cx - a.cx) * f;
       out.cy = a.cy + (b.cy - a.cy) * f;
     }
-    out.zo = Object.assign({}, b.zo, { x: a.zo.x + (b.zo.x - a.zo.x) * f, y: a.zo.y + (b.zo.y - a.zo.y) * f, r: a.zo.r + (b.zo.r - a.zo.r) * f });
+    out.zo = Object.assign({}, b.zo, { r: a.zo.r + (b.zo.r - a.zo.r) * f });
     return out;
   }
 
@@ -293,7 +289,7 @@
 
   function startDemo() {
     if (demo) demo.destroy();
-    demo = new OfflineSession({ demo: true, bots: 18, difficulty: 'normal' });
+    demo = new OfflineSession({ demo: true, bots: 14, difficulty: 'normal' });
   }
 
   function resetUi() {
@@ -461,7 +457,7 @@
         case 'kill': {
           let txt;
           if (e.k) txt = e.k + ' eliminated ' + e.v + ' with ' + weaponName(e.w);
-          else if (e.w === 'fog') txt = e.v + ' was lost in the red fog';
+          else if (e.w === 'zone') txt = e.v + ' was caught in the red zone';
           else if (e.w === 'left') txt = e.v + ' left the match';
           else txt = e.v + ' was eliminated';
           ui.killfeed.push({ txt, t: renderer.time, mine: e.kid === myId || e.vid === myId });
@@ -494,7 +490,7 @@
       aimDist = Math.hypot(ui.mouseX - cx, ui.mouseY - cy) / (renderer.zoom || 1);
       lastAim = aim;
     }
-    return { mx, my, aim, shoot: mouseDown && !ui.bigMap, aimDist, brake: keys.has('Space') };
+    return { mx, my, aim, shoot: mouseDown && !ui.bigMap, aimDist, sprint: keys.has('Space'), brake: keys.has('Space') };
   }
 
   function act(a) {
@@ -517,8 +513,8 @@
       return;
     }
     if (!inGame()) return;
-    if (e.repeat && e.code !== 'KeyW' && e.code !== 'KeyA' && e.code !== 'KeyS' && e.code !== 'KeyD') return;
     keys.add(e.code);
+    if (e.repeat) return;
     switch (e.code) {
       case 'Digit1':
         act({ a: 'slot', i: 0 });
@@ -529,12 +525,8 @@
       case 'Digit3':
         act({ a: 'slot', i: 2 });
         break;
-      case 'Digit4':
-      case 'KeyG':
-        act({ a: 'slot', i: 3 });
-        break;
       case 'KeyQ':
-        act({ a: 'swap' });
+        act({ a: 'cycle', i: 1 });
         break;
       case 'KeyR':
         act({ a: 'reload' });
@@ -543,23 +535,12 @@
       case 'KeyE':
         act({ a: 'interact' });
         break;
-      case 'Digit5':
-        act({ a: 'use', item: 'bandage' });
+      case 'KeyC':
+        act({ a: 'drop' });
         break;
-      case 'Digit6':
-        act({ a: 'use', item: 'medkit' });
-        break;
-      case 'Digit7':
-        act({ a: 'use', item: 'soda' });
-        break;
-      case 'KeyH':
-        act({ a: 'autoheal' });
-        break;
-      case 'KeyV':
-        act({ a: 'scope', i: 1 });
-        break;
-      case 'KeyX':
-        act({ a: 'cancel' });
+      case 'ShiftLeft':
+      case 'ShiftRight':
+        act({ a: 'jump' });
         break;
       case 'KeyM':
         ui.bigMap = !ui.bigMap;
@@ -615,12 +596,12 @@
   let currentDiff = store.get('diff', 'normal');
   if (!D.BOT_SKILL[currentDiff]) currentDiff = 'normal';
   $('name').value = store.get('name', '');
-  const botsSaved = Number(store.get('bots', 29));
-  $('bots').value = String(SIM.clamp(botsSaved || 29, 1, 49));
+  const botsSaved = Number(store.get('botcount', 13));
+  $('bots').value = String(SIM.clamp(botsSaved || 13, 1, 29));
   $('botsv').textContent = $('bots').value;
   $('bots').addEventListener('input', () => {
     $('botsv').textContent = $('bots').value;
-    store.set('bots', $('bots').value);
+    store.set('botcount', $('bots').value);
   });
   D.SKINS.forEach((c, i) => {
     const b = document.createElement('button');

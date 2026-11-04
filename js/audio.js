@@ -3,12 +3,11 @@
 
   const GUN = {
     pistol: { f: 1900, d: 0.12, v: 0.5, thump: 0.25 },
-    smg: { f: 2300, d: 0.08, v: 0.38, thump: 0.15 },
+    uzi: { f: 2300, d: 0.08, v: 0.38, thump: 0.15 },
     shotgun: { f: 800, d: 0.32, v: 0.75, thump: 0.6 },
     rifle: { f: 1500, d: 0.13, v: 0.5, thump: 0.35 },
-    dmr: { f: 1150, d: 0.22, v: 0.6, thump: 0.5 },
     sniper: { f: 650, d: 0.5, v: 0.8, thump: 0.8 },
-    lmg: { f: 1300, d: 0.12, v: 0.48, thump: 0.4 }
+    minigun: { f: 1300, d: 0.1, v: 0.45, thump: 0.4 }
   };
 
   const Sound = {

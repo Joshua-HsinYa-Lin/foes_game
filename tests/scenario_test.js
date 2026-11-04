@@ -26,36 +26,49 @@ const url = 'file://' + path.join(__dirname, '..', 'index.html') + '?debug';
   await page.evaluate(() => {
     const sim = PF_DEBUG.session.sim;
     const me = sim.playerMap.get(PF_DEBUG.session.myId);
-    const b = sim.buildings.find(q => q.type === 'house' && q.w >= 300) || sim.buildings[0];
+    const b = sim.buildings.find(q => q.w >= 300) || sim.buildings[0];
     me.x = b.x;
     me.y = b.y;
-    sim.spawnLoot(me.x, me.y, 'gun', 'rifle', 1);
-    sim.spawnLoot(me.x, me.y, 'gun', 'shotgun', 1);
-    sim.spawnLoot(me.x, me.y, 'vest', 2, 1);
-    sim.spawnLoot(me.x, me.y, 'helmet', 3, 1);
-    sim.spawnLoot(me.x, me.y, 'pack', 2, 1);
-    sim.spawnLoot(me.x, me.y, 'ammo', 'medium', 60);
-    sim.spawnLoot(me.x, me.y, 'heal', 'bandage', 5);
-    sim.spawnLoot(me.x, me.y, 'heal', 'medkit', 2);
-    sim.spawnLoot(me.x, me.y, 'frag', 'frag', 2);
-    sim.spawnLoot(me.x, me.y, 'scope', 2, 1);
-    for (const k of ['gun', 'heal', 'vest', 'ammo', 'scope', 'pack', 'helmet', 'frag', 'melee']) {
-      sim.spawnLoot(me.x + 60 + Math.random() * 40, me.y + 60, k === 'gun' ? 'gun' : k, k === 'gun' ? 'sniper' : k === 'heal' ? 'soda' : k === 'ammo' ? 'heavy' : k === 'frag' ? 'frag' : k === 'melee' ? 'hatchet' : 3, k === 'ammo' ? 10 : 1);
-    }
+    sim.spawnItem(me.x, me.y, 'rifle');
+    sim.spawnItem(me.x + 70, me.y + 40, 'backpack');
+    const ring = ['pistol', 'uzi', 'shotgun', 'sniper', 'minigun', 'knife', 'sword', 'syringe', 'medpack'];
+    ring.forEach((t, i) => {
+      const a = (i / ring.length) * Math.PI * 2;
+      sim.spawnItem(me.x + Math.cos(a) * 120, me.y + Math.sin(a) * 90, t);
+    });
   });
-  await page.waitForTimeout(700);
-  await page.keyboard.press('Digit1');
-  await page.waitForTimeout(400);
+  await page.keyboard.press('KeyF');
+  await page.waitForTimeout(300);
+  await page.evaluate(() => {
+    const sim = PF_DEBUG.session.sim;
+    const me = sim.playerMap.get(PF_DEBUG.session.myId);
+    me.x += 70;
+    me.y += 40;
+  });
+  await page.waitForTimeout(300);
+  await page.evaluate(() => {
+    const sim = PF_DEBUG.session.sim;
+    const me = sim.playerMap.get(PF_DEBUG.session.myId);
+    me.slots[1] = { t: 'sword' };
+    me.slots[2] = { t: 'syringe' };
+  });
   await page.mouse.down();
   await page.waitForTimeout(350);
   await page.mouse.up();
-  await page.screenshot({ path: path.join(outDir, 's1_inside_building_geared.png') });
+  await page.screenshot({ path: path.join(outDir, 's1_inside_building.png') });
+
+  await page.keyboard.press('Digit2');
+  await page.waitForTimeout(300);
+  await page.mouse.down();
+  await page.waitForTimeout(120);
+  await page.screenshot({ path: path.join(outDir, 's1b_sword.png') });
+  await page.mouse.up();
 
   await page.evaluate(() => {
     const sim = PF_DEBUG.session.sim;
     const me = sim.playerMap.get(PF_DEBUG.session.myId);
-    const v = sim.vehicles.find(q => q.t === 'jeep');
-    me.x = v.x + 60;
+    const v = sim.vehicles.find(q => q.t === 'car');
+    me.x = v.x + 70;
     me.y = v.y;
     sim.pushAction(me.id, { a: 'interact' });
   });
@@ -70,22 +83,29 @@ const url = 'file://' + path.join(__dirname, '..', 'index.html') + '?debug';
   await page.evaluate(() => {
     const sim = PF_DEBUG.session.sim;
     const me = sim.playerMap.get(PF_DEBUG.session.myId);
-    const bot = sim.players.find(p => p.bot && p.alive);
-    bot.x = me.x + 220;
-    bot.y = me.y;
-    sim.spawnLoot(me.x - 150, me.y, 'frag', 'frag', 1);
-    me.hp = 40;
-    sim.pushAction(me.id, { a: 'use', item: 'medkit' });
+    me.hp = 35;
+    me.slots[2] = { t: 'syringe' };
   });
-  await page.waitForTimeout(1500);
+  await page.keyboard.press('Digit3');
+  await page.waitForTimeout(300);
+  await page.mouse.down();
+  await page.waitForTimeout(100);
+  await page.mouse.up();
+  await page.keyboard.down('Space');
+  await page.keyboard.down('KeyD');
+  await page.waitForTimeout(700);
   await page.screenshot({ path: path.join(outDir, 's3_healing.png') });
+  await page.keyboard.up('KeyD');
+  await page.keyboard.up('Space');
+  await page.waitForTimeout(1200);
+  const healed = await page.evaluate(() => PF_DEBUG.session.sim.playerMap.get(PF_DEBUG.session.myId).hp);
 
   await page.evaluate(() => {
     const sim = PF_DEBUG.session.sim;
     const me = sim.playerMap.get(PF_DEBUG.session.myId);
     const bot = sim.players.find(p => p.bot && p.alive);
     me.kills = 3;
-    sim.damagePlayer(me, 500, bot.id, 'rifle', false);
+    sim.damagePlayer(me, 500, bot.id, 'rifle');
   });
   await page.waitForTimeout(2200);
   const overlay1 = await page.evaluate(() => !document.getElementById('overlay').hidden);
@@ -97,16 +117,17 @@ const url = 'file://' + path.join(__dirname, '..', 'index.html') + '?debug';
   await page.waitForTimeout(600);
   await page.evaluate(() => {
     const sim = PF_DEBUG.session.sim;
-    for (const p of sim.players) if (p.bot) sim.damagePlayer(p, 999, PF_DEBUG.session.myId, 'rifle', false);
+    for (const p of sim.players) if (p.bot) sim.damagePlayer(p, 999, PF_DEBUG.session.myId, 'rifle');
   });
   await page.waitForTimeout(2000);
   const won = await page.evaluate(() => document.getElementById('ovTitle').textContent);
   await page.screenshot({ path: path.join(outDir, 's6_victory.png') });
+  console.log('hp after syringe (was 35): ' + Math.round(healed));
   console.log('death overlay shown: ' + overlay1);
   console.log('victory title: ' + won);
   console.log('errors: ' + (errors.length ? '\n' + errors.join('\n') : 'none'));
   await browser.close();
-  process.exit(errors.length || !overlay1 || won.indexOf('Victory') < 0 ? 1 : 0);
+  process.exit(errors.length || !overlay1 || won.indexOf('Victory') < 0 || healed < 90 ? 1 : 0);
 })().catch(e => {
   console.log('test failed: ' + e.message);
   process.exit(1);
