@@ -6,9 +6,17 @@ Pinefall is an original game in the same style as the 2017 browser .io shooters:
 
 ## Play (no install)
 
-1. Download this repository (green **Code** button on GitHub, then **Download ZIP**) and unzip it, or `git clone` it.
-2. Double-click `index.html`. It opens in your browser and runs fully offline.
-3. Enter a name, pick a color, choose the number of bots (13 by default, so 14 players per round) and their skill, and press **Play vs Bots**.
+Download `pinefall.html` (open it on GitHub and use the **Download raw file** button) and double-click it. It is the whole game in one file and runs fully offline.
+
+Alternatively, download the repository (green **Code** button, then **Download ZIP**), unzip it, and double-click `index.html`.
+
+Enter a name, pick a color, choose the number of bots (13 by default, so 14 players per round) and their skill, and press **Play vs Bots**.
+
+`pinefall.html` is generated from the source files. After changing anything in `js/`, `css/` or `index.html`, rebuild it with:
+
+```bash
+node tools/build_single.js
+```
 
 Chrome, Edge and Firefox are supported. Nothing is installed on your computer, and the game makes no network requests in this mode.
 
