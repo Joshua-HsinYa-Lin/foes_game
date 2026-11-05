@@ -34,7 +34,23 @@ Music: the 允望樓 theme plays first, then 「two halves of a quiet room」, a
 - **樂園大亂鬥 Paradise Brawl**: free-for-all against bots (13 by default). The shrinking cold-chain zone pushes everyone together.
 - **區網對戰 LAN Battle**: Paradise Brawl with friends. Everyone meets in a waiting room where the host picks how many bots join (see Multiplayer below).
 
-Difficulty applies to both modes. Easy is the relaxed way through the story; normal makes the finale a real fight.
+## Difficulty
+
+Five levels, picked on the character screen, in the multiplayer waiting room (host), or mid-game from the pause menu (Esc) in solo play:
+
+| Level | Bots | Story enemies |
+| --- | --- | --- |
+| 1 新手 Beginner | React slowly, aim poorly, deal 55% damage to people in Paradise Brawl | 60% health, 20% damage, fire more slowly |
+| 2 輕鬆 Casual | Slower and less accurate, 75% damage to people | 70% health, 27% damage, fire a little more slowly |
+| 3 簡單 Easy | The earlier Easy | 80% health, 35% damage |
+| 4 普通 Normal | The earlier Normal | 100% health, 42% damage |
+| 5 困難 Hard | The earlier Hard | 125% health, 70% damage |
+
+New players start on level 2. Story allies always fight at level 4 or higher, so an easier level never weakens your own team. A level changed from the pause menu applies at once to bot skill; enemy health applies to enemies that appear afterwards.
+
+## Hidden details
+
+Six things are hidden in every map. The title screen counts how many you have found (saved in your browser) and gives a one-line hint for each one still missing. Some you read or touch with F; one comes from the sky every minute or two.
 
 ## Weapons and items
 
@@ -43,6 +59,11 @@ Difficulty applies to both modes. Easy is the relaxed way through the story; nor
 - Everyone carries a backpack with 3 weapon slots. The 保溫外送袋 thermal bag upgrades it to 4 weapon slots.
 - Healing items never take a weapon slot. 雞湯 chicken soup goes into a separate medical pouch when you walk over it (up to 3, or 5 with the thermal bag); press H to drink one and heal 60. 小籠包 soup dumplings heal 40 on the spot. 「?」 ingredient crates break open for better loot.
 - Delivery vans and scooters can be driven, and they hurt anyone they hit.
+- Every minute or two a cold-chain cargo plane crosses the map and parachutes a crate into the safe area. Press F on the landed crate for a rare kitchen weapon, one more item and something to heal with.
+
+## Sound
+
+Besides weapon sounds: footsteps (faster when running), rustling in bushes, a thump on landing a jump, weapon switch clicks, van and scooter doors, a heartbeat below 30% health, a sizzle while standing in the thawing zone, heavy breathing when stamina runs out, a gong when a match or chapter starts, the cargo plane's engines and its crate landing, and a few more for the hidden details. All sounds are generated in the browser; nothing extra is downloaded.
 
 ## Controls
 
@@ -79,7 +100,7 @@ One computer hosts; everyone else only needs the game.
 
 The address works for anyone on the same Wi-Fi or LAN. Playing across the internet needs the host's router to forward the port, or a virtual LAN tool, and is not covered here.
 
-Server options: `node server.js --port 8080 --bots 13 --difficulty normal` sets the port and the starting bot count and difficulty (the host can still change them). `--autostart 15` starts matches on their own 15 seconds after someone joins, for a server nobody hosts from.
+Server options: `node server.js --port 8080 --bots 13 --difficulty 4` sets the port and the starting bot count and difficulty level 1 to 5 (the host can still change them; the older names easy, normal and hard still work and mean 3, 4 and 5). `--autostart 15` starts matches on their own 15 seconds after someone joins, for a server nobody hosts from.
 
 ## Prototype
 
@@ -116,6 +137,6 @@ node tools/build_single.js
 node tests/sim_test.js
 ```
 
-Runs without dependencies. It checks the map, three full Paradise Brawl rounds, every character skill and passive, the kitchen weapon effects (knockback, burn, slow, bounce, pierce), the backpack slots and medical pouch, pickups, friendly fire, and plays each story chapter with an AI-controlled hero to confirm each chapter can be won.
+Runs without dependencies. It checks the map, the difficulty levels, every hidden detail and the airdrop, three full Paradise Brawl rounds, every character skill and passive, the kitchen weapon effects (knockback, burn, slow, bounce, pierce), the backpack slots and medical pouch, pickups, friendly fire, and plays each story chapter with an AI-controlled hero on levels 1 to 4 to confirm each chapter can be won on levels 1 to 3.
 
-The browser tests (`tests/browser_test.js`, `tests/scenario_test.js`, `tests/lan_test.js`) drive the real page with Playwright and save screenshots. They are optional and need Playwright, which this project does not install.
+The browser tests (`tests/browser_test.js`, `tests/scenario_test.js`, `tests/details_test.js`, `tests/lan_test.js`) drive the real page with Playwright and save screenshots. They are optional and need Playwright, which this project does not install. `tests/lan_test.js` needs a server running first: `node server.js --port 8099`.

@@ -49,10 +49,11 @@ const fileUrl = 'file://' + path.join(__dirname, '..', 'yunwang_paradise.html') 
     el.dispatchEvent(new Event('input'));
     el.dispatchEvent(new Event('change'));
   });
-  await alice.click('#roomDiff button[data-v="hard"]');
-  await bob.waitForFunction(() => document.getElementById('roomSummary').textContent.indexOf('3') >= 0, null, { timeout: 5000 });
-  const bobSummary = await bob.evaluate(() => document.getElementById('roomSummary').textContent + ' | hard on: ' + document.querySelector('#roomDiff button[data-v="hard"]').classList.contains('on'));
-  notes.push('Bob sees: ' + bobSummary);
+  await alice.click('#roomDiff button[data-v="5"]');
+  await bob.waitForFunction(() => document.getElementById('roomSummary').textContent.indexOf('+ 3 ') >= 0 && document.querySelector('#roomDiff button[data-v="5"]').classList.contains('on'), null, { timeout: 5000 });
+  const bobSummary = await bob.evaluate(() => document.getElementById('roomSummary').textContent + ' | level 5 on: ' + document.querySelector('#roomDiff button[data-v="5"]').classList.contains('on') + ' | buttons: ' + document.querySelectorAll('#roomDiff button').length);
+  const serverDiff = await alice.evaluate(() => PF_DEBUG.session.room.diff);
+  notes.push('Bob sees: ' + bobSummary + ' (room level ' + serverDiff + ')');
   const lobbyMusic = await carol.evaluate(() => PF_Sound.current + ' / mode ' + PF_Sound.mode);
   notes.push('Carol music in lobby: ' + lobbyMusic);
   await alice.screenshot({ path: path.join(outDir, 'lan_01_room_host.png') });
@@ -113,7 +114,7 @@ const fileUrl = 'file://' + path.join(__dirname, '..', 'yunwang_paradise.html') 
   console.log(notes.join('\n'));
   console.log('errors: ' + (errors.length ? '\n' + errors.join('\n') : 'none'));
   await browser.close();
-  const ok = !errors.length && hostView.start && hostView.slider && !guestView.start && !guestView.slider && total === 6 && lobbyMusic.startsWith('quiet') && gameMusic.startsWith('theme') && roomAfter.state === 'lobby' && roomAfter.startVisible && backMusic.startsWith('quiet') && total2 === 2 && total3 === 2;
+  const ok = !errors.length && serverDiff === 5 && bobSummary.indexOf('level 5 on: true') >= 0 && hostView.start && hostView.slider && !guestView.start && !guestView.slider && total === 6 && lobbyMusic.startsWith('quiet') && gameMusic.startsWith('theme') && roomAfter.state === 'lobby' && roomAfter.startVisible && backMusic.startsWith('quiet') && total2 === 2 && total3 === 2;
   process.exit(ok ? 0 : 1);
 })().catch(e => {
   console.log('test failed: ' + e.message);

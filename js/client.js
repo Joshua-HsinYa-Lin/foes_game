@@ -33,7 +33,7 @@
     music: store.get('music', '1') === '1',
     sfx: store.get('sfx', '1') === '1',
     char: D.CHARS[store.get('char', 'yunwang')] ? store.get('char', 'yunwang') : 'yunwang',
-    diff: D.BOT_SKILL[store.get('diff', 'normal')] ? store.get('diff', 'normal') : 'normal',
+    diff: D.diffLevel(store.get('diff', '')) || 2,
     bots: SIM.clamp(Number(store.get('bots', 13)) || 13, 1, 29),
     progress: SIM.clamp(Number(store.get('progress', 0)) || 0, 0, D.STORY.length)
   };
@@ -58,6 +58,11 @@
   let flow = null;
   let dlg = null;
   let lastView = null;
+  const SECRET_IDS = ['notice', 'cat', 'gold', 'log', 'recipe', 'plane'];
+  const NOTE_IDS = { notice: 1, log: 1, recipe: 1 };
+  const found = new Set(String(store.get('secrets', '')).split(',').filter(k => SECRET_IDS.indexOf(k) >= 0));
+  let noteAt = null;
+  let sfx = {};
 
   function who(name, nk) {
     if (nk) {
@@ -372,6 +377,8 @@
     const served = window.location.protocol === 'http:' || window.location.protocol === 'https:';
     $('lanNote').textContent = served ? I.t('lanNoteServed', window.location.host) : I.t('lanNoteLocal');
     $('server').placeholder = I.t('serverHint');
+    $('diffHint').textContent = I.t('diffHint' + prefs.diff);
+    renderSecrets();
     roomKey = '';
     if (!$('lobby').hidden) renderRoom();
     renderHeroCards();
@@ -552,6 +559,8 @@
     show('pause', false);
     show('specbar', false);
     $('lobbyBanner').hidden = true;
+    closeNote();
+    sfx = {};
   }
 
   function startSolo(opts) {
@@ -566,6 +575,7 @@
     session = new OfflineSession(opts);
     onlyScreen(null);
     canvas.classList.add('playing');
+    if (opts.mode !== 'story') Sound.play('gong');
   }
 
   function startChapter(idx) {
@@ -579,6 +589,7 @@
       if (!session) return;
       session.paused = false;
       renderer.banner(I.pick(I.STORY.titles[ch.id]), '#ffd75e');
+      Sound.play('gong');
       if (session.sim.players.some(p => p.kind === 'boss')) Sound.play('boss');
     });
   }
@@ -595,6 +606,7 @@
         show('lobby', false);
         canvas.classList.add('playing');
         Sound.setMusicMode('playlist', true);
+        Sound.play('gong');
         if (demo) {
           demo.destroy();
           demo = null;
@@ -705,11 +717,11 @@
     if (document.activeElement !== slider) slider.value = String(Math.min(r.bots, Number(slider.max)));
     $('roomBotsV').textContent = slider.value;
     for (const b of document.querySelectorAll('#roomDiff button')) {
-      b.classList.toggle('on', b.dataset.v === r.diff);
+      b.classList.toggle('on', Number(b.dataset.v) === r.diff);
       b.disabled = !isHost || r.state !== 'lobby';
     }
     $('roomDiff').classList.toggle('locked', !isHost);
-    $('roomSummary').textContent = I.t('roomSummary', r.players.length, r.effBots, r.players.length + r.effBots);
+    $('roomSummary').textContent = I.t('roomSummary', r.players.length, r.effBots, r.players.length + r.effBots) + '  ·  ' + I.t('diffNow', I.t('diff' + r.diff));
     $('roomStart').hidden = !isHost || r.state !== 'lobby';
   }
 
@@ -739,6 +751,8 @@
     if (session.kind === 'offline') session.paused = open;
     $('pauseTitle').textContent = session.kind === 'offline' ? I.t('paused') : I.t('menu');
     $('pauseQuit').textContent = session.kind === 'offline' ? I.t('quit') : I.t('leave');
+    $('pauseDiffRow').hidden = session.kind !== 'offline';
+    markDiff();
     applyI18n();
   }
 
@@ -866,10 +880,22 @@
         case 'crash':
           Sound.play('crash', { dist, dx });
           break;
+        case 'secret':
+          onSecret(e.id);
+          break;
+        case 'meow':
+          Sound.play('meow', { dist, dx });
+          break;
+        case 'land':
+          Sound.play('landDrop', { dist, dx });
+          break;
+        case 'open':
+          Sound.play('unlock', { dist, dx });
+          break;
         case 'pick':
           ui.pickups.push({ txt: pickText(e), t: renderer.time });
           if (ui.pickups.length > 5) ui.pickups.shift();
-          Sound.play(e.ok ? 'pickup' : 'empty');
+          Sound.play(e.k === 'drop' ? 'drop' : e.ok ? 'pickup' : 'empty');
           break;
         case 'streak':
           renderer.banner(I.t(e.n >= 4 ? 'streak4' : e.n === 3 ? 'streak3' : 'streak2'), '#ff8a5a');
@@ -879,7 +905,7 @@
           const txt = I.t(e.k, ...(e.a || []));
           ui.notices.push({ txt, t: renderer.time, col: e.k === 'msg_box' ? '#9fdcff' : e.k === 'msg_zone' ? '#ffb38a' : '#ffd75e' });
           if (ui.notices.length > 3) ui.notices.shift();
-          Sound.play(e.k === 'msg_box' ? 'coldbox' : e.k === 'msg_wave' ? 'wave' : e.k === 'msg_boss' ? 'boss' : 'zone');
+          Sound.play(e.k === 'msg_box' ? 'coldbox' : e.k === 'msg_wave' ? 'wave' : e.k === 'msg_boss' ? 'boss' : e.k === 'msg_plane' ? 'plane' : 'zone');
           break;
         }
         case 'kill': {
@@ -900,6 +926,108 @@
         }
       }
     }
+  }
+
+  function renderSecrets() {
+    $('secretsSum').textContent = '✦ ' + I.t('secretsTitle', found.size, SECRET_IDS.length);
+    const list = $('secretsList');
+    list.innerHTML = '';
+    for (const id of SECRET_IDS) {
+      const li = document.createElement('li');
+      const b = document.createElement('b');
+      const has = found.has(id);
+      li.className = has ? 'found' : '';
+      b.textContent = has ? '✔ ' + I.t('sec_' + id) : I.t('secretsHidden');
+      li.appendChild(b);
+      if (!has) li.appendChild(document.createTextNode('  ' + I.t('hint_' + id)));
+      list.appendChild(li);
+    }
+  }
+
+  function onSecret(id) {
+    if (SECRET_IDS.indexOf(id) < 0) return;
+    if (!found.has(id)) {
+      found.add(id);
+      store.set('secrets', Array.from(found).join(','));
+      Sound.play('secret');
+      ui.notices.push({ txt: I.t('secretFound', found.size, SECRET_IDS.length, I.t('sec_' + id)), t: renderer.time, col: '#ffe27a' });
+      if (ui.notices.length > 3) ui.notices.shift();
+      renderSecrets();
+    }
+    if (NOTE_IDS[id]) openNote(id);
+    else renderer.banner(I.t('say_' + id), '#ffe27a');
+  }
+
+  function openNote(id) {
+    $('noteTitle').textContent = I.t('note_' + id + '_t');
+    $('noteBody').textContent = I.t('note_' + id + '_b');
+    $('note').hidden = false;
+    noteAt = lastView ? { x: lastView.me.x, y: lastView.me.y } : null;
+    Sound.play('paper');
+  }
+
+  function closeNote() {
+    if ($('note').hidden) return;
+    $('note').hidden = true;
+    noteAt = null;
+  }
+
+  // Sounds that follow from the player's own state: steps, bushes, landing, weapon switch,
+  // vehicle doors, heartbeat at low health, the thaw zone and running out of stamina.
+  function ownSounds(view, dt) {
+    const me = view.me;
+    const s = sfx;
+    if (!me.alive || view.cam !== view.you || view.st !== 'playing') {
+      s.x = null;
+      return;
+    }
+    const mp = view.pl.find(p => p.i === view.you);
+    if (s.x != null && mp && !me.veh) {
+      const d = Math.hypot(me.x - s.x, me.y - s.y);
+      if (d < 120) s.acc = (s.acc || 0) + d;
+      if (mp.jz > 0) s.acc = 0;
+      if (s.acc > 66) {
+        s.acc = 0;
+        s.alt = !s.alt;
+        const fast = d / Math.max(dt, 1e-3) > D.SPEED * 1.2;
+        Sound.play(mp.bu ? 'rustle' : 'step', { v: fast ? 0.1 : 0.065, alt: s.alt });
+      }
+    }
+    s.x = me.x;
+    s.y = me.y;
+    if (mp) {
+      if (s.bu === 0 && mp.bu) Sound.play('rustle');
+      if (s.jz > 0 && !mp.jz) Sound.play('land');
+      s.bu = mp.bu;
+      s.jz = mp.jz;
+    }
+    if (s.act != null && me.act !== s.act && me.sl[me.act]) Sound.play('switch');
+    s.act = me.act;
+    const inVeh = me.veh ? 1 : 0;
+    if (s.veh != null && inVeh !== s.veh) Sound.play('door');
+    s.veh = inVeh;
+    const hpf = me.hp / me.mhp;
+    if (hpf < 0.3) {
+      s.beatT = (s.beatT || 0) - dt;
+      if (s.beatT <= 0) {
+        Sound.play('heartbeat');
+        s.beatT = hpf < 0.15 ? 0.62 : 0.9;
+      }
+    } else {
+      s.beatT = 0;
+    }
+    const zo = view.zo;
+    if (zo.on && Math.hypot(me.x - zo.x, me.y - zo.y) > zo.r) {
+      s.zT = (s.zT || 0) - dt;
+      if (s.zT <= 0) {
+        Sound.play('sizzle');
+        s.zT = 0.45;
+      }
+    } else {
+      s.zT = 0;
+    }
+    if (s.st > 0 && me.st <= 0) Sound.play('breath');
+    s.st = me.st;
   }
 
   function tipFor(view) {
@@ -947,6 +1075,10 @@
     if (dlg) {
       if (e.code === 'Space' || e.code === 'Enter') advanceDialogue();
       if (e.code === 'Escape') endDialogue();
+      return;
+    }
+    if (!$('note').hidden && (e.code === 'Escape' || e.code === 'KeyF' || e.code === 'KeyE')) {
+      closeNote();
       return;
     }
     if (e.code === 'Escape') {
@@ -1053,14 +1185,47 @@
     $('botsv').textContent = $('bots').value;
     store.set('bots', prefs.bots);
   });
-  for (const b of document.querySelectorAll('#diff button')) {
-    b.classList.toggle('on', b.dataset.v === prefs.diff);
+  for (const id of ['diff', 'roomDiff', 'pauseDiff']) {
+    for (const n of D.DIFF_LEVELS) {
+      const b = document.createElement('button');
+      b.dataset.v = String(n);
+      b.dataset.i18n = 'diff' + n;
+      $(id).appendChild(b);
+    }
+  }
+  function markDiff() {
+    for (const b of document.querySelectorAll('#diff button, #pauseDiff button')) b.classList.toggle('on', Number(b.dataset.v) === prefs.diff);
+    $('diffHint').textContent = I.t('diffHint' + prefs.diff);
+  }
+  function setDiff(n) {
+    prefs.diff = n;
+    store.set('diff', n);
+    markDiff();
+    Sound.play('click');
+  }
+  for (const b of document.querySelectorAll('#diff button')) b.addEventListener('click', () => setDiff(Number(b.dataset.v)));
+  for (const b of document.querySelectorAll('#pauseDiff button')) {
     b.addEventListener('click', () => {
-      prefs.diff = b.dataset.v;
-      store.set('diff', prefs.diff);
-      for (const el of document.querySelectorAll('#diff button')) el.classList.toggle('on', el === b);
+      setDiff(Number(b.dataset.v));
+      if (session && session.kind === 'offline') session.sim.setDifficulty(prefs.diff);
     });
   }
+  markDiff();
+  $('noteClose').addEventListener('click', () => {
+    closeNote();
+    blurFocus();
+  });
+  let hoverEl = null;
+  let hoverAt = 0;
+  document.addEventListener('pointerover', e => {
+    const b = e.target && e.target.closest ? e.target.closest('button, summary') : null;
+    if (b === hoverEl) return;
+    hoverEl = b;
+    const now = performance.now();
+    if (!b || b.disabled || now - hoverAt < 45) return;
+    hoverAt = now;
+    Sound.play('hover');
+  });
   $('server').value = store.get('server', '');
   $('roomBots').addEventListener('input', () => {
     $('roomBotsV').textContent = $('roomBots').value;
@@ -1075,7 +1240,7 @@
   });
   for (const b of document.querySelectorAll('#roomDiff button')) {
     b.addEventListener('click', () => {
-      if (session && session.kind === 'online' && session.room) session.configure(Number($('roomBots').value), b.dataset.v);
+      if (session && session.kind === 'online' && session.room) session.configure(Number($('roomBots').value), Number(b.dataset.v));
     });
   }
   $('roomStart').addEventListener('click', () => {
@@ -1216,6 +1381,8 @@
         renderer.draw(view, ui, cur.paused ? 0 : dt);
         if (!isDemo) {
           afterFrame(view);
+          if (!cur.paused && $('lobby').hidden) ownSounds(view, dt);
+          if (noteAt && Math.hypot(view.me.x - noteAt.x, view.me.y - noteAt.y) > 170) closeNote();
           lastView = view;
         }
       } else if (!isDemo) {

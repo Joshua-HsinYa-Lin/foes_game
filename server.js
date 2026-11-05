@@ -20,7 +20,8 @@ const HOST = arg('host', '0.0.0.0');
 const MAX_TOTAL = 30;
 const LEGACY_PLAYERS = Number(arg('players', 0));
 const DEFAULT_BOTS = Math.max(0, Math.min(MAX_TOTAL - 1, Number(arg('bots', LEGACY_PLAYERS ? LEGACY_PLAYERS - 1 : 13)) || 0));
-const DIFFICULTY = D.BOT_SKILL[arg('difficulty', 'normal')] ? arg('difficulty', 'normal') : 'normal';
+// Level 1 (beginner) to 5 (hard); the names easy, normal and hard from older versions mean 3, 4 and 5.
+const DIFFICULTY = D.diffLevel(arg('difficulty', '')) || D.DIFF_DEFAULT;
 // Seconds before a match starts on its own once someone is in the room; 0 means the host presses Start.
 const AUTOSTART = Math.max(0, Number(arg('autostart', arg('lobby', 0))) || 0);
 const ROOT = __dirname;
@@ -249,7 +250,7 @@ function startMatch() {
   state = 'playing';
   endTimer = 0;
   broadcastRoom();
-  console.log('Match ' + matchNo + ' started: ' + humans.length + ' player(s), ' + (sim.players.length - humans.length) + ' bot(s), ' + room.diff);
+  console.log('Match ' + matchNo + ' started: ' + humans.length + ' player(s), ' + (sim.players.length - humans.length) + ' bot(s), difficulty ' + room.diff);
 }
 
 function lateJoin(c) {
@@ -314,7 +315,8 @@ function onMessage(c, raw) {
     if (c.cid !== hostCid || state !== 'lobby') return;
     const bots = Math.floor(Number(m.bots));
     if (Number.isFinite(bots)) room.bots = Math.max(0, Math.min(MAX_TOTAL - 1, bots));
-    if (D.BOT_SKILL[m.diff]) room.diff = m.diff;
+    const lv = D.diffLevel(m.diff);
+    if (lv) room.diff = lv;
     broadcastRoom();
     return;
   }
@@ -432,7 +434,7 @@ server.listen(PORT, HOST, () => {
       if (n.family === 'IPv4' && !n.internal) console.log('  Friends:       http://' + n.address + ':' + PORT + '   (or type ' + n.address + ':' + PORT + ' in the game)');
     }
   }
-  console.log('The first player to join is the host and picks the bots (default ' + DEFAULT_BOTS + ') and difficulty. Press Ctrl+C to stop.');
+  console.log('The first player to join is the host and picks the bots (default ' + DEFAULT_BOTS + ') and difficulty (1 to 5, default ' + DIFFICULTY + '). Press Ctrl+C to stop.');
 });
 
 setInterval(tick, 1000 / D.TICK_RATE);

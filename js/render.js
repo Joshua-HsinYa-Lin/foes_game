@@ -45,6 +45,24 @@
     ctx.arc(x, y, Math.max(0, r), 0, TAU);
   }
 
+  function heart(ctx, x, y, s) {
+    ctx.beginPath();
+    ctx.moveTo(x, y + s * 0.7);
+    ctx.bezierCurveTo(x - s * 1.2, y - s * 0.2, x - s * 0.5, y - s, x, y - s * 0.35);
+    ctx.bezierCurveTo(x + s * 0.5, y - s, x + s * 1.2, y - s * 0.2, x, y + s * 0.7);
+    ctx.closePath();
+  }
+
+  function star(ctx, x, y, r) {
+    ctx.beginPath();
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * TAU;
+      const d = i % 2 ? r * 0.3 : r;
+      ctx.lineTo(x + Math.cos(a) * d, y + Math.sin(a) * d);
+    }
+    ctx.closePath();
+  }
+
   function fillStroke(ctx, fill, lw) {
     ctx.fillStyle = fill;
     ctx.fill();
@@ -340,6 +358,20 @@
             this.addParticles(e.x, e.y, 18, '#ffffff', 300, 0.5, 4);
           }
           break;
+        case 'meow':
+          for (let i = 0; i < 4; i++) {
+            this.particles.push({ x: e.x + (Math.random() - 0.5) * 24, y: e.y - 16, vx: (Math.random() - 0.5) * 40, vy: -60 - Math.random() * 40, life: 1.4, max: 1.4, size: 8 + Math.random() * 4, color: '#ff6f9f', kind: 5, rot: 0, vr: 0 });
+          }
+          break;
+        case 'land':
+          this.rings.push({ x: e.x, y: e.y, r: 110, t: this.time, col: '#ffffff', life: 0.5 });
+          this.addParticles(e.x, e.y, 12, '#d8c7a6', 150, 1.1, 18, 3);
+          break;
+        case 'open':
+          this.rings.push({ x: e.x, y: e.y, r: 130, t: this.time, col: '#ffcf3a', life: 0.6 });
+          this.addParticles(e.x, e.y, 16, '#ffe27a', 260, 0.7, 5);
+          this.addParticles(e.x, e.y, 10, '#9fdcff', 200, 0.7, 5);
+          break;
         case 'msg':
           if (e.box) {
             this.rings.push({ x: e.x, y: e.y, r: 120, t: this.time, col: '#7fd3ff', life: 0.6 });
@@ -358,7 +390,7 @@
           ps.splice(i, 1);
           continue;
         }
-        const k = Math.exp(-(p.kind === 3 ? 1.5 : 4) * dt);
+        const k = Math.exp(-(p.kind === 3 ? 1.5 : p.kind === 5 ? 0.6 : 4) * dt);
         p.vx *= k;
         p.vy *= k;
         p.x += p.vx * dt;
@@ -423,6 +455,14 @@
       for (const b of map.buildings) {
         if (vis(b.x, b.y, Math.max(b.w, b.h))) this.drawFloor(ctx, b);
       }
+      for (const sc of map.secrets || []) {
+        if (vis(sc.x, sc.y, 40)) this.drawSecretSpot(ctx, sc);
+      }
+      const extras = view.sx || [];
+      for (const q of extras) {
+        if (q.k === 'gold' && vis(q.x, q.y, 40)) this.drawGold(ctx, q);
+        else if (q.k === 'plane') this.drawPlane(ctx, q, true);
+      }
       for (const it of view.it) {
         if (vis(it.x, it.y, 40)) this.drawGroundItem(ctx, it);
       }
@@ -445,6 +485,7 @@
         else if (o.k === 'container') this.drawContainer(ctx, o);
         else if (o.k === 'lantern') this.drawLanternPost(ctx, o);
         else if (o.k === 'bamboo') this.drawBambooBase(ctx, o);
+        else if (o.k === 'board') this.drawBoard(ctx, o);
       }
       for (const t of view.tu || []) {
         if (vis(t.x, t.y, 40)) this.drawTurret(ctx, t);
@@ -453,6 +494,9 @@
       for (const p of view.pl) plMap.set(p.i, p);
       for (const v of view.ve) {
         if (vis(v.x, v.y, 90)) this.drawVehicle(ctx, v, plMap);
+      }
+      for (const q of extras) {
+        if (q.k === 'cat' && vis(q.x, q.y, 40)) this.drawCat(ctx, q);
       }
       for (const p of view.pl) {
         if (p.d || p.veh) continue;
@@ -479,6 +523,13 @@
       }
       for (const o of obs) {
         if (o.k === 'lantern') this.drawLanternTop(ctx, o);
+        else if (o.k === 'board') this.drawBoardTop(ctx, o);
+      }
+      for (const it of view.it) {
+        if (it.t === 'drop' && it.f > 0 && vis(it.x, it.y, 260)) this.drawFallingDrop(ctx, it);
+      }
+      for (const q of extras) {
+        if (q.k === 'plane' && vis(q.x, q.y, 320)) this.drawPlane(ctx, q, false);
       }
       this.drawParticles(ctx, vis, true);
       this.drawExplosions(ctx);
@@ -1168,6 +1219,18 @@
     drawGroundItem(ctx, it) {
       const bob = Math.sin(this.time * 3 + it.i) * 2;
       const W = D.WEAPONS[it.t];
+      if (it.t === 'drop') {
+        if (it.f > 0) {
+          const k = clamp(1 - it.f / 4, 0.2, 1);
+          ctx.fillStyle = 'rgba(0,0,0,' + (0.1 + k * 0.2) + ')';
+          ctx.beginPath();
+          ctx.ellipse(it.x, it.y, 34 * k, 24 * k, 0, 0, TAU);
+          ctx.fill();
+        } else {
+          this.drawDropCrate(ctx, it.x, it.y, 1, true);
+        }
+        return;
+      }
       if (it.t === 'coldbox') {
         const pulse = 0.5 + Math.sin(this.time * 4) * 0.5;
         const g = ctx.createRadialGradient(it.x, it.y, 6, it.x, it.y, 70);
@@ -1208,6 +1271,301 @@
         }
       }
       this.drawItemIcon(ctx, it.t, it.x, it.y + bob, 1);
+    }
+
+    // ---------- hidden details ----------
+
+    twinkle(ctx, x, y, seed) {
+      const t = (this.time + seed * 0.37) % 3.5;
+      if (t > 0.6) return;
+      ctx.globalAlpha = 1 - t / 0.6;
+      star(ctx, x, y, 7 + t * 8);
+      ctx.fillStyle = '#fffbe0';
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+
+    drawBoard(ctx, o) {
+      ctx.fillStyle = 'rgba(0,0,0,0.18)';
+      ctx.fillRect(o.x - o.hw + 4, o.y - o.hh + 5, o.hw * 2, o.hh * 2);
+      roundRect(ctx, o.x - o.hw, o.y - o.hh, o.hw * 2, o.hh * 2, 3);
+      fillStroke(ctx, '#8a5a30', 3);
+      for (const sx of [-1, 1]) {
+        circle(ctx, o.x + sx * (o.hw - 6), o.y, 6);
+        fillStroke(ctx, '#5a3a22', 2.5);
+      }
+    }
+
+    drawBoardTop(ctx, o) {
+      const x = o.x;
+      const y = o.y - 46;
+      roundRect(ctx, x - 40, y - 28, 80, 54, 5);
+      fillStroke(ctx, '#8a5a30', 3.5);
+      roundRect(ctx, x - 33, y - 21, 66, 40, 2);
+      ctx.fillStyle = '#f3e2b8';
+      ctx.fill();
+      ctx.fillStyle = '#b8322a';
+      ctx.font = 'bold 12px ' + FONT;
+      ctx.textAlign = 'center';
+      ctx.fillText(I.lang === 'en' ? 'NOTICE' : '允望樓 公告', x, y - 7);
+      ctx.fillStyle = 'rgba(70,50,30,0.55)';
+      for (let i = 0; i < 3; i++) ctx.fillRect(x - 25, y + i * 6, i === 2 ? 30 : 50, 2.2);
+      circle(ctx, x + 22, y + 11, 5);
+      ctx.fillStyle = 'rgba(200,40,30,0.75)';
+      ctx.fill();
+      this.twinkle(ctx, x + 34, y - 24, o.v || 0);
+    }
+
+    drawSecretSpot(ctx, sc) {
+      if (sc.id === 'log') {
+        circle(ctx, sc.x + 18, sc.y + 6, 15);
+        fillStroke(ctx, '#c9a56a', 3);
+        circle(ctx, sc.x + 18, sc.y + 6, 7);
+        ctx.strokeStyle = '#8a6a3a';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.save();
+        ctx.translate(sc.x - 8, sc.y);
+        ctx.rotate(-0.25);
+        roundRect(ctx, -14, -11, 28, 22, 3);
+        fillStroke(ctx, '#3f5f7a', 2.5);
+        ctx.strokeStyle = '#e8d8a8';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(0, -6);
+        ctx.lineTo(0, 6);
+        ctx.moveTo(-5, 3);
+        ctx.quadraticCurveTo(0, 9, 5, 3);
+        ctx.moveTo(-4, -4);
+        ctx.lineTo(4, -4);
+        ctx.stroke();
+        ctx.restore();
+        this.twinkle(ctx, sc.x - 18, sc.y - 14, sc.x);
+      } else if (sc.id === 'recipe') {
+        ctx.save();
+        ctx.translate(sc.x, sc.y);
+        ctx.rotate(0.3);
+        roundRect(ctx, -18, -8, 36, 16, 3);
+        fillStroke(ctx, '#f3e2b8', 2.5);
+        for (const ex of [-18, 18]) {
+          circle(ctx, ex, 0, 5);
+          fillStroke(ctx, '#a8732f', 2);
+        }
+        circle(ctx, 4, 2, 4);
+        ctx.fillStyle = '#c4362c';
+        ctx.fill();
+        ctx.restore();
+        this.twinkle(ctx, sc.x + 16, sc.y - 14, sc.y);
+      }
+    }
+
+    drawGold(ctx, g) {
+      const pulse = 0.5 + Math.sin(this.time * 3) * 0.5;
+      const gr = ctx.createRadialGradient(g.x, g.y, 4, g.x, g.y, 46);
+      gr.addColorStop(0, 'rgba(255,220,90,' + (0.35 + pulse * 0.25) + ')');
+      gr.addColorStop(1, 'rgba(255,220,90,0)');
+      ctx.fillStyle = gr;
+      circle(ctx, g.x, g.y, 46);
+      ctx.fill();
+      const y = g.y + Math.sin(this.time * 2.5) * 2;
+      ctx.beginPath();
+      ctx.ellipse(g.x, y, 15, 12, 0, 0, TAU);
+      fillStroke(ctx, '#ffd23a', 3);
+      ctx.strokeStyle = '#c99a1a';
+      ctx.lineWidth = 1.8;
+      for (let i = -2; i <= 2; i++) {
+        ctx.beginPath();
+        ctx.moveTo(g.x, y - 3);
+        ctx.lineTo(g.x + i * 5, y - 11);
+        ctx.stroke();
+      }
+      circle(ctx, g.x, y - 4, 3);
+      ctx.fillStyle = '#fff3b0';
+      ctx.fill();
+      this.twinkle(ctx, g.x + 14, y - 14, 3);
+    }
+
+    drawCat(ctx, c) {
+      ctx.save();
+      ctx.translate(c.x, c.y);
+      ctx.rotate(c.a);
+      ctx.scale(1.35, 1.35);
+      const walk = c.s ? 0 : Math.sin(this.time * 12) * 3;
+      ctx.fillStyle = 'rgba(0,0,0,0.18)';
+      ctx.beginPath();
+      ctx.ellipse(3, 4, 18, 11, 0, 0, TAU);
+      ctx.fill();
+      ctx.strokeStyle = OUT;
+      ctx.lineWidth = 6;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(-14, 0);
+      if (c.s) ctx.quadraticCurveTo(-20, 16, 2, 14);
+      else ctx.quadraticCurveTo(-26, walk * 2, -30, -8 + walk);
+      ctx.stroke();
+      ctx.strokeStyle = '#e39b4a';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+      ctx.lineCap = 'butt';
+      ctx.beginPath();
+      ctx.ellipse(-2, 0, c.s ? 12 : 15, 10, 0, 0, TAU);
+      fillStroke(ctx, '#e39b4a', 2.5);
+      ctx.strokeStyle = '#b8692a';
+      ctx.lineWidth = 2;
+      for (const sx of [-8, -2, 4]) {
+        ctx.beginPath();
+        ctx.moveTo(sx, -8);
+        ctx.lineTo(sx + 1, -3);
+        ctx.moveTo(sx, 8);
+        ctx.lineTo(sx + 1, 3);
+        ctx.stroke();
+      }
+      for (const sy of [-1, 1]) {
+        ctx.beginPath();
+        ctx.moveTo(15, sy * 3);
+        ctx.lineTo(19, sy * 10);
+        ctx.lineTo(10, sy * 8);
+        ctx.closePath();
+        fillStroke(ctx, '#e39b4a', 2);
+      }
+      circle(ctx, 14, 0, 7.5);
+      fillStroke(ctx, '#f0ad5c', 2.5);
+      ctx.restore();
+      if (c.h) {
+        heart(ctx, c.x, c.y - 38 + Math.sin(this.time * 5) * 2, 8);
+        ctx.fillStyle = '#ff6f9f';
+        ctx.fill();
+        ctx.strokeStyle = OUT;
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
+    }
+
+    drawDropCrate(ctx, x, y, s, chuteDown) {
+      if (chuteDown) {
+        ctx.beginPath();
+        ctx.ellipse(x + 30, y - 18, 26, 12, 0.5, 0, TAU);
+        fillStroke(ctx, 'rgba(240,248,255,0.9)', 2.5);
+        ctx.strokeStyle = '#38b7e8';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.ellipse(x + 30, y - 18, 16, 6, 0.5, 0, TAU);
+        ctx.stroke();
+      }
+      const h = 26 * s;
+      ctx.fillStyle = 'rgba(0,0,0,0.2)';
+      ctx.fillRect(x - h + 5, y - h + 6, h * 2, h * 2);
+      roundRect(ctx, x - h, y - h, h * 2, h * 2, 6 * s);
+      fillStroke(ctx, '#e9f4fb', 4);
+      ctx.fillStyle = '#38b7e8';
+      ctx.fillRect(x - h + 3, y - 5 * s, h * 2 - 6, 10 * s);
+      ctx.strokeStyle = '#2a7fae';
+      ctx.lineWidth = 2.5 * s;
+      ctx.beginPath();
+      for (let i = 0; i < 3; i++) {
+        const a = (i / 3) * Math.PI;
+        ctx.moveTo(x - Math.cos(a) * 12 * s, y - h * 0.55 - Math.sin(a) * 12 * s + 4 * s);
+        ctx.lineTo(x + Math.cos(a) * 12 * s, y - h * 0.55 + Math.sin(a) * 12 * s + 4 * s);
+      }
+      ctx.stroke();
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold ' + Math.round(10 * s) + 'px ' + FONT;
+      ctx.textAlign = 'center';
+      ctx.fillText('允望', x, y + 4 * s);
+    }
+
+    drawFallingDrop(ctx, it) {
+      const lift = it.f * 55;
+      const sway = Math.sin(this.time * 2 + it.i) * 6;
+      const x = it.x + sway;
+      const y = it.y - lift;
+      ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      for (const ex of [-30, -10, 10, 30]) {
+        ctx.moveTo(x + ex * 1.6, y - 70);
+        ctx.lineTo(x + ex * 0.6, y - 20);
+      }
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.ellipse(x, y - 72, 56, 26, 0, Math.PI, 0);
+      ctx.closePath();
+      fillStroke(ctx, '#f4f9ff', 3);
+      ctx.fillStyle = '#38b7e8';
+      ctx.beginPath();
+      ctx.ellipse(x, y - 72, 20, 26, 0, Math.PI, 0);
+      ctx.closePath();
+      ctx.fill();
+      this.drawDropCrate(ctx, x, y, 0.85, false);
+    }
+
+    drawPlane(ctx, q, shadow) {
+      ctx.save();
+      if (shadow) {
+        ctx.translate(q.x + 150, q.y + 190);
+        ctx.scale(0.9, 0.9);
+      } else {
+        ctx.translate(q.x, q.y);
+      }
+      ctx.rotate(q.a);
+      const body = new Path2D();
+      body.moveTo(-120, -14);
+      body.lineTo(90, -16);
+      body.quadraticCurveTo(135, -14, 140, 0);
+      body.quadraticCurveTo(135, 14, 90, 16);
+      body.lineTo(-120, 14);
+      body.closePath();
+      const wings = new Path2D();
+      for (const sy of [-1, 1]) {
+        wings.moveTo(30, sy * 14);
+        wings.lineTo(-20, sy * 150);
+        wings.lineTo(-48, sy * 150);
+        wings.lineTo(-30, sy * 14);
+        wings.closePath();
+        wings.moveTo(-95, sy * 12);
+        wings.lineTo(-122, sy * 54);
+        wings.lineTo(-138, sy * 54);
+        wings.lineTo(-125, sy * 12);
+        wings.closePath();
+      }
+      if (shadow) {
+        ctx.fillStyle = 'rgba(0,0,0,0.16)';
+        ctx.fill(wings);
+        ctx.fill(body);
+        ctx.restore();
+        return;
+      }
+      ctx.lineJoin = 'round';
+      ctx.fillStyle = '#e4ecf2';
+      ctx.fill(wings);
+      ctx.strokeStyle = OUT;
+      ctx.lineWidth = 4;
+      ctx.stroke(wings);
+      for (const sy of [-1, 1]) {
+        for (const d of [55, 100]) {
+          roundRect(ctx, -10 - d * 0.28, sy * d - 7, 34, 14, 6);
+          fillStroke(ctx, '#9aa7b1', 3);
+        }
+      }
+      ctx.fillStyle = '#f7fafc';
+      ctx.fill(body);
+      ctx.stroke(body);
+      ctx.fillStyle = '#38b7e8';
+      ctx.fillRect(-118, -5, 220, 10);
+      ctx.fillStyle = '#2b2a28';
+      ctx.beginPath();
+      ctx.moveTo(112, -8);
+      ctx.quadraticCurveTo(128, -7, 130, 0);
+      ctx.quadraticCurveTo(128, 7, 112, 8);
+      ctx.closePath();
+      ctx.fill();
+      ctx.rotate(Math.PI / 2);
+      ctx.fillStyle = '#1f6f9a';
+      ctx.font = 'bold 15px ' + FONT;
+      ctx.textAlign = 'center';
+      ctx.fillText('允望', -95, 30);
+      ctx.fillText('冷鏈', 95, 30);
+      ctx.restore();
     }
 
     // ---------- characters ----------
@@ -1675,10 +2033,17 @@
 
     drawParticles(ctx, vis, top) {
       for (const p of this.particles) {
-        if ((p.kind === 3) !== top || !vis(p.x, p.y, p.size)) continue;
+        if ((p.kind === 3 || p.kind === 5) !== top || !vis(p.x, p.y, p.size)) continue;
         const a = clamp(p.life / p.max, 0, 1);
         ctx.fillStyle = p.color;
-        if (p.kind === 3) {
+        if (p.kind === 5) {
+          ctx.globalAlpha = Math.min(1, a * 2);
+          heart(ctx, p.x, p.y, p.size);
+          ctx.fill();
+          ctx.strokeStyle = OUT;
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+        } else if (p.kind === 3) {
           ctx.globalAlpha = a * 0.5;
           circle(ctx, p.x, p.y, p.size * (1.6 - a * 0.6));
           ctx.fill();
@@ -2103,6 +2468,24 @@
         ctx.strokeStyle = OUT;
         ctx.lineWidth = 2;
         ctx.stroke();
+      }
+      for (const q of view.sx || []) {
+        if (q.k !== 'plane') continue;
+        ctx.save();
+        ctx.translate(tx(q.x), ty(q.y));
+        ctx.rotate(q.a);
+        ctx.beginPath();
+        ctx.moveTo(8, 0);
+        ctx.lineTo(-6, -7);
+        ctx.lineTo(-3, 0);
+        ctx.lineTo(-6, 7);
+        ctx.closePath();
+        ctx.fillStyle = '#ffffff';
+        ctx.fill();
+        ctx.strokeStyle = '#38b7e8';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        ctx.restore();
       }
       for (const p of view.pl) {
         if (p.d || p.i === view.cam || p.tm !== 1) continue;

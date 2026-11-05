@@ -29,6 +29,7 @@
       <button id="tMusic" class="chip"></button>
       <button id="tSfx" class="chip"></button>
     </div>
+    <details id="secrets" class="controls secrets"><summary id="secretsSum"></summary><ul id="secretsList"></ul></details>
     <p id="lanNote" class="note"></p>
     <p id="menuNote" class="note warn"></p>
     <details class="controls">
@@ -58,7 +59,8 @@
     <div id="heroCards" class="hero-cards"></div>
     <div class="form">
       <label class="field"><span data-i18n="name"></span><input id="name" maxlength="16" placeholder="Player" autocomplete="off" spellcheck="false"></label>
-      <div class="field"><span data-i18n="diff"></span><div class="seg" id="diff"><button data-v="easy" data-i18n="easy"></button><button data-v="normal" data-i18n="normal"></button><button data-v="hard" data-i18n="hard"></button></div></div>
+      <div class="field"><span data-i18n="diff"></span><div class="seg diff-seg" id="diff"></div></div>
+      <p id="diffHint" class="note diff-hint"></p>
       <div class="field" id="botsRow"><span data-i18n="bots"></span><div class="range"><input type="range" id="bots" min="1" max="29" value="13"><b id="botsv">13</b></div></div>
       <label class="field" id="serverRow" hidden><span data-i18n="serverAddr"></span><input id="server" maxlength="80" autocomplete="off" spellcheck="false"></label>
     </div>
@@ -112,6 +114,7 @@
   <div class="card small">
     <h2 id="pauseTitle"></h2>
     <button id="pauseResume" class="btn primary" data-i18n="resume"></button>
+    <div class="field pause-diff" id="pauseDiffRow"><span data-i18n="diff"></span><div class="seg diff-seg" id="pauseDiff"></div></div>
     <button id="pauseMusic" class="btn"></button>
     <button id="pauseSfx" class="btn"></button>
     <button id="pauseQuit" class="btn"></button>
@@ -127,7 +130,7 @@
     <div class="field room-chars-row"><span data-i18n="changeHero"></span><div id="roomChars" class="room-chars"></div></div>
     <div id="roomHost" class="form">
       <div class="field"><span data-i18n="bots"></span><div class="range"><input type="range" id="roomBots" min="0" max="29" value="13"><b id="roomBotsV">13</b></div></div>
-      <div class="field"><span data-i18n="diff"></span><div class="seg" id="roomDiff"><button data-v="easy" data-i18n="easy"></button><button data-v="normal" data-i18n="normal"></button><button data-v="hard" data-i18n="hard"></button></div></div>
+      <div class="field"><span data-i18n="diff"></span><div class="seg diff-seg" id="roomDiff"></div></div>
     </div>
     <p id="roomSummary" class="note"></p>
     <div class="btns">
@@ -145,6 +148,12 @@
 </div>
 
 <div id="lobbyBanner" class="banner" hidden></div>
+
+<div id="note" class="note-card" hidden>
+  <h3 id="noteTitle"></h3>
+  <div id="noteBody"></div>
+  <button id="noteClose" class="chip" data-i18n="noteClose"></button>
+</div>
 
 <script src="js/data.js"></script>
 <script src="js/i18n.js"></script>

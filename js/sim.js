@@ -265,7 +265,7 @@
       this.seed = (seed >>> 0) || ((Math.random() * 4294967296) >>> 0);
       this.rng = mulberry32(this.seed);
       this.size = D.MAP_SIZE;
-      this.difficulty = D.BOT_SKILL[opts.difficulty] ? opts.difficulty : 'normal';
+      this.difficulty = D.diffLevel(opts.difficulty) || D.DIFF_DEFAULT;
       this.time = 0;
       this.nextId = 1;
       this.players = [];
@@ -290,12 +290,26 @@
       this._q2 = [];
       this.usedNames = new Set();
       this.closingAnnounced = false;
+      // Hidden details use their own random stream so the map and the bots play out the same without them.
+      this.sr = mulberry32((this.seed ^ 0x5ec2e7) >>> 0);
+      this.secrets = [];
+      this.cat = null;
+      this.gold = null;
+      this.plane = null;
+      this.planeT = (this.mode === 'story' ? 50 : 70) + this.sr() * 30;
       this.generateMap();
       this.initZone();
     }
 
     ev(e) {
       this.events.push(e);
+    }
+
+    // Changes bot skill now; foe health applies to foes that spawn afterwards.
+    setDifficulty(v) {
+      const n = D.diffLevel(v);
+      if (n) this.difficulty = n;
+      return this.difficulty;
     }
 
     // ---------- map ----------
@@ -397,7 +411,7 @@
         trees++;
       }
       let groves = 0;
-      for (let t = 0; t < 600 && groves < 26; t++) {
+      for (let t = 0; t < 600 && groves < 18; t++) {
         const gx = 200 + R() * (S - 400);
         const gy = 200 + R() * (S - 400);
         if (this.noiseAt(gx, gy) > 0.55 || Math.hypot(gx - cx, gy - cy) < 750) continue;
@@ -412,8 +426,8 @@
         }
         if (ok) groves++;
       }
-      this.scatter('rock', 110, () => ({ r: 28 + R() * 22 }), 52);
-      this.scatter('bush', 190, () => ({ r: 38 + R() * 16 }), 0);
+      this.scatter('rock', 90, () => ({ r: 28 + R() * 22 }), 52);
+      this.scatter('bush', 85, () => ({ r: 38 + R() * 16 }), 0);
       this.scatter('crate', 75, () => ({ hw: 30, hh: 30 }), 46);
 
       if (this.mode === 'royale') {
@@ -446,6 +460,63 @@
           break;
         }
       }
+      this.placeSecrets();
+    }
+
+    placeSecrets() {
+      const R = this.sr;
+      const pz = this.plaza;
+      for (let t = 0; t < 60; t++) {
+        const a = R() * TAU;
+        const x = pz.x + Math.cos(a) * 405;
+        const y = pz.y + Math.sin(a) * 405;
+        if (this.nearRoad(x, y, 30) || this.insideBuilding(x, y, 30) || this.blockedAt(x, y, 46)) continue;
+        this.addObstacle('board', 'r', x, y, { hw: 34, hh: 7, v: Math.floor(R() * 1000) });
+        this.secrets.push({ id: 'notice', x, y, r: 74 });
+        break;
+      }
+      const yd = this.yard;
+      for (let t = 0; t < 80; t++) {
+        const x = yd.x + (R() - 0.5) * (yd.w - 100);
+        const y = yd.y + (R() - 0.5) * (yd.h - 100);
+        if (this.blockedAt(x, y, 34) || this.nearRoad(x, y, 10)) continue;
+        this.secrets.push({ id: 'log', x, y, r: 62 });
+        break;
+      }
+      const houses = this.buildings.filter(b => b.type === 'house');
+      for (let t = 0; t < 40 && houses.length; t++) {
+        const b = houses[Math.floor(R() * houses.length)];
+        const x = b.x + (R() - 0.5) * (b.w - 100);
+        const y = b.y + (R() - 0.5) * (b.h - 100);
+        if (this.blockedAt(x, y, 30)) continue;
+        this.secrets.push({ id: 'recipe', x, y, r: 62 });
+        break;
+      }
+      const bamboo = this.obstacles.filter(o => o.k === 'bamboo');
+      for (let t = 0; t < 60 && bamboo.length; t++) {
+        const o = bamboo[Math.floor(R() * bamboo.length)];
+        const a = R() * TAU;
+        const x = o.x + Math.cos(a) * 40;
+        const y = o.y + Math.sin(a) * 40;
+        if (this.blockedAt(x, y, 16)) continue;
+        this.gold = { x, y, taken: false };
+        break;
+      }
+      const c = { x: pz.x + 440, y: pz.y, a: Math.PI / 2, ang: 0, tx: 0, ty: 0, sitT: 3, petT: 0 };
+      this.catTarget(c);
+      c.x = c.tx;
+      c.y = c.ty;
+      this.catTarget(c);
+      this.cat = c;
+    }
+
+    // The cat walks short hops around the plaza ring, outside the restaurant and inside the lanterns.
+    catTarget(c) {
+      const R = this.sr;
+      c.ang += (R() < 0.5 ? -1 : 1) * (0.25 + R() * 0.25);
+      const rr = 410 + R() * 60;
+      c.tx = this.plaza.x + Math.cos(c.ang) * rr;
+      c.ty = this.plaza.y + Math.sin(c.ang) * rr;
     }
 
     noiseAt(x, y) {
@@ -530,7 +601,7 @@
 
     addObstacle(kind, shape, x, y, sh) {
       const def = D.OBST[kind];
-      const o = { id: this.obstacles.length, k: kind, s: shape, x, y, r: sh.r || 0, hw: sh.hw || 0, hh: sh.hh || 0, hp: def.hp, mhp: def.hp, solid: def.solid, blk: def.blk, dead: false, v: Math.floor(this.rng() * 1000), b: sh.b != null ? sh.b : -1, _s: 0 };
+      const o = { id: this.obstacles.length, k: kind, s: shape, x, y, r: sh.r || 0, hw: sh.hw || 0, hh: sh.hh || 0, hp: def.hp, mhp: def.hp, solid: def.solid, blk: def.blk, dead: false, v: sh.v != null ? sh.v : Math.floor(this.rng() * 1000), b: sh.b != null ? sh.b : -1, _s: 0 };
       this.obstacles.push(o);
       this.grid.insert(o);
       return o;
@@ -565,15 +636,25 @@
         if (horizontal) this.addObstacle('wall', 'r', (lo + hi) / 2, fixed, { hw: (hi - lo) / 2, hh: T / 2, b: b.id });
         else this.addObstacle('wall', 'r', fixed, (lo + hi) / 2, { hw: T / 2, hh: (hi - lo) / 2, b: b.id });
       };
+      // Doorways are kept for bot routing: centre point and outward normal.
+      b.doors = [];
+      const NORMAL = [[0, -1], [1, 0], [0, 1], [-1, 0]];
       for (let side = 0; side < 4; side++) {
         const horizontal = side === 0 || side === 2;
         const lo = horizontal ? x0 : y0 + T;
         const hi = horizontal ? x1 : y1 - T;
         const fixed = side === 0 ? y0 + T / 2 : side === 2 ? y1 - T / 2 : side === 1 ? x1 - T / 2 : x0 + T / 2;
         const d = doors[side];
-        if (d === 'open') continue;
+        const nx = NORMAL[side][0];
+        const ny = NORMAL[side][1];
+        if (d === 'open') {
+          const mid = (lo + hi) / 2;
+          b.doors.push(horizontal ? { x: mid, y: fixed, nx, ny } : { x: fixed, y: mid, nx, ny });
+          continue;
+        }
         if (d != null) {
           const dc = typeof d === 'number' ? (lo + hi) / 2 + d : lo + 40 + door / 2 + this.rng() * (hi - lo - 80 - door);
+          b.doors.push(horizontal ? { x: dc, y: fixed, nx, ny } : { x: fixed, y: dc, nx, ny });
           seg(horizontal, lo, dc - door / 2, fixed);
           seg(horizontal, dc + door / 2, hi, fixed);
         } else {
@@ -638,10 +719,10 @@
 
     // ---------- items ----------
 
-    rollItem(tier) {
+    rollItem(tier, R) {
       let total = 0;
       for (const e of D.LOOT) total += e[1 + tier];
-      let r = this.rng() * total;
+      let r = (R || this.rng)() * total;
       for (const e of D.LOOT) {
         r -= e[1 + tier];
         if (r <= 0) return e[0];
@@ -998,6 +1079,12 @@
     // Weapons go into the held slot if empty, then any empty slot, otherwise they replace the held weapon.
     // Healing items never use weapon slots: soup goes to the medical pouch, dumplings heal on the spot.
     tryPickup(p, it, manual) {
+      if (it.t === 'drop') {
+        if (!manual || this.time < it.land) return false;
+        this.removeItem(it);
+        this.openDrop(p, it);
+        return true;
+      }
       if (it.t === 'coldbox') {
         if (!this.story || p.team !== 1) return false;
         this.removeItem(it);
@@ -1065,7 +1152,7 @@
       let best = null;
       let bd = range * range;
       for (const it of q) {
-        if (it.t === 'coldbox') continue;
+        if (it.t === 'coldbox' || (it.t === 'drop' && it.land > this.time)) continue;
         const d = (it.x - p.x) * (it.x - p.x) + (it.y - p.y) * (it.y - p.y);
         if (d < bd) {
           bd = d;
@@ -1096,8 +1183,63 @@
       if (it && Math.hypot(it.x - p.x, it.y - p.y) < p.r + D.ITEM_R) return { item: it };
       const v = this.nearestFreeVehicle(p);
       if (v) return { vehicle: v };
+      if (!p.bot) {
+        const sc = this.nearSecret(p);
+        if (sc) return { secret: sc };
+      }
       return it ? { item: it } : null;
     }
+
+    nearSecret(p) {
+      for (const sc of this.secrets) {
+        if (Math.hypot(sc.x - p.x, sc.y - p.y) < sc.r) return sc;
+      }
+      const c = this.cat;
+      if (c && Math.hypot(c.x - p.x, c.y - p.y) < 66) return { id: 'cat' };
+      return null;
+    }
+
+    secret(p, id) {
+      if (p.bot) return;
+      this.ev({ e: 'secret', to: p.id, id });
+    }
+
+    useSecret(p, sc) {
+      if (sc.id === 'cat') {
+        const c = this.cat;
+        c.petT = 2.6;
+        c.sitT = Math.max(c.sitT, 3);
+        c.a = Math.atan2(p.y - c.y, p.x - c.x);
+        this.ev({ e: 'meow', x: c.x, y: c.y });
+      }
+      this.secret(p, sc.id);
+    }
+
+    // A cold-chain airdrop holds one rare kitchen weapon, one crate-tier item and one healing item.
+    openDrop(p, it) {
+      const R = this.sr;
+      const rares = D.LOOT.filter(e => D.WEAPONS[e[0]] && D.WEAPONS[e[0]].rare);
+      let total = 0;
+      for (const e of rares) total += e[2];
+      let r = R() * total;
+      let rare = rares[0][0];
+      for (const e of rares) {
+        r -= e[2];
+        if (r <= 0) {
+          rare = e[0];
+          break;
+        }
+      }
+      const got = [rare, this.rollItem(1, R), R() < 0.5 ? 'soup' : 'bao'];
+      got.forEach((t, i) => {
+        const a = (i / got.length) * TAU + R();
+        this.spawnItem(it.x + Math.cos(a) * 34, it.y + Math.sin(a) * 34, t);
+      });
+      this.ev({ e: 'open', x: it.x, y: it.y, i: p.id });
+      this.toPlayer(p, 'pick_drop', [], true);
+      this.secret(p, 'plane');
+    }
+
 
     interact(p) {
       if (p.veh) {
@@ -1107,6 +1249,7 @@
       const tg = this.interactTarget(p);
       if (tg && tg.item) this.tryPickup(p, tg.item, true);
       else if (tg && tg.vehicle && p.kind === 'player') this.enterVehicle(p, tg.vehicle);
+      else if (tg && tg.secret) this.useSecret(p, tg.secret);
     }
 
     enterVehicle(p, v) {
@@ -1508,7 +1651,7 @@
         return;
       }
       s.m--;
-      p.cool = W.delay * (p.kind === 'player' ? 1 : p.kind === 'boss' ? 2 : 1.8);
+      p.cool = W.delay * (p.kind === 'player' ? 1 : (p.kind === 'boss' ? 2 : 1.8) * D.BOT_SKILL[this.difficulty].foeFire);
       p.lastShot = this.time;
       const moving = Math.hypot(p.vx, p.vy) > 40;
       const spread = W.spread * (moving ? 1.5 : 1) * DEG;
@@ -1587,7 +1730,8 @@
       if (!p.alive || amt <= 0) return;
       const att = src ? this.playerMap.get(src) : null;
       if (att && att !== p && !this.enemies(att, p)) return;
-      if (att && att.kind !== 'player' && p.team === 1) amt *= { easy: 0.35, normal: 0.42, hard: 0.7 }[this.difficulty];
+      if (att && att.kind !== 'player' && p.team === 1) amt *= D.BOT_SKILL[this.difficulty].foeDmg;
+      else if (att && att.bot && !p.bot && this.mode === 'royale') amt *= D.BOT_SKILL[this.difficulty].botDmg;
       p.hp -= amt;
       p.hitT = this.time;
       if (p.inject && cause !== 'zone' && cause !== 'burn') p.inject = null;
@@ -1794,7 +1938,7 @@
     }
 
     spawnFoe(kind, weapons, x, y) {
-      const hpMul = { easy: 0.8, normal: 1, hard: 1.25 }[this.difficulty];
+      const hpMul = D.BOT_SKILL[this.difficulty].foeHp;
       const w = weapons[Math.floor(this.rng() * weapons.length)];
       const id = this.addPlayer('', true, { kind, team: 2, weapon: w === 'fists' ? null : w, x, y, hpMul, hunt: this.chapter.hunt || 800 });
       const p = this.playerMap.get(id);
@@ -1865,7 +2009,108 @@
       this.updateTurrets(dt);
       this.updateVehicles(dt);
       this.updateBullets(dt);
+      this.updateSecrets(dt);
       this.updateStory(dt);
+    }
+
+    updateSecrets(dt) {
+      const c = this.cat;
+      if (c) {
+        c.petT = Math.max(0, c.petT - dt);
+        if (c.sitT > 0) {
+          c.sitT -= dt;
+        } else {
+          const dx = c.tx - c.x;
+          const dy = c.ty - c.y;
+          const d = Math.hypot(dx, dy);
+          if (d < 4) {
+            c.sitT = 2 + this.sr() * 5;
+            this.catTarget(c);
+          } else {
+            const step = Math.min(d, 55 * dt);
+            c.a = Math.atan2(dy, dx);
+            c.x += (dx / d) * step;
+            c.y += (dy / d) * step;
+          }
+        }
+      }
+      const g = this.gold;
+      if (g && !g.taken) {
+        for (const p of this.players) {
+          if (p.bot || !p.alive || p.veh || Math.hypot(p.x - g.x, p.y - g.y) > p.r + 16) continue;
+          g.taken = true;
+          p.hp = p.maxHp;
+          p.boostT = Math.max(p.boostT, 4);
+          this.ev({ e: 'heal', i: p.id, x: p.x, y: p.y });
+          this.toPlayer(p, 'pick_gold', [], true);
+          this.secret(p, 'gold');
+          break;
+        }
+      }
+      for (const it of this.items.values()) {
+        if (it.t === 'drop' && !it.landed && this.time >= it.land) {
+          it.landed = true;
+          this.ev({ e: 'land', x: it.x, y: it.y });
+        }
+      }
+      if (this.state !== 'playing') return;
+      const pl = this.plane;
+      if (!pl) {
+        this.planeT -= dt;
+        if (this.planeT <= 0) this.launchPlane();
+        return;
+      }
+      const sp = 620 * dt;
+      pl.x += pl.dx * sp;
+      pl.y += pl.dy * sp;
+      pl.trav += sp;
+      if (!pl.dropped && pl.trav >= pl.dropAt) {
+        pl.dropped = true;
+        let open = 0;
+        for (const it of this.items.values()) if (it.t === 'drop') open++;
+        if (open < 2) {
+          const it = this.spawnItem(pl.tx, pl.ty, 'drop');
+          it.land = this.time + 4;
+          it.landed = false;
+        }
+      }
+      if (pl.trav >= pl.len) {
+        this.plane = null;
+        this.planeT = 75 + this.sr() * 35;
+      }
+    }
+
+    // The cold-chain cargo plane crosses the map and drops a crate near the middle of the safe area.
+    launchPlane() {
+      const R = this.sr;
+      const S = this.size;
+      const z = this.zone;
+      let tx = S / 2;
+      let ty = S / 2;
+      for (let t = 0; t < 40; t++) {
+        let x;
+        let y;
+        if (this.zoneOn) {
+          const a = R() * TAU;
+          const d = Math.sqrt(R()) * z.tr * 0.6;
+          x = z.x + Math.cos(a) * d;
+          y = z.y + Math.sin(a) * d;
+        } else {
+          x = 400 + R() * (S - 800);
+          y = 400 + R() * (S - 800);
+        }
+        if (x < 120 || y < 120 || x > S - 120 || y > S - 120) continue;
+        if (this.blockedAt(x, y, 40) || this.insideBuilding(x, y, 20)) continue;
+        tx = x;
+        ty = y;
+        break;
+      }
+      const a = R() * TAU;
+      const dx = Math.cos(a);
+      const dy = Math.sin(a);
+      const back = 3200;
+      this.plane = { x: tx - dx * back, y: ty - dy * back, dx, dy, a, tx, ty, trav: 0, dropAt: back, len: back * 2, dropped: false };
+      this.ev({ e: 'msg', g: 1, k: 'msg_plane' });
     }
 
     updateTurrets(dt) {
@@ -2128,6 +2373,7 @@
     }
 
     botWant(p, it) {
+      if (it.t === 'drop') return it.land <= this.time ? 8 : 0;
       if (it.t === 'coldbox') return p.team === 1 ? 9 : 0;
       if (it.t === 'bao') return p.hp < p.maxHp * 0.85 ? 2 + 7 * (1 - p.hp / p.maxHp) : 0;
       if (it.t === 'bag') return p.nslots < D.SLOTS_BAG ? 6 : 0;
@@ -2325,6 +2571,8 @@
             if (slot < 0) slot = this.worstWeaponSlot(p);
             if (slot >= 0 && p.act !== slot) p.actions.push({ a: 'slot', i: slot });
             else p.actions.push({ a: 'interact' });
+          } else if (cur.t === 'drop' && Math.hypot(cur.x - p.x, cur.y - p.y) < 50) {
+            p.actions.push({ a: 'interact' });
           }
           return;
         }
@@ -2368,6 +2616,27 @@
       }
     }
 
+    // Leaving a building for a goal outside it (or entering one from outside): head for the best doorway first.
+    routeVia(p, gx, gy) {
+      const inB = this.insideBuilding(p.x, p.y, -4);
+      const gB = this.insideBuilding(gx, gy, -4);
+      if (inB === gB) return null;
+      const b = inB || gB;
+      if (!b.doors || !b.doors.length) return null;
+      let best = null;
+      let bd = Infinity;
+      for (const dr of b.doors) {
+        const d = Math.hypot(dr.x - p.x, dr.y - p.y) + Math.hypot(gx - dr.x, gy - dr.y);
+        if (d < bd) {
+          bd = d;
+          best = dr;
+        }
+      }
+      const out = inB ? 1 : -1;
+      if (Math.hypot(best.x - p.x, best.y - p.y) < 50) return [best.x + best.nx * 75 * out, best.y + best.ny * 75 * out];
+      return [best.x - best.nx * 42 * out, best.y - best.ny * 42 * out];
+    }
+
     botSteer(p, mx, my) {
       const len = Math.hypot(mx, my);
       if (len < 1e-6) return [0, 0];
@@ -2381,7 +2650,8 @@
 
     botUpdate(p, dt) {
       const ai = p.ai;
-      const P = D.BOT_SKILL[this.difficulty];
+      // Story allies keep at least level-4 skill, so an easier level never weakens the hero's own team.
+      const P = D.BOT_SKILL[this.story && p.team === 1 ? Math.max(this.difficulty, 4) : this.difficulty];
       const inp = p.input;
       if (ai.sleepT > 0) {
         ai.sleepT -= dt;
@@ -2405,8 +2675,14 @@
         const dx = tgt.x - p.x;
         const dy = tgt.y - p.y;
         const d = Math.hypot(dx, dy) || 1;
-        const ux = dx / d;
-        const uy = dy / d;
+        let ux = dx / d;
+        let uy = dy / d;
+        const via = ai.los ? null : this.routeVia(p, tgt.x, tgt.y);
+        if (via) {
+          const vd = Math.hypot(via[0] - p.x, via[1] - p.y) || 1;
+          ux = (via[0] - p.x) / vd;
+          uy = (via[1] - p.y) / vd;
+        }
         const pref = isGun(t) ? (t === 'shotgun' ? 150 : t === 'sniper' ? 650 : t === 'pistol' || t === 'uzi' ? 280 : 420) : 20;
         let ap = 0;
         if (!ai.los || d > pref * 1.2) ap = 1;
@@ -2423,9 +2699,12 @@
         sprint = !isGun(t) && d > 120;
         if (this.time - p.hitT < 0.3 && p.jumpCool <= 0 && p.kind === 'player' && this.rng() < 0.08) p.actions.push({ a: 'jump' });
       } else if (ai.goal) {
-        const dx = ai.goal[0] - p.x;
-        const dy = ai.goal[1] - p.y;
-        const d = Math.hypot(dx, dy);
+        const via = this.routeVia(p, ai.goal[0], ai.goal[1]);
+        const gx = via ? via[0] : ai.goal[0];
+        const gy = via ? via[1] : ai.goal[1];
+        const dx = gx - p.x;
+        const dy = gy - p.y;
+        const d = via ? Math.max(40, Math.hypot(dx, dy)) : Math.hypot(dx, dy);
         if (d > (ai.goalKind === 'crate' ? 70 : 6)) {
           mx = dx / d;
           my = dy / d;
@@ -2504,7 +2783,9 @@
       const tg = this.interactTarget(p);
       if (!tg) return null;
       if (tg.vehicle) return { k: 'drive', t: tg.vehicle.t };
+      if (tg.secret) return { k: 'see_' + tg.secret.id };
       const it = tg.item;
+      if (it.t === 'drop') return { k: 'openDrop' };
       if (it.t === 'bao' || it.t === 'bag' || it.t === 'soup') return { k: 'pickUp', t: it.t };
       let free = !p.slots[p.act];
       for (let i = 0; i < p.nslots; i++) if (!p.slots[i]) free = true;
@@ -2518,6 +2799,7 @@
         seed: this.seed,
         plaza: this.plaza,
         yard: this.yard,
+        secrets: this.secrets.map(sc => ({ id: sc.id, x: r1(sc.x), y: r1(sc.y) })),
         roads: this.roads.map(r => ({ w: r.w, pts: r.pts.map(p => [r1(p[0]), r1(p[1])]) })),
         buildings: this.buildings.map(b => ({ id: b.id, x: b.x, y: b.y, w: b.w, h: b.h, type: b.type, roof: b.roof, floor: b.floor })),
         obstacles: this.obstacles.map(o => ({ id: o.id, k: o.k, s: o.s, x: r1(o.x), y: r1(o.y), r: r1(o.r), hw: r1(o.hw), hh: r1(o.hh), hp: o.hp, mhp: o.mhp, v: o.v, dead: o.dead ? 1 : 0, b: o.b }))
@@ -2636,7 +2918,18 @@
         if (inView(t.x, t.y, 60)) tu.push({ i: t.id, x: r1(t.x), y: r1(t.y), a: Math.round(t.a * 100) / 100, tm: t.team, lf: Math.round(t.life * 10) / 10 });
       }
       const it = [];
-      for (const t of this.itemGrid.query(x0 - 30, y0 - 30, x1 + 30, y1 + 30, [])) it.push({ i: t.id, x: r1(t.x), y: r1(t.y), t: t.t });
+      for (const t of this.itemGrid.query(x0 - 30, y0 - 30, x1 + 30, y1 + 30, [])) {
+        const o = { i: t.id, x: r1(t.x), y: r1(t.y), t: t.t };
+        if (t.t === 'drop' && t.land > this.time) o.f = r1(t.land - this.time);
+        it.push(o);
+      }
+      const sx = [];
+      const cat = this.cat;
+      if (cat && inView(cat.x, cat.y, 40)) sx.push({ i: -1, k: 'cat', x: r1(cat.x), y: r1(cat.y), a: Math.round(cat.a * 100) / 100, s: cat.sitT > 0 ? 1 : 0, h: cat.petT > 0 ? 1 : 0 });
+      const gold = this.gold;
+      if (gold && !gold.taken && inView(gold.x, gold.y, 30)) sx.push({ i: -2, k: 'gold', x: r1(gold.x), y: r1(gold.y) });
+      const pn = this.plane;
+      if (pn) sx.push({ i: -3, k: 'plane', x: r1(pn.x), y: r1(pn.y), a: Math.round(pn.a * 1000) / 1000 });
       const ve = [];
       for (const v of this.vehicles) {
         if (inView(v.x, v.y, 100)) ve.push({ i: v.id, t: v.t, x: r1(v.x), y: r1(v.y), a: Math.round(v.a * 1000) / 1000, hp: Math.round((v.hp / v.mhp) * 100) / 100, d: v.driver, c: v.col, sp: Math.round(v.sp) });
@@ -2669,6 +2962,7 @@
         bu,
         tu,
         it,
+        sx,
         ve,
         ob,
         zo: { x: r1(z.x), y: r1(z.y), r: r1(z.r), tr: r1(z.tr), on: this.zoneOn ? 1 : 0 },

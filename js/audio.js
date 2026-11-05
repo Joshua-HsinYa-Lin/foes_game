@@ -323,6 +323,141 @@
         case 'lose':
           this.notes([392, 349, 311, 262], 'triangle', 0.3, 0.2);
           break;
+        case 'step': {
+          const d = this.out((opts.v || 0.07) * att, pan);
+          this.noiseBurst(d, opts.alt ? 520 : 440, 'lowpass', 0.07);
+          this.tone(d, opts.alt ? 95 : 85, 50, 0.05, 'sine', 0.35);
+          break;
+        }
+        case 'rustle': {
+          const d = this.out(0.16 * att, pan);
+          this.noiseBurst(d, 2600, 'bandpass', 0.22, 0.8);
+          this.noiseBurst(d, 3800, 'bandpass', 0.16, 1.2, 0.07);
+          break;
+        }
+        case 'land': {
+          const d = this.out(0.22 * att, pan);
+          this.tone(d, 140, 55, 0.12, 'sine', 0.8);
+          this.noiseBurst(d, 600, 'lowpass', 0.09);
+          break;
+        }
+        case 'switch': {
+          const d = this.out(0.16, 0);
+          this.tone(d, 2400, 1900, 0.025, 'square', 0.3);
+          this.tone(d, 1500, 1200, 0.03, 'square', 0.25, 0.05);
+          break;
+        }
+        case 'drop': {
+          const d = this.out(0.22, 0);
+          this.tone(d, 260, 110, 0.12, 'triangle', 0.6);
+          this.noiseBurst(d, 900, 'lowpass', 0.08);
+          break;
+        }
+        case 'door': {
+          const d = this.out(0.3 * att, pan);
+          this.noiseBurst(d, 380, 'lowpass', 0.14);
+          this.tone(d, 130, 70, 0.12, 'square', 0.25);
+          this.tone(d, 900, 700, 0.03, 'square', 0.15, 0.1);
+          break;
+        }
+        case 'heartbeat': {
+          const d = this.out(0.32, 0);
+          this.tone(d, 70, 42, 0.13, 'sine', 1);
+          this.tone(d, 64, 40, 0.11, 'sine', 0.7, 0.2);
+          break;
+        }
+        case 'sizzle':
+          this.noiseBurst(this.out(0.09, 0), 5200, 'highpass', 0.35);
+          break;
+        case 'breath': {
+          const d = this.out(0.2, 0);
+          this.noiseBurst(d, 900, 'bandpass', 0.45, 1.5);
+          this.noiseBurst(d, 700, 'bandpass', 0.5, 1.5, 0.55);
+          break;
+        }
+        case 'hover':
+          this.tone(this.out(0.05, 0), 2100, 1900, 0.025, 'triangle', 0.5);
+          break;
+        case 'gong': {
+          const d = this.out(0.4, 0);
+          for (const [f, v] of [[174, 1], [263, 0.55], [392, 0.35], [607, 0.2], [861, 0.12]]) this.tone(d, f, f * 0.985, 2.6, 'sine', v);
+          this.noiseBurst(d, 1200, 'lowpass', 0.08);
+          break;
+        }
+        case 'secret':
+          this.notes([1047, 1319, 1568, 1976, 2349, 3136], 'sine', 0.24, 0.07);
+          this.notes([523, 784], 'triangle', 0.12, 0.2);
+          break;
+        case 'meow': {
+          const t = this.ctx.currentTime;
+          const d = this.out(0.3 * att, pan);
+          const o = this.ctx.createOscillator();
+          o.type = 'sawtooth';
+          o.frequency.setValueAtTime(620, t);
+          o.frequency.linearRampToValueAtTime(980, t + 0.12);
+          o.frequency.linearRampToValueAtTime(560, t + 0.45);
+          const flt = this.ctx.createBiquadFilter();
+          flt.type = 'bandpass';
+          flt.frequency.setValueAtTime(1300, t);
+          flt.frequency.linearRampToValueAtTime(1800, t + 0.15);
+          flt.frequency.linearRampToValueAtTime(1000, t + 0.45);
+          flt.Q.value = 3;
+          const g = this.ctx.createGain();
+          g.gain.setValueAtTime(0.0001, t);
+          g.gain.exponentialRampToValueAtTime(0.9, t + 0.04);
+          g.gain.setValueAtTime(0.9, t + 0.25);
+          g.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
+          o.connect(flt);
+          flt.connect(g);
+          g.connect(d);
+          o.start(t);
+          o.stop(t + 0.55);
+          break;
+        }
+        case 'plane': {
+          const t = this.ctx.currentTime;
+          const d = this.out(0.22, 0);
+          const flt = this.ctx.createBiquadFilter();
+          flt.type = 'lowpass';
+          flt.frequency.value = 420;
+          const g = this.ctx.createGain();
+          g.gain.setValueAtTime(0.0001, t);
+          g.gain.exponentialRampToValueAtTime(0.8, t + 1.8);
+          g.gain.setValueAtTime(0.8, t + 3.2);
+          g.gain.exponentialRampToValueAtTime(0.001, t + 7);
+          flt.connect(g);
+          g.connect(d);
+          for (const f of [68, 71.5, 136]) {
+            const o = this.ctx.createOscillator();
+            o.type = 'sawtooth';
+            o.frequency.setValueAtTime(f * 1.04, t);
+            o.frequency.linearRampToValueAtTime(f * 0.96, t + 7);
+            o.connect(flt);
+            o.start(t);
+            o.stop(t + 7.1);
+          }
+          break;
+        }
+        case 'landDrop': {
+          const d = this.out(0.45 * att, pan);
+          this.tone(d, 120, 40, 0.35, 'sine', 1);
+          this.noiseBurst(d, 420, 'lowpass', 0.3);
+          this.noiseBurst(d, 2400, 'bandpass', 0.25, 0.8, 0.05);
+          break;
+        }
+        case 'unlock': {
+          const d = this.out(0.3 * att, pan);
+          this.tone(d, 900, 600, 0.05, 'square', 0.3);
+          this.tone(d, 1200, 800, 0.05, 'square', 0.3, 0.08);
+          this.notes([784, 1047, 1319], 'triangle', 0.18 * att, 0.06);
+          break;
+        }
+        case 'paper': {
+          const d = this.out(0.22, 0);
+          this.noiseBurst(d, 3000, 'bandpass', 0.12, 1);
+          this.noiseBurst(d, 4200, 'bandpass', 0.1, 1, 0.1);
+          break;
+        }
         case 'blip':
           this.tone(this.out(0.12, 0), 880, 760, 0.05, 'square', 0.3);
           break;

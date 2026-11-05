@@ -60,8 +60,131 @@ function duel(charA, charB, opts) {
   check(['pan', 'chopsticks', 'bowl'].every(t => rare.indexOf(t) >= 0), 'pan, chopsticks and bowl are rare loot');
 }
 
+// ---------- difficulty levels ----------
+{
+  check(D.diffLevel('easy') === 3 && D.diffLevel('normal') === 4 && D.diffLevel('hard') === 5, 'old difficulty names map to levels 3, 4 and 5');
+  check(D.diffLevel(1) === 1 && D.diffLevel('2') === 2 && D.diffLevel(0) === 0 && D.diffLevel('7') === 0 && D.diffLevel('x') === 0, 'levels 1 to 5 are accepted and other values are not');
+  check(new Sim({ seed: 5 }).difficulty === D.DIFF_DEFAULT && new Sim({ seed: 5, difficulty: 'hard' }).difficulty === 5, 'sim falls back to the default level and reads old names');
+  const lv = D.DIFF_LEVELS.map(n => D.BOT_SKILL[n]);
+  let ordered = true;
+  for (let i = 1; i < lv.length; i++) {
+    if (!(lv[i].react <= lv[i - 1].react && lv[i].aimNoise <= lv[i - 1].aimNoise && lv[i].foeDmg >= lv[i - 1].foeDmg && lv[i].foeHp >= lv[i - 1].foeHp && lv[i].botDmg >= lv[i - 1].botDmg)) ordered = false;
+  }
+  check(ordered, 'each level is at least as hard as the one below it');
+  const { sim, a } = duel('yunwang', 'luap', { dist: 200 });
+  sim.setDifficulty(1);
+  const botId = sim.addPlayer('', true, {});
+  const bot = sim.playerMap.get(botId);
+  bot.x = 2100;
+  bot.y = 2100;
+  const hp0 = a.hp;
+  sim.damagePlayer(a, 20, botId, 'pistol');
+  check(Math.abs(hp0 - a.hp - 20 * D.BOT_SKILL[1].botDmg) < 1e-9, 'level 1 bots deal ' + D.BOT_SKILL[1].botDmg + 'x damage to people in Paradise Brawl');
+  sim.setDifficulty(4);
+  const hp1 = a.hp;
+  sim.damagePlayer(a, 20, botId, 'pistol');
+  check(Math.abs(hp1 - a.hp - 20) < 1e-9, 'level 4 bots deal full damage, unchanged from before');
+  check(sim.setDifficulty('nonsense') === 4, 'setDifficulty ignores invalid values');
+  const st = new Sim({ mode: 'story', chapter: 'ch1', difficulty: 1 });
+  const hid = st.startStory('Hero', 'luap');
+  const foe = st.players.find(p => p.team === 2);
+  check(foe.maxHp === Math.round(D.FOES.thug.hp * D.BOT_SKILL[1].foeHp), 'level 1 story foes have reduced health');
+  const hero = st.playerMap.get(hid);
+  const h0 = hero.hp;
+  st.damagePlayer(hero, 50, foe.id, 'pistol');
+  check(Math.abs(h0 - hero.hp - 50 * D.BOT_SKILL[1].foeDmg) < 1e-9, 'level 1 story foes deal ' + D.BOT_SKILL[1].foeDmg + 'x damage');
+}
+
+// ---------- hidden details ----------
+{
+  const sim = new Sim({ seed: 4242 });
+  const ids = sim.secrets.map(sc => sc.id);
+  check(['notice', 'log', 'recipe'].every(k => ids.indexOf(k) >= 0) && sim.gold && sim.cat, 'notice board, logbook, recipe, golden dumpling and cat are placed');
+  check(sim.obstacles.some(o => o.k === 'board') && sim.getMapData().secrets.length === 3, 'notice board is an obstacle and the map data lists the static secrets');
+  const kinds = {};
+  for (const o of sim.obstacles) kinds[o.k] = (kinds[o.k] || 0) + 1;
+  check((kinds.bush || 0) <= 90, 'fewer bushes than before (' + kinds.bush + ', was up to 190)');
+  const pid = sim.addPlayer('Finder', false, { char: 'auhsoj' });
+  const p = sim.playerMap.get(pid);
+  const bid = sim.addPlayer('', true, {});
+  const bot = sim.playerMap.get(bid);
+  const gotSecret = () => {
+    const out = [];
+    for (const e of sim.eventsFor(pid, 0)) if (e.e === 'secret') out.push(e.id);
+    return out;
+  };
+  const visit = (x, y) => {
+    for (const it of [...sim.items.values()]) {
+      if (it.t !== 'drop' && Math.hypot(it.x - x, it.y - y) < 90) sim.removeItem(it);
+    }
+    p.x = x;
+    p.y = y;
+    p.vx = 0;
+    p.vy = 0;
+    sim.setInput(pid, { mx: 0, my: 0, aim: 0, shoot: false });
+  };
+  const notice = sim.secrets.find(sc => sc.id === 'notice');
+  visit(notice.x, notice.y + 40);
+  sim.pushAction(pid, { a: 'interact' });
+  sim.step(1 / 30);
+  check(gotSecret().indexOf('notice') >= 0, 'pressing F at the notice board reveals it');
+  check(sim.promptFor(p) && sim.promptFor(p).k === 'see_notice', 'the notice board shows a read prompt');
+  for (const id of ['log', 'recipe']) {
+    const sc = sim.secrets.find(q => q.id === id);
+    visit(sc.x, sc.y);
+    sim.pushAction(pid, { a: 'interact' });
+    sim.step(1 / 30);
+    check(gotSecret().indexOf(id) >= 0, 'pressing F at the ' + id + ' reveals it');
+  }
+  const cat = sim.cat;
+  cat.sitT = 10;
+  visit(cat.x + 30, cat.y);
+  sim.pushAction(pid, { a: 'interact' });
+  sim.step(1 / 30);
+  const catEv = sim.events.filter(e => e.e === 'meow').length;
+  check(catEv === 1 && gotSecret().indexOf('cat') >= 0 && cat.petT > 0, 'petting the cat makes it meow and reveals it');
+  p.hp = 20;
+  visit(sim.gold.x, sim.gold.y);
+  sim.step(1 / 30);
+  check(sim.gold.taken && p.hp === p.maxHp && gotSecret().indexOf('gold') >= 0, 'the golden dumpling heals fully and reveals it');
+  bot.x = 300;
+  bot.y = 300;
+  sim.planeT = 0;
+  let drop = null;
+  let msg = 0;
+  for (let i = 0; i < 30 * 20 && !drop; i++) {
+    sim.step(1 / 30);
+    if (sim.events.some(e => e.e === 'msg' && e.k === 'msg_plane')) msg++;
+    for (const it of sim.items.values()) if (it.t === 'drop') drop = it;
+  }
+  check(msg === 1 && drop && drop.land > sim.time, 'the cargo plane announces itself and drops a falling crate');
+  visit(drop.x, drop.y);
+  sim.pushAction(pid, { a: 'interact' });
+  sim.step(1 / 30);
+  check(sim.items.has(drop.id), 'a falling crate cannot be opened');
+  let landed = 0;
+  for (let i = 0; i < 30 * 5; i++) {
+    sim.step(1 / 30);
+    landed += sim.events.filter(e => e.e === 'land').length;
+  }
+  visit(drop.x, drop.y);
+  const id0 = sim.nextId;
+  sim.pushAction(pid, { a: 'interact' });
+  sim.step(1 / 30);
+  const secretsNow = gotSecret();
+  const rareOut = [...sim.items.values()].some(it => D.WEAPONS[it.t] && D.WEAPONS[it.t].rare && Math.hypot(it.x - drop.x, it.y - drop.y) < 80);
+  check(landed === 1 && !sim.items.has(drop.id) && sim.nextId - id0 === 3 && rareOut && secretsNow.indexOf('plane') >= 0, 'a landed crate opens into a rare kitchen weapon and two more items');
+  const botEvents = sim.eventsFor(bid, 0).filter(e => e.e === 'secret');
+  check(botEvents.length === 0, 'bots never get secret events');
+  bot.x = notice.x;
+  bot.y = notice.y + 40;
+  check(!(sim.interactTarget(bot) || {}).secret, 'bots do not use secrets');
+  const twin = new Sim({ seed: 4242 });
+  check(JSON.stringify(twin.obstacles.map(o => [o.k, o.x, o.y])) === JSON.stringify(new Sim({ seed: 4242 }).obstacles.map(o => [o.k, o.x, o.y])), 'hidden details keep the map deterministic');
+}
+
 // ---------- royale ----------
-for (const [seed, diff] of [[1, 'normal'], [2, 'hard'], [3, 'easy']]) {
+for (const [seed, diff] of [[1, 4], [2, 5], [3, 1]]) {
   const sim = new Sim({ seed, difficulty: diff });
   const hid = sim.addPlayer('Tester', false, { char: 'yunwang' });
   sim.autopilot(hid);
@@ -80,7 +203,7 @@ for (const [seed, diff] of [[1, 'normal'], [2, 'hard'], [3, 'easy']]) {
   const ms = Date.now() - t0;
   const kills = sim.players.reduce((a, p) => a + p.kills, 0);
   const chars = new Set(sim.players.map(p => p.char));
-  console.log('royale ' + seed + ' (' + diff + '): ' + sim.time.toFixed(0) + 's, kills=' + kills + ', winner=' + (sim.winner ? sim.winner.name || sim.winner.char : '-') + ', ' + (ms / n).toFixed(3) + ' ms/step');
+  console.log('royale ' + seed + ' (level ' + diff + '): ' + sim.time.toFixed(0) + 's, kills=' + kills + ', winner=' + (sim.winner ? sim.winner.name || sim.winner.char : '-') + ', ' + (ms / n).toFixed(3) + ' ms/step');
   check(sim.state === 'ended' && sim.players.filter(p => p.alive).length <= 1, 'royale ' + seed + ': ends with one survivor');
   check(!nan && kills >= 5 && chars.size === 4, 'royale ' + seed + ': no NaN, kills happen, all four characters present');
 }
@@ -236,7 +359,7 @@ for (const [seed, diff] of [[1, 'normal'], [2, 'hard'], [3, 'easy']]) {
 
 // ---------- story chapters ----------
 const storyResults = {};
-for (const diff of ['easy', 'normal']) {
+for (const diff of [1, 2, 3, 4]) {
   for (const ch of D.STORY) {
     let wins = 0;
     const tries = 3;
@@ -254,7 +377,11 @@ for (const diff of ['easy', 'normal']) {
     console.log('story ' + diff + ' ' + ch.id + ': autopilot won ' + wins + '/' + tries + '  [' + notes.join(', ') + ']');
   }
 }
-for (const ch of D.STORY) check(storyResults['easy ' + ch.id] >= 1, 'story ' + ch.id + ' can be won by the autopilot on easy');
+for (const lvl of [1, 2, 3]) {
+  for (const ch of D.STORY) check(storyResults[lvl + ' ' + ch.id] >= 1, 'story ' + ch.id + ' can be won by the autopilot on level ' + lvl);
+}
+const total = lvl => D.STORY.reduce((a, ch) => a + storyResults[lvl + ' ' + ch.id], 0);
+check(total(1) >= total(4), 'level 1 story wins (' + total(1) + ') are at least level 4 wins (' + total(4) + ')');
 
 console.log(failures ? failures + ' check(s) failed' : 'all checks passed');
 process.exit(failures ? 1 : 0);
