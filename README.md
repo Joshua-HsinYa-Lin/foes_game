@@ -59,11 +59,12 @@ Six things are hidden in every map. The title screen counts how many you have fo
 - Everyone carries a backpack with 3 weapon slots. The 保溫外送袋 thermal bag upgrades it to 4 weapon slots.
 - Healing items never take a weapon slot. 雞湯 chicken soup goes into a separate medical pouch when you walk over it (up to 3, or 5 with the thermal bag); press H to drink one and heal 60. 小籠包 soup dumplings heal 40 on the spot. 「?」 ingredient crates break open for better loot.
 - Delivery vans and scooters can be driven, and they hurt anyone they hit.
+- Wooden buildings break: the striped food stalls and the brown-roofed cabins have plank walls that crack and give way after enough hits (bullets, melee, flame bursts, or driving into them). Once half of a building's walls are down, the whole thing collapses into rubble and its roof is gone. Brick houses and 允望樓 itself do not break.
 - Every minute or two a cold-chain cargo plane crosses the map and parachutes a crate into the safe area. Press F on the landed crate for a rare kitchen weapon, one more item and something to heal with.
 
 ## Sound
 
-Besides weapon sounds: footsteps (faster when running), rustling in bushes, a thump on landing a jump, weapon switch clicks, van and scooter doors, a heartbeat below 30% health, a sizzle while standing in the thawing zone, heavy breathing when stamina runs out, a gong when a match or chapter starts, the cargo plane's engines and its crate landing, and a few more for the hidden details. All sounds are generated in the browser; nothing extra is downloaded.
+Besides weapon sounds: wood knocks, cracks and a crash when a wooden building comes down, footsteps (faster when running), rustling in bushes, a thump on landing a jump, weapon switch clicks, van and scooter doors, a heartbeat below 30% health, a sizzle while standing in the thawing zone, heavy breathing when stamina runs out, a gong when a match or chapter starts, the cargo plane's engines and its crate landing, and a few more for the hidden details. All sounds are generated in the browser; nothing extra is downloaded.
 
 ## Controls
 
@@ -95,12 +96,30 @@ One computer hosts; everyone else only needs the game.
 
    Or double-click `start-lan-server.bat` (Windows) / run `./start-lan-server.sh` (macOS, Linux). It prints an address such as `192.168.1.23:8080`. Allow Node.js through the firewall on private networks if your computer asks.
 2. **Everyone, including the host:** open the game, either by visiting `http://<that address>` in a browser or by opening the downloaded `yunwang_paradise.html` and typing the address in the **伺服器位址 Server address** box. Pick a character and press **區網對戰 LAN Battle**.
-3. **Waiting room:** the first person in is the host. The host picks **how many bots** join (0 to 29, as long as people plus bots stay at 30 or fewer) and the bot difficulty; everyone sees the settings and the player list, and anyone can switch character. The host presses **開始對戰 Start Match**. With only one person in the room at least one bot is added.
+3. **Waiting room:** the first person in is the host. The host picks **how many bots** join (0 to 29, as long as people plus bots stay at 30 or fewer), the bot difficulty and the **match mode**; everyone sees the settings and the player list, and anyone can switch character. The host presses **開始對戰 Start Match**. With only one person in the room at least one bot is added.
 4. After a match everyone returns to the waiting room for the next one. If the host leaves, the next person becomes host.
+
+Match modes:
+
+| Mode | How it plays |
+| --- | --- |
+| 大亂鬥 Free-for-all | Everyone for themselves; last one standing wins. |
+| 紅藍對戰 Red vs Blue | Everyone picks 紅隊 red, 藍隊 blue or 自動 auto in the waiting room; bots even out the sides. Teammates cannot hurt each other, and every player wears a ring in their team colour. The last side with anyone standing wins. |
+| 全家合作 Family co-op | All people on one team against the bots. A fallen player watches a family member and comes back next to them after 6 seconds, with a pistol and two seconds of shield. The family loses only if everyone is down at the same time. |
+
+### Playing with the whole family (8 people)
+
+This was tested with 8 browsers in one room. Each player received 30 updates a second, the server used 1 to 1.5 ms of each 33 ms tick, and the host sent 0.7 to 1.1 MB/s in total (about 6 to 9 Mbit/s), which home Wi-Fi handles.
+
+- Put the host computer on the same Wi-Fi as everyone, or better, on a cable to the router. Keep it plugged in.
+- Everyone else needs only a browser: visit `http://<host address>` (no download needed), or open `yunwang_paradise.html` and type the address.
+- Each person needs a keyboard and mouse; the game has no touch controls yet.
+- For mixed ages, 全家合作 Family co-op on level 1 or 2 keeps everyone in the game. Every bot hunts the family in co-op, so start with about 1.5 bots per person (12 bots for 8 people) and add more if it is too easy. For a family rivalry, 紅藍對戰 Red vs Blue with each side picked in the waiting room.
+- Several people can play the same character; names and team rings tell them apart.
 
 The address works for anyone on the same Wi-Fi or LAN. Playing across the internet needs the host's router to forward the port, or a virtual LAN tool, and is not covered here.
 
-Server options: `node server.js --port 8080 --bots 13 --difficulty 4` sets the port and the starting bot count and difficulty level 1 to 5 (the host can still change them; the older names easy, normal and hard still work and mean 3, 4 and 5). `--autostart 15` starts matches on their own 15 seconds after someone joins, for a server nobody hosts from.
+Server options: `node server.js --port 8080 --bots 13 --difficulty 4 --mode coop` sets the port and the starting bot count, difficulty level 1 to 5 and mode (`ffa`, `teams` or `coop`); the host can still change them. The older difficulty names easy, normal and hard still work and mean 3, 4 and 5. `--autostart 15` starts matches on their own 15 seconds after someone joins, for a server nobody hosts from. `--stats` prints server load and bandwidth every 10 seconds.
 
 ## Prototype
 
@@ -137,6 +156,6 @@ node tools/build_single.js
 node tests/sim_test.js
 ```
 
-Runs without dependencies. It checks the map, the difficulty levels, every hidden detail and the airdrop, three full Paradise Brawl rounds, every character skill and passive, the kitchen weapon effects (knockback, burn, slow, bounce, pierce), the backpack slots and medical pouch, pickups, friendly fire, and plays each story chapter with an AI-controlled hero on levels 1 to 4 to confirm each chapter can be won on levels 1 to 3.
+Runs without dependencies. It checks the map, the difficulty levels, every hidden detail and the airdrop, breakable buildings, the team and family co-op modes (including full 30-player matches with 8 people and their snapshot sizes), three full Paradise Brawl rounds, every character skill and passive, the kitchen weapon effects (knockback, burn, slow, bounce, pierce), the backpack slots and medical pouch, pickups, friendly fire, and plays each story chapter with an AI-controlled hero on levels 1 to 4 to confirm each chapter can be won on levels 1 to 3.
 
-The browser tests (`tests/browser_test.js`, `tests/scenario_test.js`, `tests/details_test.js`, `tests/lan_test.js`) drive the real page with Playwright and save screenshots. They are optional and need Playwright, which this project does not install. `tests/lan_test.js` needs a server running first: `node server.js --port 8099`.
+The browser tests (`tests/browser_test.js`, `tests/scenario_test.js`, `tests/details_test.js`, `tests/lan_test.js`, `tests/family_test.js`) drive the real page with Playwright and save screenshots. They are optional and need Playwright, which this project does not install. `tests/lan_test.js` and `tests/family_test.js` (8 people in one room) need a server running first: `node server.js --port 8099 --stats`. `tests/playtest.js [shots dir] [level] [character] [rounds]` plays Paradise Brawl rounds through the keyboard and mouse and reports how each went.

@@ -836,6 +836,27 @@ input[type='range']:disabled {
   color: var(--ink);
   margin-bottom: 14px;
 }
+
+.room-player.team1 {
+  box-shadow: inset 0 0 0 3px #d9372b;
+}
+
+.room-player.team2 {
+  box-shadow: inset 0 0 0 3px #3f78d0;
+}
+
+.team-seg button[data-v='1'].on {
+  background: #d9372b;
+}
+
+.team-seg button[data-v='2'].on {
+  background: #3f78d0;
+}
+
+#lobby {
+  overflow-y: auto;
+  align-items: flex-start;
+}
 </style>
 </head>
 <body>
@@ -963,7 +984,10 @@ input[type='range']:disabled {
     <div id="roomHost" class="form">
       <div class="field"><span data-i18n="bots"></span><div class="range"><input type="range" id="roomBots" min="0" max="29" value="13"><b id="roomBotsV">13</b></div></div>
       <div class="field"><span data-i18n="diff"></span><div class="seg diff-seg" id="roomDiff"></div></div>
+      <div class="field"><span data-i18n="matchMode"></span><div class="seg" id="roomMode"><button data-v="ffa" data-i18n="mode_ffa"></button><button data-v="teams" data-i18n="mode_teams"></button><button data-v="coop" data-i18n="mode_coop"></button></div></div>
     </div>
+    <p id="roomModeHint" class="note"></p>
+    <div class="field" id="roomTeamRow" hidden><span data-i18n="yourTeam"></span><div class="seg team-seg" id="roomTeam"><button data-v="0" data-i18n="team_0"></button><button data-v="1" data-i18n="team_1"></button><button data-v="2" data-i18n="team_2"></button></div></div>
     <p id="roomSummary" class="note"></p>
     <div class="btns">
       <button id="lobbyLeave" class="btn" data-i18n="leave"></button>
@@ -1129,6 +1153,9 @@ input[type='range']:disabled {
   // The cold-chain zone shrinks with the share of players still alive, and on a timer after timeStart.
   D.ZONE = { startFrac: 0.72, minFrac: 0.04, speed: 40, timeStart: 90, timeDur: 330, dps: 20 };
 
+  // Plank wall health: base plus per pixel of wall length (a 100 px piece takes about 170).
+  D.PLANK_HP = [80, 0.9];
+
   D.OBST = {
     tree: { solid: true, blk: true, hp: 0 },
     bamboo: { solid: true, blk: true, hp: 0 },
@@ -1136,6 +1163,7 @@ input[type='range']:disabled {
     rock: { solid: true, blk: true, hp: 0 },
     crate: { solid: true, blk: true, hp: 70 },
     wall: { solid: true, blk: true, hp: 0 },
+    plank: { solid: true, blk: true, hp: 1 },
     table: { solid: true, blk: false, hp: 0 },
     stove: { solid: true, blk: true, hp: 0 },
     lantern: { solid: true, blk: false, hp: 0 },
@@ -1146,14 +1174,20 @@ input[type='range']:disabled {
   // Difficulty levels 1 to 5; 3, 4 and 5 are the earlier easy, normal and hard.
   // foeDmg: story enemy damage to the hero team. foeHp: story enemy health.
   // botDmg: bot damage to people in Paradise Brawl. foeFire: story enemy fire-delay multiplier.
+  // botFire: fire-delay multiplier for Paradise Brawl bots.
   D.BOT_SKILL = {
-    1: { react: 0.7, aimNoise: 0.32, turn: 3.2, sight: 480, lead: 0, shootAngle: 0.24, foeDmg: 0.2, foeHp: 0.6, botDmg: 0.55, foeFire: 1.35 },
-    2: { react: 0.55, aimNoise: 0.24, turn: 4, sight: 560, lead: 0.15, shootAngle: 0.2, foeDmg: 0.27, foeHp: 0.7, botDmg: 0.75, foeFire: 1.15 },
-    3: { react: 0.4, aimNoise: 0.16, turn: 5, sight: 650, lead: 0.3, shootAngle: 0.16, foeDmg: 0.35, foeHp: 0.8, botDmg: 1, foeFire: 1 },
-    4: { react: 0.27, aimNoise: 0.085, turn: 8, sight: 800, lead: 0.6, shootAngle: 0.12, foeDmg: 0.42, foeHp: 1, botDmg: 1, foeFire: 1 },
-    5: { react: 0.16, aimNoise: 0.04, turn: 13, sight: 950, lead: 0.9, shootAngle: 0.08, foeDmg: 0.7, foeHp: 1.25, botDmg: 1, foeFire: 1 }
+    1: { react: 0.7, aimNoise: 0.32, turn: 3.2, sight: 480, lead: 0, shootAngle: 0.24, foeDmg: 0.2, foeHp: 0.6, botDmg: 0.55, foeFire: 1.35, botFire: 1.6 },
+    2: { react: 0.55, aimNoise: 0.24, turn: 4, sight: 560, lead: 0.15, shootAngle: 0.2, foeDmg: 0.27, foeHp: 0.7, botDmg: 0.75, foeFire: 1.15, botFire: 1.3 },
+    3: { react: 0.4, aimNoise: 0.16, turn: 5, sight: 650, lead: 0.3, shootAngle: 0.16, foeDmg: 0.35, foeHp: 0.8, botDmg: 1, foeFire: 1, botFire: 1 },
+    4: { react: 0.27, aimNoise: 0.085, turn: 8, sight: 800, lead: 0.6, shootAngle: 0.12, foeDmg: 0.42, foeHp: 1, botDmg: 1, foeFire: 1, botFire: 1 },
+    5: { react: 0.16, aimNoise: 0.04, turn: 13, sight: 950, lead: 0.9, shootAngle: 0.08, foeDmg: 0.7, foeHp: 1.25, botDmg: 1, foeFire: 1, botFire: 1 }
   };
   D.DIFF_LEVELS = [1, 2, 3, 4, 5];
+  D.TEAM_MODES = ['ffa', 'teams', 'coop'];
+  // Coop matches: seconds before a fallen person returns next to a family member.
+  D.RESPAWN_TIME = 6;
+  // In coop every bot is after the family, so bots hit people this much softer than in a free-for-all.
+  D.COOP_BOT_DMG = 0.75;
   D.DIFF_DEFAULT = 4;
   // Saved settings and server flags from before the levels used names.
   const DIFF_NAMES = { easy: 3, normal: 4, hard: 5 };
@@ -1301,6 +1335,30 @@ input[type='range']:disabled {
       note_recipe_t: '允望的秘方（請勿外流）',
       note_recipe_b: '一、食材要新鮮，冷鏈不能斷。\n二、火候看鍋，不看時鐘。\n三、湯頭熬滿六小時，少一分鐘客人吃得出來。\n四、最後一味：煮給家人吃的心情。\n\n（背面：Meibao 的珍奶配方在另一張紙上，找不到別怪我。）',
       noteClose: '關閉（F / Esc）',
+      matchMode: '對戰模式',
+      mode_ffa: '大亂鬥',
+      mode_teams: '紅藍對戰',
+      mode_coop: '全家合作',
+      modeHint_ffa: '每個人各自為戰，最後站著的人獲勝。',
+      modeHint_teams: '分成紅隊和藍隊，每個人自己選邊，電腦玩家補齊人數。最後還有人站著的隊伍獲勝。',
+      modeHint_coop: '所有人同一隊對抗電腦。倒下的人 6 秒後在還活著的家人身邊復活；全員同時倒下就輸了。所有電腦都會來找你們，建議電腦人數約是家人的 1.5 倍。',
+      yourTeam: '你的隊伍',
+      team_0: '自動',
+      team_1: '紅隊',
+      team_2: '藍隊',
+      family: '全家',
+      teamWin: '{0}獲勝！',
+      teamLose: '{0}落敗……',
+      coopWin: '全家勝利！',
+      coopWinSub: '電腦全倒了，一起去吃飯吧！',
+      teamWinSub: '你的隊伍撐到了最後。',
+      coopLose: '全家都倒下了……',
+      youDown: '你倒下了',
+      teamFighting: '{0}還在戰鬥，一起觀戰吧',
+      teamAlive: '紅隊 {0} · 藍隊 {1}',
+      coopAlive: '家人 {0} · 敵人 {1}',
+      respawnIn: '{0} 秒後在家人身邊復活',
+      respawned: '回來了！',
       lang: 'Language',
       music: '音樂',
       sfx: '音效',
@@ -1397,6 +1455,7 @@ input[type='range']:disabled {
       outlasted: '你撐過了其他 {0} 位玩家。',
       placed: '第 {0} 名',
       eliminatedBy: '被 {0} 擊倒。',
+      zoneDeath: '在退冰區裡撐不住了。下次早點往冷鏈區中心跑！',
       chapterClear: '章節完成！',
       chapterFail: '任務失敗',
       fail_dead: '你被擊倒了，再來一次！',
@@ -1493,6 +1552,30 @@ input[type='range']:disabled {
       note_recipe_t: "Yunwang's Secret Recipe (do not share)",
       note_recipe_b: "1. Fresh ingredients. Never break the cold chain.\n2. Judge the heat by the wok, not the clock.\n3. Simmer the broth a full six hours; guests can taste a skipped minute.\n4. The last ingredient: cook it like it's for family.\n\n(On the back: Meibao's boba recipe is on another sheet. Don't blame me if you can't find it.)",
       noteClose: 'Close (F / Esc)',
+      matchMode: 'Mode',
+      mode_ffa: 'Free-for-all',
+      mode_teams: 'Red vs Blue',
+      mode_coop: 'Family co-op',
+      modeHint_ffa: 'Everyone for themselves. The last one standing wins.',
+      modeHint_teams: 'Red team against blue team. Everyone picks a side; bots even out the numbers. The last team with anyone standing wins.',
+      modeHint_coop: 'Everyone on one team against the bots. A fallen player comes back next to a living family member after 6 seconds; if everyone is down at once, the bots win. Every bot comes after the family, so about 1.5 bots per person is a good start.',
+      yourTeam: 'Your team',
+      team_0: 'Auto',
+      team_1: 'Red',
+      team_2: 'Blue',
+      family: 'Family',
+      teamWin: '{0} team wins!',
+      teamLose: '{0} team lost...',
+      coopWin: 'The family wins!',
+      coopWinSub: 'Every bot is down. Dinner time!',
+      teamWinSub: 'Your team made it to the end.',
+      coopLose: 'The whole family is down...',
+      youDown: 'You are down',
+      teamFighting: '{0} team is still fighting. Watch them.',
+      teamAlive: 'Red {0} · Blue {1}',
+      coopAlive: 'Family {0} · Enemies {1}',
+      respawnIn: 'Back next to your family in {0} s',
+      respawned: 'Back in the fight!',
       lang: '語言',
       music: 'Music',
       sfx: 'Sound',
@@ -1589,6 +1672,7 @@ input[type='range']:disabled {
       outlasted: 'You outlasted {0} other players.',
       placed: 'You placed #{0}',
       eliminatedBy: 'Taken out by {0}.',
+      zoneDeath: 'The thaw zone got you. Head for the middle of the cold-chain zone sooner next time!',
       chapterClear: 'Chapter Clear!',
       chapterFail: 'Mission Failed',
       fail_dead: 'You were knocked out. Try again!',
@@ -1993,6 +2077,9 @@ input[type='range']:disabled {
       opts = opts || {};
       this.mode = opts.mode === 'story' ? 'story' : 'royale';
       this.chapter = this.mode === 'story' ? D.STORY.find(c => c.id === opts.chapter) || D.STORY[0] : null;
+      // Paradise Brawl: 'ffa' everyone for themselves, 'teams' red (1) against blue (2), 'coop' people (1) against bots (2).
+      this.teamMode = this.mode === 'royale' && D.TEAM_MODES.indexOf(opts.teamMode) > 0 ? opts.teamMode : 'ffa';
+      this.winTeam = 0;
       const seed = this.chapter ? this.chapter.seed : opts.seed;
       this.seed = (seed >>> 0) || ((Math.random() * 4294967296) >>> 0);
       this.rng = mulberry32(this.seed);
@@ -2128,7 +2215,7 @@ input[type='range']:disabled {
       }
       let cabins = 0;
       for (let t = 0; t < 300 && cabins < 6; t++) {
-        if (this.tryBuilding(300 + R() * (S - 600), 300 + R() * (S - 600), 220, 190, 'house')) cabins++;
+        if (this.tryBuilding(300 + R() * (S - 600), 300 + R() * (S - 600), 220, 190, 'house', true)) cabins++;
       }
 
       let trees = 0;
@@ -2339,7 +2426,7 @@ input[type='range']:disabled {
       return o;
     }
 
-    tryBuilding(x, y, w, h, type) {
+    tryBuilding(x, y, w, h, type, weak) {
       const S = this.size;
       x = Math.round(x);
       y = Math.round(y);
@@ -2353,7 +2440,7 @@ input[type='range']:disabled {
       const blocked = q.length > 0;
       q.length = 0;
       if (blocked) return false;
-      this.addBuilding(x, y, w, h, type);
+      this.addBuilding(x, y, w, h, type, weak);
       return true;
     }
 
@@ -2363,10 +2450,19 @@ input[type='range']:disabled {
       const x1 = b.x + b.w / 2;
       const y0 = b.y - b.h / 2;
       const y1 = b.y + b.h / 2;
+      // Wooden buildings get plank walls that break after enough hits.
+      const kind = b.weak ? 'plank' : 'wall';
+      b.walls = [];
       const seg = (horizontal, lo, hi, fixed) => {
         if (hi - lo < 2) return;
-        if (horizontal) this.addObstacle('wall', 'r', (lo + hi) / 2, fixed, { hw: (hi - lo) / 2, hh: T / 2, b: b.id });
-        else this.addObstacle('wall', 'r', fixed, (lo + hi) / 2, { hw: T / 2, hh: (hi - lo) / 2, b: b.id });
+        let o;
+        if (horizontal) o = this.addObstacle(kind, 'r', (lo + hi) / 2, fixed, { hw: (hi - lo) / 2, hh: T / 2, b: b.id });
+        else o = this.addObstacle(kind, 'r', fixed, (lo + hi) / 2, { hw: T / 2, hh: (hi - lo) / 2, b: b.id });
+        if (b.weak) {
+          o.hp = Math.round(D.PLANK_HP[0] + (hi - lo) * D.PLANK_HP[1]);
+          o.mhp = o.hp;
+        }
+        b.walls.push(o.id);
       };
       // Doorways are kept for bot routing: centre point and outward normal.
       b.doors = [];
@@ -2395,9 +2491,9 @@ input[type='range']:disabled {
       }
     }
 
-    addBuilding(x, y, w, h, type) {
+    addBuilding(x, y, w, h, type, weak) {
       const R = this.rng;
-      const b = { id: this.buildings.length, x, y, w, h, type, roof: Math.floor(R() * D.ROOFS.length), floor: Math.floor(R() * D.FLOORS.length) };
+      const b = { id: this.buildings.length, x, y, w, h, type, roof: Math.floor(R() * D.ROOFS.length), floor: Math.floor(R() * D.FLOORS.length), weak: !!weak || type === 'stall', broken: false };
       this.buildings.push(b);
       if (type === 'stall') {
         const doors = {};
@@ -2593,6 +2689,7 @@ input[type='range']:disabled {
         skillCool: 2,
         skillUses: 0,
         boostT: 0,
+        shieldT: 0,
         burnT: 0,
         burnDps: 0,
         burnSrc: 0,
@@ -2686,6 +2783,7 @@ input[type='range']:disabled {
       const p = this.playerMap.get(id);
       if (!p) return;
       p.bot = true;
+      p.pilot = true;
       const collect = this.story && this.story.goal.type === 'collect';
       p.ai = this.makeAi(p.kind, { loot: true, hunt: this.mode === 'story' && !collect ? 1400 : 0 });
       p.ai.lastX = p.x;
@@ -2734,6 +2832,131 @@ input[type='range']:disabled {
         return [px, py];
       }
       return [clamp(x + d0, 80, S - 80), clamp(y, 80, S - 80)];
+    }
+
+    // Called once people and bots are in. Coop: every person on team 1, bots on team 2.
+    // Teams: people keep a chosen side (1 red, 2 blue), the rest and the bots even out the sides.
+    setupTeams() {
+      if (this.teamMode === 'ffa') return;
+      const people = this.players.filter(p => this.isPerson(p));
+      const bots = this.players.filter(p => !this.isPerson(p));
+      if (this.teamMode === 'coop') {
+        for (const p of people) p.team = 1;
+        for (const p of bots) p.team = 2;
+      } else {
+        const n = [0, 0, 0];
+        for (const p of people) if (p.team === 1 || p.team === 2) n[p.team]++;
+        for (const p of people.concat(bots)) {
+          if (p.team === 1 || p.team === 2) continue;
+          p.team = n[1] <= n[2] ? 1 : 2;
+          n[p.team]++;
+        }
+      }
+      this.placeTeams();
+    }
+
+    // Each side starts together: teams on opposite sides of the map, coop families in one group with bots spread out.
+    placeTeams() {
+      const S = this.size;
+      const a = this.rng() * TAU;
+      const anchors = [null, [S / 2 + Math.cos(a) * 1150, S / 2 + Math.sin(a) * 1150], [S / 2 - Math.cos(a) * 1150, S / 2 - Math.sin(a) * 1150]];
+      const sides = this.teamMode === 'coop' ? [1] : [1, 2];
+      for (const t of sides) {
+        const an = anchors[t];
+        for (const p of this.players) {
+          if (p.team !== t) continue;
+          const sp = this.findSpot(an[0], an[1], 0, 300, p.r);
+          p.x = sp[0];
+          p.y = sp[1];
+        }
+      }
+      if (this.teamMode === 'coop') {
+        for (const p of this.players) {
+          if (p.team !== 2) continue;
+          p.x = -9999;
+          p.y = -9999;
+        }
+        // Bots start well away from the family, since every one of them is after the family.
+        const fam = this.players.filter(p => p.team === 1);
+        const famDist = (x, y) => Math.min(...fam.map(f => Math.hypot(f.x - x, f.y - y)));
+        for (const p of this.players) {
+          if (p.team !== 2) continue;
+          for (let t = 0; t < 12; t++) {
+            this.spawnPoint(p);
+            if (famDist(p.x, p.y) > 1100) break;
+          }
+        }
+        for (const p of this.players) if (p.team === 1 && p.ai) p.ai.home = [p.x, p.y];
+      }
+    }
+
+    // People are the human players; an autopilot (used by tests) still counts as one.
+    isPerson(p) {
+      return !p.bot || !!p.pilot;
+    }
+
+    // A person who joins a running team match goes to the smaller side (always team 1 in coop), next to a teammate.
+    joinTeam(p) {
+      if (this.teamMode === 'ffa') return;
+      if (this.teamMode === 'coop') {
+        p.team = 1;
+      } else if (p.team !== 1 && p.team !== 2) {
+        const n = [0, 0, 0];
+        for (const q of this.players) if (q !== p && q.alive) n[q.team]++;
+        p.team = n[1] <= n[2] ? 1 : 2;
+      }
+      const mate = this.players.find(q => q !== p && q.alive && q.team === p.team);
+      if (mate) {
+        const sp = this.findSpot(mate.x, mate.y, 60, 220, p.r);
+        p.x = sp[0];
+        p.y = sp[1];
+      }
+    }
+
+    // Coop only: a fallen person comes back next to a living family member after D.RESPAWN_TIME seconds.
+    respawnLeft(p) {
+      if (this.teamMode !== 'coop' || p.alive || !this.isPerson(p) || p.left || this.state !== 'playing') return -1;
+      if (!this.players.some(q => q.alive && this.isPerson(q) && q.team === p.team)) return -1;
+      return Math.max(0, D.RESPAWN_TIME - (this.time - p.deadT));
+    }
+
+    updateRespawns() {
+      if (this.teamMode !== 'coop' || this.state !== 'playing') return;
+      for (const p of this.players) {
+        if (this.respawnLeft(p) !== 0) continue;
+        const mates = this.players.filter(q => q.alive && this.isPerson(q) && q.team === p.team);
+        this.respawn(p, mates[Math.floor(this.rng() * mates.length)]);
+      }
+    }
+
+    respawn(p, near) {
+      const sp = this.findSpot(near.x, near.y, 60, 220, p.r);
+      p.x = sp[0];
+      p.y = sp[1];
+      p.vx = 0;
+      p.vy = 0;
+      p.kx = 0;
+      p.ky = 0;
+      p.alive = true;
+      p.hp = p.maxHp;
+      p.stamina = 100;
+      p.burnT = 0;
+      p.slowT = 0;
+      p.jumpT = 0;
+      p.rushT = 0;
+      p.cool = 0;
+      p.reload = null;
+      p.inject = null;
+      p.slots = [{ t: 'pistol', m: D.WEAPONS.pistol.mag }, null, null, null];
+      p.act = 0;
+      p.nslots = D.SLOTS;
+      p.soups = 1;
+      p.killer = '';
+      p.killerNk = '';
+      p.killerId = 0;
+      p.placement = 0;
+      p.shieldT = this.time + 2;
+      this.ev({ e: 'respawn', i: p.id, x: p.x, y: p.y });
     }
 
     removePlayer(id) {
@@ -3191,7 +3414,7 @@ input[type='range']:disabled {
       const q = this.grid.query(Math.min(x0, x1), Math.min(y0, y1), Math.max(x0, x1), Math.max(y0, y1), this._q2);
       let hit = false;
       for (const o of q) {
-        if (!o.blk || o.dead || (wallsOnly && o.k !== 'wall')) continue;
+        if (!o.blk || o.dead || (wallsOnly && o.k !== 'wall' && o.k !== 'plank')) continue;
         if (obstacleSegT(o, x0, y0, x1, y1) >= 0) {
           hit = true;
           break;
@@ -3383,7 +3606,8 @@ input[type='range']:disabled {
         return;
       }
       s.m--;
-      p.cool = W.delay * (p.kind === 'player' ? 1 : (p.kind === 'boss' ? 2 : 1.8) * D.BOT_SKILL[this.difficulty].foeFire);
+      const L = D.BOT_SKILL[this.difficulty];
+      p.cool = W.delay * (p.kind === 'player' ? (p.bot && !p.pilot && !this.story ? L.botFire : 1) : (p.kind === 'boss' ? 2 : 1.8) * L.foeFire);
       p.lastShot = this.time;
       const moving = Math.hypot(p.vx, p.vy) > 40;
       const spread = W.spread * (moving ? 1.5 : 1) * DEG;
@@ -3459,11 +3683,11 @@ input[type='range']:disabled {
     }
 
     damagePlayer(p, amt, src, cause, quiet) {
-      if (!p.alive || amt <= 0) return;
+      if (!p.alive || amt <= 0 || p.shieldT > this.time) return;
       const att = src ? this.playerMap.get(src) : null;
       if (att && att !== p && !this.enemies(att, p)) return;
       if (att && att.kind !== 'player' && p.team === 1) amt *= D.BOT_SKILL[this.difficulty].foeDmg;
-      else if (att && att.bot && !p.bot && this.mode === 'royale') amt *= D.BOT_SKILL[this.difficulty].botDmg;
+      else if (att && att.bot && !p.bot && this.mode === 'royale') amt *= D.BOT_SKILL[this.difficulty].botDmg * (this.teamMode === 'coop' ? D.COOP_BOT_DMG : 1);
       p.hp -= amt;
       p.hitT = this.time;
       if (p.inject && cause !== 'zone' && cause !== 'burn') p.inject = null;
@@ -3521,6 +3745,19 @@ input[type='range']:disabled {
 
     checkWin() {
       if (this.state !== 'playing' || this.players.length < 2) return;
+      if (this.teamMode !== 'ffa') {
+        const left = new Set();
+        for (const q of this.players) if (q.alive) left.add(q.team);
+        if (left.size > 1) return;
+        const team = left.size ? [...left][0] : 0;
+        this.state = 'ended';
+        this.winTeam = team;
+        this.winner = this.players.find(q => q.alive) || null;
+        this.result = team ? 'win' : 'none';
+        for (const q of this.players) if (q.team === team) q.placement = 1;
+        this.ev({ e: 'win', g: 1, n: this.winner ? this.winner.name : '', i: this.winner ? this.winner.id : 0, tm: team });
+        return;
+      }
       let alive = 0;
       let last = null;
       for (const q of this.players) {
@@ -3554,10 +3791,26 @@ input[type='range']:disabled {
       o.hp = 0;
       o.dead = true;
       this.ev({ e: 'break', x: o.x, y: o.y, k: o.k, id: o.id });
+      if (o.k === 'plank' && o.b >= 0) this.checkCollapse(this.buildings[o.b]);
       if (o.k === 'crate') {
         this.spawnItem(o.x, o.y, this.rollItem(1));
         if (this.rng() < 0.35) this.spawnItem(o.x + 30, o.y + 10, this.rollItem(1));
       }
+    }
+
+    // A wooden building falls in once half of its wall pieces are broken: the rest of the walls and the roof go.
+    checkCollapse(b) {
+      if (!b || b.broken || !b.walls) return;
+      let down = 0;
+      for (const id of b.walls) if (this.obstacles[id].dead) down++;
+      if (down * 2 < b.walls.length) return;
+      b.broken = true;
+      for (const id of b.walls) {
+        const o = this.obstacles[id];
+        o.dead = true;
+        o.hp = 0;
+      }
+      this.ev({ e: 'collapse', x: b.x, y: b.y, w: b.w, h: b.h, id: b.id });
     }
 
     damageVehicle(v, dmg, src) {
@@ -3742,6 +3995,7 @@ input[type='range']:disabled {
       this.updateVehicles(dt);
       this.updateBullets(dt);
       this.updateSecrets(dt);
+      this.updateRespawns();
       this.updateStory(dt);
     }
 
@@ -3856,8 +4110,10 @@ input[type='range']:disabled {
         t.cool -= dt;
         const owner = this.playerMap.get(t.owner);
         if (!owner) continue;
+        // A bot's turret aims only as well as that bot would at this level.
+        const P = owner.bot && !owner.pilot ? D.BOT_SKILL[this.difficulty] : null;
         let best = null;
-        let bd = D.WEAPONS.turret.range;
+        let bd = P ? Math.min(D.WEAPONS.turret.range, P.sight) : D.WEAPONS.turret.range;
         for (const q of this.players) {
           if (!q.alive || q.veh || !this.enemies(owner, q)) continue;
           const d = Math.hypot(q.x - t.x, q.y - t.y);
@@ -3870,8 +4126,8 @@ input[type='range']:disabled {
         const want = Math.atan2(best.y - t.y, best.x - t.x);
         t.a += clamp(angleDiff(t.a, want), -8 * dt, 8 * dt);
         if (t.cool <= 0 && Math.abs(angleDiff(t.a, want)) < 0.2) {
-          t.cool = 0.28;
-          this.spawnBullet(owner, 'turret', t.a + (this.rng() - 0.5) * 0.06, t.x + Math.cos(t.a) * 20, t.y + Math.sin(t.a) * 20);
+          t.cool = 0.28 * (P ? 1 + P.react : 1);
+          this.spawnBullet(owner, 'turret', t.a + (this.rng() - 0.5) * (0.06 + (P ? P.aimNoise * 2 : 0)), t.x + Math.cos(t.a) * 20, t.y + Math.sin(t.a) * 20);
           this.ev({ e: 'shot', i: 0, x: t.x, y: t.y, a: t.a, w: 'turret' });
         }
       }
@@ -4193,7 +4449,8 @@ input[type='range']:disabled {
         const s = p.slots[gunSlot];
         if (s.m < D.WEAPONS[s.t].mag * 0.5) p.actions.push({ a: 'reload' });
       }
-      if (p.char && p.skillCool <= 0) {
+      // In Paradise Brawl bots hold their skills for the first 20 seconds, while everyone gears up.
+      if (p.char && p.skillCool <= 0 && !(this.mode === 'royale' && this.time < 20)) {
         const sk = D.CHARS[p.char].skill.id;
         if (sk === 'flame' && tgt && tdist < 150) p.actions.push({ a: 'skill' });
         else if (sk === 'rush' && tgt && ai.los && tdist > 120 && tdist < 330) {
@@ -4350,8 +4607,10 @@ input[type='range']:disabled {
 
     // Leaving a building for a goal outside it (or entering one from outside): head for the best doorway first.
     routeVia(p, gx, gy) {
-      const inB = this.insideBuilding(p.x, p.y, -4);
-      const gB = this.insideBuilding(gx, gy, -4);
+      let inB = this.insideBuilding(p.x, p.y, -4);
+      let gB = this.insideBuilding(gx, gy, -4);
+      if (inB && inB.broken) inB = null;
+      if (gB && gB.broken) gB = null;
       if (inB === gB) return null;
       const b = inB || gB;
       if (!b.doors || !b.doors.length) return null;
@@ -4533,7 +4792,7 @@ input[type='range']:disabled {
         yard: this.yard,
         secrets: this.secrets.map(sc => ({ id: sc.id, x: r1(sc.x), y: r1(sc.y) })),
         roads: this.roads.map(r => ({ w: r.w, pts: r.pts.map(p => [r1(p[0]), r1(p[1])]) })),
-        buildings: this.buildings.map(b => ({ id: b.id, x: b.x, y: b.y, w: b.w, h: b.h, type: b.type, roof: b.roof, floor: b.floor })),
+        buildings: this.buildings.map(b => ({ id: b.id, x: b.x, y: b.y, w: b.w, h: b.h, type: b.type, roof: b.roof, floor: b.floor, weak: b.weak ? 1 : 0, broken: b.broken ? 1 : 0 })),
         obstacles: this.obstacles.map(o => ({ id: o.id, k: o.k, s: o.s, x: r1(o.x), y: r1(o.y), r: r1(o.r), hw: r1(o.hw), hh: r1(o.hh), hp: o.hp, mhp: o.mhp, v: o.v, dead: o.dead ? 1 : 0, b: o.b }))
       };
     }
@@ -4544,6 +4803,11 @@ input[type='range']:disabled {
       if (!me.alive && spectateId) {
         const s = this.playerMap.get(spectateId);
         if (s) return s;
+      }
+      // In a team match a fallen player watches a living teammate.
+      if (!me.alive && this.teamMode !== 'ffa') {
+        const mate = this.players.find(q => q.alive && q.team === me.team && !q.bot) || this.players.find(q => q.alive && q.team === me.team);
+        if (mate) return mate;
       }
       return me;
     }
@@ -4597,6 +4861,9 @@ input[type='range']:disabled {
         killer: p.killer,
         killerNk: p.killerNk,
         killerId: p.killerId,
+        tm: p.team,
+        rsp: Math.round(this.respawnLeft(p) * 10) / 10,
+        sh: p.shieldT > this.time ? 1 : 0,
         pr: full ? this.promptFor(p) : null
       };
     }
@@ -4638,6 +4905,7 @@ input[type='range']:disabled {
           hp: q.kind !== 'player' || q.team !== 0 ? Math.round((q.hp / q.maxHp) * 100) / 100 : -1,
           hit: this.time - q.hitT < 0.12 ? 1 : 0,
           bu: q.inBush ? 1 : 0,
+          sh: q.shieldT > this.time ? 1 : 0,
           hu: q.bot ? 0 : 1
         });
       }
@@ -4705,6 +4973,10 @@ input[type='range']:disabled {
         obj: this.objective(),
         boss: boss ? { hp: Math.round(boss.hp), mhp: boss.maxHp } : null,
         marks,
+        bk: this.buildings.filter(b => b.broken).map(b => b.id),
+        tmode: this.teamMode,
+        ta: this.teamMode === 'ffa' ? null : [1, 2].map(t => this.players.filter(q => q.alive && q.team === t).length),
+        wt: this.winTeam,
         st: this.state,
         res: this.result,
         why: this.failReason,
@@ -5177,6 +5449,31 @@ input[type='range']:disabled {
           this.notes([784, 1047, 1319], 'triangle', 0.18 * att, 0.06);
           break;
         }
+        case 'woodHit': {
+          const d = this.out(0.32 * att, pan);
+          this.tone(d, 210, 120, 0.09, 'triangle', 0.8);
+          this.noiseBurst(d, 900, 'bandpass', 0.07, 1.5);
+          break;
+        }
+        case 'woodBreak': {
+          const d = this.out(0.5 * att, pan);
+          this.noiseBurst(d, 1500, 'bandpass', 0.18, 1.2);
+          this.noiseBurst(d, 3200, 'highpass', 0.06, 0, 0.02);
+          this.tone(d, 180, 70, 0.22, 'triangle', 0.7);
+          this.noiseBurst(d, 700, 'lowpass', 0.25, 0, 0.08);
+          break;
+        }
+        case 'collapse': {
+          const d = this.out(0.9 * att, pan);
+          this.noiseBurst(d, 300, 'lowpass', 1.4);
+          this.tone(d, 70, 30, 1.1, 'sine', 0.9);
+          for (let i = 0; i < 6; i++) this.noiseBurst(d, 900 + i * 300, 'bandpass', 0.15, 1.5, 0.08 + i * 0.12);
+          break;
+        }
+        case 'respawn':
+          this.notes([523, 659, 784, 1047], 'triangle', 0.22, 0.07);
+          this.tone(this.out(0.15, 0), 300, 900, 0.3, 'sine', 0.5);
+          break;
         case 'paper': {
           const d = this.out(0.22, 0);
           this.noiseBurst(d, 3000, 'bandpass', 0.12, 1);
@@ -5331,7 +5628,7 @@ input[type='range']:disabled {
   const CAR_COL = ['#e0574a', '#4a8fe0', '#f0c043', '#5cc08a'];
   const BIKE_COL = ['#e07a2e', '#c43d7a', '#4f6fd0', '#2f2f2f'];
   const CONTAINER_COL = ['#c2563f', '#3f78b5', '#3f9a6b', '#d1932f', '#7c5aa6'];
-  const DEBRIS = { tree: '#5a3d22', bamboo: '#7fb24a', rock: '#a3a8ac', crate: '#d49a4a', bush: '#3f8f3a', wall: '#7a6450', container: '#8a6a52', table: '#ffffff', stove: '#444444', vehicle: '#555555' };
+  const DEBRIS = { plank: '#a87a4a', tree: '#5a3d22', bamboo: '#7fb24a', rock: '#a3a8ac', crate: '#d49a4a', bush: '#3f8f3a', wall: '#7a6450', container: '#8a6a52', table: '#ffffff', stove: '#444444', vehicle: '#555555' };
   const TRACER = { pistol: 60, uzi: 55, shotgun: 40, rifle: 90, sniper: 180, minigun: 80, turret: 50 };
 
   class Renderer {
@@ -5587,6 +5884,21 @@ input[type='range']:disabled {
             this.particles.push({ x: e.x + (Math.random() - 0.5) * 24, y: e.y - 16, vx: (Math.random() - 0.5) * 40, vy: -60 - Math.random() * 40, life: 1.4, max: 1.4, size: 8 + Math.random() * 4, color: '#ff6f9f', kind: 5, rot: 0, vr: 0 });
           }
           break;
+        case 'respawn':
+          this.rings.push({ x: e.x, y: e.y, r: 90, t: this.time, col: '#8fe07a', life: 0.6 });
+          this.addParticles(e.x, e.y, 14, '#c9ffc0', 180, 0.7, 5);
+          break;
+        case 'collapse': {
+          for (let i = 0; i < 26; i++) {
+            const px = e.x + (Math.random() - 0.5) * e.w;
+            const py = e.y + (Math.random() - 0.5) * e.h;
+            this.addParticles(px, py, 1, i % 4 ? '#a87a4a' : '#7a4a2a', 220, 1, 10, 1);
+          }
+          for (let i = 0; i < 10; i++) this.addParticles(e.x + (Math.random() - 0.5) * e.w, e.y + (Math.random() - 0.5) * e.h, 1, '#cbb89a', 90, 1.6, 34, 3);
+          const d = Math.hypot(e.x - camX, e.y - camY);
+          this.shake = Math.max(this.shake, clamp(16 - d / 60, 0, 14));
+          break;
+        }
         case 'land':
           this.rings.push({ x: e.x, y: e.y, r: 110, t: this.time, col: '#ffffff', life: 0.5 });
           this.addParticles(e.x, e.y, 12, '#d8c7a6', 150, 1.1, 18, 3);
@@ -5646,6 +5958,8 @@ input[type='range']:disabled {
       const z = this.zoom;
       this.camX = view.cx;
       this.camY = view.cy;
+      this.myTeam = view.me.tm || 0;
+      this.tmode = view.tmode || 'ffa';
       this.shake = Math.max(0, this.shake - dt * 40);
       const sx = (Math.random() - 0.5) * this.shake;
       const sy = (Math.random() - 0.5) * this.shake;
@@ -5703,6 +6017,7 @@ input[type='range']:disabled {
         if (o.k === 'rock') this.drawRock(ctx, o);
         else if (o.k === 'crate') this.drawCrate(ctx, o);
         else if (o.k === 'wall') this.drawWall(ctx, o);
+        else if (o.k === 'plank') this.drawPlank(ctx, o);
         else if (o.k === 'tree') this.drawTrunk(ctx, o);
         else if (o.k === 'table') this.drawTable(ctx, o);
         else if (o.k === 'stove') this.drawStove(ctx, o);
@@ -5739,7 +6054,7 @@ input[type='range']:disabled {
       }
       for (const b of map.buildings) {
         if (!vis(b.x, b.y, Math.max(b.w, b.h))) continue;
-        const tgt = camInside === b ? 0 : 1;
+        const tgt = camInside === b || b.broken ? 0 : 1;
         let a = this.roofAlpha.get(b.id);
         a = a == null ? tgt : lerp(a, tgt, Math.min(1, dt * 8));
         this.roofAlpha.set(b.id, a);
@@ -5872,6 +6187,28 @@ input[type='range']:disabled {
         ctx.lineTo(x + b.w, yy);
       }
       ctx.stroke();
+      if (b.broken) this.drawRubble(ctx, b);
+    }
+
+    // Broken planks and roof pieces left where a wooden building fell in.
+    drawRubble(ctx, b) {
+      const n = Math.round((b.w * b.h) / 2600);
+      for (let i = 0; i < n; i++) {
+        const px = b.x + (rnd(b.id * 97 + 3, i) - 0.5) * b.w * 0.92;
+        const py = b.y + (rnd(b.id * 89 + 7, i) - 0.5) * b.h * 0.92;
+        const len = 18 + rnd(b.id * 31 + 1, i) * 34;
+        ctx.save();
+        ctx.translate(px, py);
+        ctx.rotate(rnd(b.id * 13 + 5, i) * Math.PI);
+        ctx.fillStyle = 'rgba(0,0,0,0.15)';
+        ctx.fillRect(-len / 2 + 3, -2, len, 9);
+        ctx.fillStyle = i % 3 === 0 ? (b.type === 'stall' ? (i % 2 ? '#e05a4a' : '#ffffff') : '#7a4a2a') : '#a87a4a';
+        ctx.strokeStyle = OUT;
+        ctx.lineWidth = 2;
+        ctx.fillRect(-len / 2, -5, len, 9);
+        ctx.strokeRect(-len / 2, -5, len, 9);
+        ctx.restore();
+      }
     }
 
     drawRoof(ctx, b, alpha) {
@@ -5906,7 +6243,7 @@ input[type='range']:disabled {
         ctx.restore();
         return;
       }
-      const col = D.ROOFS[b.roof];
+      const col = b.weak ? '#8a5a34' : D.ROOFS[b.roof];
       roundRect(ctx, x, y, w, h, 10);
       fillStroke(ctx, col, 6);
       const horiz = w >= h;
@@ -6059,6 +6396,48 @@ input[type='range']:disabled {
       ctx.beginPath();
       ctx.rect(o.x - o.hw, o.y - o.hh, o.hw * 2, o.hh * 2);
       fillStroke(ctx, b && b.type === 'restaurant' ? '#8a2a22' : '#7a6450', 4);
+    }
+
+    drawPlank(ctx, o) {
+      const x = o.x - o.hw;
+      const y = o.y - o.hh;
+      const w = o.hw * 2;
+      const h = o.hh * 2;
+      ctx.beginPath();
+      ctx.rect(x, y, w, h);
+      fillStroke(ctx, '#a87a4a', 3.5);
+      ctx.strokeStyle = '#7a5530';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      const horiz = w >= h;
+      const L = horiz ? w : h;
+      for (let d = 22; d < L; d += 22 + (Math.floor(d) % 3) * 6) {
+        if (horiz) {
+          ctx.moveTo(x + d, y + 2);
+          ctx.lineTo(x + d, y + h - 2);
+        } else {
+          ctx.moveTo(x + 2, y + d);
+          ctx.lineTo(x + w - 2, y + d);
+        }
+      }
+      ctx.stroke();
+      const f = o.mhp ? o.hp / o.mhp : 1;
+      if (f < 0.7) {
+        const cracks = f < 0.35 ? 5 : 2;
+        ctx.strokeStyle = '#2b1a0e';
+        ctx.lineWidth = 2.2;
+        ctx.beginPath();
+        for (let i = 0; i < cracks; i++) {
+          const t = rnd(o.id * 7 + 1, i);
+          const cx = horiz ? x + 10 + t * (w - 20) : o.x;
+          const cy = horiz ? o.y : y + 10 + t * (h - 20);
+          const s = horiz ? h : w;
+          ctx.moveTo(cx - (horiz ? 4 : s / 2), cy - (horiz ? s / 2 : 4));
+          ctx.lineTo(cx + 3, cy);
+          ctx.lineTo(cx - (horiz ? 2 : -s / 2), cy + (horiz ? s / 2 : 3));
+        }
+        ctx.stroke();
+      }
     }
 
     drawTable(ctx, o) {
@@ -6946,6 +7325,20 @@ input[type='range']:disabled {
       const sc = (1 + jz * 0.28) * (R / PR);
       ctx.save();
       ctx.translate(p.x, p.y);
+      if ((this.tmode === 'teams' && p.tm) || (this.tmode === 'coop' && p.tm === 1)) {
+        circle(ctx, 0, 0, R + 8);
+        ctx.strokeStyle = this.tmode === 'coop' ? 'rgba(120,220,110,0.85)' : p.tm === 1 ? 'rgba(230,70,60,0.9)' : 'rgba(70,140,240,0.9)';
+        ctx.lineWidth = 4;
+        ctx.stroke();
+      }
+      if (p.sh) {
+        circle(ctx, 0, 0, R + 14);
+        ctx.fillStyle = 'rgba(160,230,255,' + (0.18 + Math.sin(this.time * 10) * 0.08) + ')';
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(200,245,255,0.8)';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
       if (p.rs) {
         ctx.save();
         ctx.rotate(aim);
@@ -7347,10 +7740,11 @@ input[type='range']:disabled {
         const b = this.buildingAt(p.x, p.y);
         if (b && b !== camInside) continue;
         const R = p.r || PR;
-        const ally = p.tm === 1;
-        const foe = p.tm === 2;
+        const ally = this.myTeam !== 0 && p.tm === this.myTeam;
+        const foe = view.mode === 'story' ? p.tm === 2 : this.myTeam !== 0 && p.tm !== 0 && p.tm !== this.myTeam;
         if (p.hp >= 0 && (foe || ally) && (p.hp < 1 || p.ch === 'boss' || ally)) this.bar(ctx, p.x, p.y + R + 10, R * 2.2, p.hp, foe ? '#e8453b' : '#7ad35e');
-        if (p.hu || ally) this.outlinedText(ctx, nameOf(p), p.x, p.y - R - 14, 16, ally ? '#b8f5a0' : '#ffffff');
+        const enemyCol = this.tmode === 'teams' ? (p.tm === 1 ? '#ffa294' : '#a8cfff') : '#ffffff';
+        if (p.hu || ally) this.outlinedText(ctx, nameOf(p), p.x, p.y - R - 14, 16, ally ? '#b8f5a0' : enemyCol);
       }
     }
 
@@ -7558,11 +7952,25 @@ input[type='range']:disabled {
         if (timer) this.outlinedText(ctx, timer, 26 * s, 86 * s, 15 * s, o.ty === 'collect' && o.tl < 30 ? '#ff8a7a' : '#9fdcff', 'left');
         ky = (timer ? 124 : 102) * s;
       } else {
-        this.panel(ctx, 14 * s, 14 * s, 170 * s, 46 * s);
-        this.outlinedText(ctx, I.t('alive', view.al), 26 * s, 46 * s, 22 * s, '#ffffff', 'left');
-        this.panel(ctx, 192 * s, 14 * s, 130 * s, 46 * s);
-        this.outlinedText(ctx, I.t('kills', me.k), 204 * s, 46 * s, 22 * s, '#ffd75e', 'left');
+        let kx = 192;
+        if (view.ta) {
+          const coop = view.tmode === 'coop';
+          this.panel(ctx, 14 * s, 14 * s, 250 * s, 46 * s);
+          if (coop) {
+            this.outlinedText(ctx, I.t('coopAlive', view.ta[0], view.ta[1]), 26 * s, 46 * s, 20 * s, '#b8f5a0', 'left');
+          } else {
+            const mine = me.tm === 1 ? '#ffa294' : '#a8cfff';
+            this.outlinedText(ctx, I.t('teamAlive', view.ta[0], view.ta[1]), 26 * s, 46 * s, 20 * s, mine, 'left');
+          }
+          kx = 272;
+        } else {
+          this.panel(ctx, 14 * s, 14 * s, 170 * s, 46 * s);
+          this.outlinedText(ctx, I.t('alive', view.al), 26 * s, 46 * s, 22 * s, '#ffffff', 'left');
+        }
+        this.panel(ctx, kx * s, 14 * s, 130 * s, 46 * s);
+        this.outlinedText(ctx, I.t('kills', me.k), (kx + 12) * s, 46 * s, 22 * s, '#ffd75e', 'left');
         ky = 90 * s;
+        if (!me.alive && me.rsp >= 0) this.outlinedText(ctx, I.t('respawnIn', Math.ceil(me.rsp)), this.W / 2, this.H * 0.32, 30 * s, '#b8f5a0');
       }
       if (ui.tip) {
         ctx.font = 'bold ' + Math.round(15 * s) + 'px ' + FONT;
@@ -7712,7 +8120,7 @@ input[type='range']:disabled {
         ctx.restore();
       }
       for (const p of view.pl) {
-        if (p.d || p.i === view.cam || p.tm !== 1) continue;
+        if (p.d || p.i === view.cam || !this.myTeam || p.tm !== this.myTeam) continue;
         circle(ctx, tx(p.x), ty(p.y), full ? 5 : 3.5);
         ctx.fillStyle = '#8fe07a';
         ctx.fill();
@@ -8272,8 +8680,12 @@ input[type='range']:disabled {
       this.send({ t: 'specnext' });
     }
 
-    configure(bots, diff) {
-      this.send({ t: 'cfg', bots, diff });
+    configure(bots, diff, mode) {
+      this.send({ t: 'cfg', bots, diff, mode });
+    }
+
+    setTeam(team) {
+      this.send({ t: 'team', team });
     }
 
     startMatch() {
@@ -8624,7 +9036,7 @@ input[type='range']:disabled {
       box.innerHTML = '';
       for (const pl of r.players) {
         const d = document.createElement('div');
-        d.className = 'room-player';
+        d.className = 'room-player' + (r.mode === 'teams' && pl.team ? ' team' + pl.team : '');
         const cv = document.createElement('canvas');
         cv.width = 80;
         cv.height = 80;
@@ -8676,7 +9088,19 @@ input[type='range']:disabled {
       b.disabled = !isHost || r.state !== 'lobby';
     }
     $('roomDiff').classList.toggle('locked', !isHost);
-    $('roomSummary').textContent = I.t('roomSummary', r.players.length, r.effBots, r.players.length + r.effBots) + '  ·  ' + I.t('diffNow', I.t('diff' + r.diff));
+    for (const b of document.querySelectorAll('#roomMode button')) {
+      b.classList.toggle('on', b.dataset.v === r.mode);
+      b.disabled = !isHost || r.state !== 'lobby';
+    }
+    $('roomMode').classList.toggle('locked', !isHost);
+    $('roomModeHint').textContent = I.t('modeHint_' + r.mode);
+    const mine = r.players.find(pl => pl.cid === r.you);
+    $('roomTeamRow').hidden = r.mode !== 'teams';
+    for (const b of document.querySelectorAll('#roomTeam button')) {
+      b.classList.toggle('on', mine && Number(b.dataset.v) === (mine.team || 0));
+      b.disabled = r.state !== 'lobby';
+    }
+    $('roomSummary').textContent = I.t('roomSummary', r.players.length, r.effBots, r.players.length + r.effBots) + '  ·  ' + I.t('diffNow', I.t('diff' + r.diff)) + '  ·  ' + I.t('mode_' + r.mode);
     $('roomStart').hidden = !isHost || r.state !== 'lobby';
   }
 
@@ -8730,13 +9154,32 @@ input[type='range']:disabled {
     return Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0');
   }
 
+  function teamName(t) {
+    return I.t('team_' + t);
+  }
+
   function showGameOver(view, won) {
     const me = view.me;
     gameOver.shown = true;
+    if (view.tmode && view.tmode !== 'ffa') {
+      const coop = view.tmode === 'coop';
+      const ended = view.st === 'ended';
+      gameOver.final = ended;
+      const survivedT = ((gameOver.deathAt || performance.now()) - gameOver.startAt) / 1000;
+      $('ovTitle').textContent = won ? I.t(coop ? 'coopWin' : 'teamWin', teamName(me.tm)) : ended ? I.t(coop ? 'coopLose' : 'teamLose', teamName(me.tm)) : I.t('youDown');
+      $('ovTitle').className = won ? 'win' : '';
+      $('ovSub').textContent = !ended ? I.t('teamFighting', teamName(me.tm)) : won ? I.t(coop ? 'coopWinSub' : 'teamWinSub') : coop || !view.wt ? '' : I.t('teamWin', teamName(view.wt));
+      statCells([[I.t('st_kills'), me.k], [I.t('st_damage'), me.dd], [I.t('st_time'), fmt(survivedT)], [I.t('yourTeam'), coop ? I.t('family') : teamName(me.tm)]]);
+      $('ovSpectate').hidden = ended || view.al === 0;
+      $('ovAgain').textContent = session && session.kind === 'online' ? I.t('backToLobby') : I.t('playAgain');
+      show('overlay', true);
+      show('specbar', false);
+      return;
+    }
     const survived = ((gameOver.deathAt || performance.now()) - gameOver.startAt) / 1000;
     $('ovTitle').textContent = won ? I.t('victory') : I.t('placed', me.plc);
     $('ovTitle').className = won ? 'win' : '';
-    $('ovSub').textContent = won ? I.t('outlasted', view.tot - 1) : me.killer || me.killerNk ? I.t('eliminatedBy', me.killerNk === 'zone' ? I.t('kill_zone', '').trim() : who(me.killer, me.killerNk)) : '';
+    $('ovSub').textContent = won ? I.t('outlasted', view.tot - 1) : me.killerNk === 'zone' ? I.t('zoneDeath') : me.killer || me.killerNk ? I.t('eliminatedBy', who(me.killer, me.killerNk)) : '';
     statCells([[I.t('st_kills'), me.k], [I.t('st_damage'), me.dd], [I.t('st_time'), fmt(survived)], [I.t('st_place', view.tot), '#' + (won ? 1 : me.plc)]]);
     $('ovSpectate').hidden = won || view.st === 'ended' || view.al === 0;
     $('ovAgain').textContent = session && session.kind === 'online' ? I.t('backToLobby') : I.t('playAgain');
@@ -8800,10 +9243,14 @@ input[type='range']:disabled {
           else if (e.ty === 'p' && (e.w === 'cleaver' || e.w === 'swordfish' || e.w === 'knife')) Sound.play('chop', { dist, dx });
           else if (e.ty === 'p' && e.w === 'rollingpin') Sound.play('thud', { dist, dx });
           else if (e.w === 'bowl') Sound.play('ceramic', { dist, dx });
+          else if (e.ty === 'o' && e.k === 'plank') Sound.play('woodHit', { dist, dx });
           else Sound.play(e.ty === 'p' ? 'hitPlayer' : e.ty === 'v' ? 'hitVeh' : 'hitObj', { dist, dx });
           break;
         case 'break':
-          Sound.play('break', { dist, dx });
+          Sound.play(e.k === 'plank' ? 'woodBreak' : 'break', { dist, dx });
+          break;
+        case 'collapse':
+          Sound.play('collapse', { dist, dx });
           break;
         case 'exp':
           Sound.play('explosion', { dist, dx });
@@ -9187,15 +9634,26 @@ input[type='range']:disabled {
     const now = performance.now();
     if (session && session.kind === 'online' && session.room && now - lastCfgSend > 120) {
       lastCfgSend = now;
-      session.configure(Number($('roomBots').value), session.room.diff);
+      session.configure(Number($('roomBots').value), session.room.diff, session.room.mode);
     }
   });
   $('roomBots').addEventListener('change', () => {
-    if (session && session.kind === 'online' && session.room) session.configure(Number($('roomBots').value), session.room.diff);
+    if (session && session.kind === 'online' && session.room) session.configure(Number($('roomBots').value), session.room.diff, session.room.mode);
   });
+  for (const b of document.querySelectorAll('#roomMode button')) {
+    b.addEventListener('click', () => {
+      if (session && session.kind === 'online' && session.room) session.configure(Number($('roomBots').value), session.room.diff, b.dataset.v);
+    });
+  }
+  for (const b of document.querySelectorAll('#roomTeam button')) {
+    b.addEventListener('click', () => {
+      Sound.play('click');
+      if (session && session.kind === 'online' && session.room) session.setTeam(Number(b.dataset.v));
+    });
+  }
   for (const b of document.querySelectorAll('#roomDiff button')) {
     b.addEventListener('click', () => {
-      if (session && session.kind === 'online' && session.room) session.configure(Number($('roomBots').value), Number(b.dataset.v));
+      if (session && session.kind === 'online' && session.room) session.configure(Number($('roomBots').value), Number(b.dataset.v), session.room.mode);
     });
   }
   $('roomStart').addEventListener('click', () => {
@@ -9325,6 +9783,10 @@ input[type='range']:disabled {
             o.dead = ob[1] <= 0;
           }
         }
+        for (const id of view.bk || []) {
+          const b = cur.map.buildings[id];
+          if (b) b.broken = 1;
+        }
         if (view.cam !== view.you || view.spec) {
           const c = view.pl.find(p => p.i === view.cam);
           view.specName = c ? Renderer.nameOf(c) : '';
@@ -9389,8 +9851,34 @@ input[type='range']:disabled {
       return;
     }
     $('lobbyBanner').hidden = true;
+    const teamGame = view.tmode && view.tmode !== 'ffa';
+    if (!me.alive) {
+      gameOver.wasDown = true;
+    } else if (gameOver.wasDown) {
+      gameOver.wasDown = false;
+      gameOver.deathAt = 0;
+      gameOver.shown = false;
+      gameOver.spectating = false;
+      show('overlay', false);
+      show('specbar', false);
+      Sound.play('respawn');
+      renderer.banner(I.t('respawned'), '#8fe07a');
+    }
+    if (!me.alive && me.rsp >= 0) return;
     if (!me.alive && !gameOver.deathAt) gameOver.deathAt = performance.now();
-    const won = view.st === 'ended' && view.winId === view.you;
+    const won = view.st === 'ended' && (teamGame ? view.wt === me.tm : view.winId === view.you);
+    if (teamGame && gameOver.shown && !gameOver.final && view.st === 'ended') {
+      gameOver.spectating = false;
+      Sound.play(won ? 'win' : 'lose');
+      showGameOver(view, won);
+    }
+    if (teamGame && !gameOver.shown && me.alive && view.st === 'ended' && !won) {
+      if (!gameOver.lostAt) {
+        gameOver.lostAt = performance.now();
+        Sound.play('lose');
+      }
+      if (performance.now() - gameOver.lostAt > 1400) showGameOver(view, false);
+    }
     if (!gameOver.shown) {
       if (won) {
         if (!gameOver.wonAt) {

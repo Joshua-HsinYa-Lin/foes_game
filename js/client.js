@@ -317,8 +317,12 @@
       this.send({ t: 'specnext' });
     }
 
-    configure(bots, diff) {
-      this.send({ t: 'cfg', bots, diff });
+    configure(bots, diff, mode) {
+      this.send({ t: 'cfg', bots, diff, mode });
+    }
+
+    setTeam(team) {
+      this.send({ t: 'team', team });
     }
 
     startMatch() {
@@ -669,7 +673,7 @@
       box.innerHTML = '';
       for (const pl of r.players) {
         const d = document.createElement('div');
-        d.className = 'room-player';
+        d.className = 'room-player' + (r.mode === 'teams' && pl.team ? ' team' + pl.team : '');
         const cv = document.createElement('canvas');
         cv.width = 80;
         cv.height = 80;
@@ -721,7 +725,19 @@
       b.disabled = !isHost || r.state !== 'lobby';
     }
     $('roomDiff').classList.toggle('locked', !isHost);
-    $('roomSummary').textContent = I.t('roomSummary', r.players.length, r.effBots, r.players.length + r.effBots) + '  ·  ' + I.t('diffNow', I.t('diff' + r.diff));
+    for (const b of document.querySelectorAll('#roomMode button')) {
+      b.classList.toggle('on', b.dataset.v === r.mode);
+      b.disabled = !isHost || r.state !== 'lobby';
+    }
+    $('roomMode').classList.toggle('locked', !isHost);
+    $('roomModeHint').textContent = I.t('modeHint_' + r.mode);
+    const mine = r.players.find(pl => pl.cid === r.you);
+    $('roomTeamRow').hidden = r.mode !== 'teams';
+    for (const b of document.querySelectorAll('#roomTeam button')) {
+      b.classList.toggle('on', mine && Number(b.dataset.v) === (mine.team || 0));
+      b.disabled = r.state !== 'lobby';
+    }
+    $('roomSummary').textContent = I.t('roomSummary', r.players.length, r.effBots, r.players.length + r.effBots) + '  ·  ' + I.t('diffNow', I.t('diff' + r.diff)) + '  ·  ' + I.t('mode_' + r.mode);
     $('roomStart').hidden = !isHost || r.state !== 'lobby';
   }
 
@@ -775,13 +791,32 @@
     return Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0');
   }
 
+  function teamName(t) {
+    return I.t('team_' + t);
+  }
+
   function showGameOver(view, won) {
     const me = view.me;
     gameOver.shown = true;
+    if (view.tmode && view.tmode !== 'ffa') {
+      const coop = view.tmode === 'coop';
+      const ended = view.st === 'ended';
+      gameOver.final = ended;
+      const survivedT = ((gameOver.deathAt || performance.now()) - gameOver.startAt) / 1000;
+      $('ovTitle').textContent = won ? I.t(coop ? 'coopWin' : 'teamWin', teamName(me.tm)) : ended ? I.t(coop ? 'coopLose' : 'teamLose', teamName(me.tm)) : I.t('youDown');
+      $('ovTitle').className = won ? 'win' : '';
+      $('ovSub').textContent = !ended ? I.t('teamFighting', teamName(me.tm)) : won ? I.t(coop ? 'coopWinSub' : 'teamWinSub') : coop || !view.wt ? '' : I.t('teamWin', teamName(view.wt));
+      statCells([[I.t('st_kills'), me.k], [I.t('st_damage'), me.dd], [I.t('st_time'), fmt(survivedT)], [I.t('yourTeam'), coop ? I.t('family') : teamName(me.tm)]]);
+      $('ovSpectate').hidden = ended || view.al === 0;
+      $('ovAgain').textContent = session && session.kind === 'online' ? I.t('backToLobby') : I.t('playAgain');
+      show('overlay', true);
+      show('specbar', false);
+      return;
+    }
     const survived = ((gameOver.deathAt || performance.now()) - gameOver.startAt) / 1000;
     $('ovTitle').textContent = won ? I.t('victory') : I.t('placed', me.plc);
     $('ovTitle').className = won ? 'win' : '';
-    $('ovSub').textContent = won ? I.t('outlasted', view.tot - 1) : me.killer || me.killerNk ? I.t('eliminatedBy', me.killerNk === 'zone' ? I.t('kill_zone', '').trim() : who(me.killer, me.killerNk)) : '';
+    $('ovSub').textContent = won ? I.t('outlasted', view.tot - 1) : me.killerNk === 'zone' ? I.t('zoneDeath') : me.killer || me.killerNk ? I.t('eliminatedBy', who(me.killer, me.killerNk)) : '';
     statCells([[I.t('st_kills'), me.k], [I.t('st_damage'), me.dd], [I.t('st_time'), fmt(survived)], [I.t('st_place', view.tot), '#' + (won ? 1 : me.plc)]]);
     $('ovSpectate').hidden = won || view.st === 'ended' || view.al === 0;
     $('ovAgain').textContent = session && session.kind === 'online' ? I.t('backToLobby') : I.t('playAgain');
@@ -845,10 +880,14 @@
           else if (e.ty === 'p' && (e.w === 'cleaver' || e.w === 'swordfish' || e.w === 'knife')) Sound.play('chop', { dist, dx });
           else if (e.ty === 'p' && e.w === 'rollingpin') Sound.play('thud', { dist, dx });
           else if (e.w === 'bowl') Sound.play('ceramic', { dist, dx });
+          else if (e.ty === 'o' && e.k === 'plank') Sound.play('woodHit', { dist, dx });
           else Sound.play(e.ty === 'p' ? 'hitPlayer' : e.ty === 'v' ? 'hitVeh' : 'hitObj', { dist, dx });
           break;
         case 'break':
-          Sound.play('break', { dist, dx });
+          Sound.play(e.k === 'plank' ? 'woodBreak' : 'break', { dist, dx });
+          break;
+        case 'collapse':
+          Sound.play('collapse', { dist, dx });
           break;
         case 'exp':
           Sound.play('explosion', { dist, dx });
@@ -1232,15 +1271,26 @@
     const now = performance.now();
     if (session && session.kind === 'online' && session.room && now - lastCfgSend > 120) {
       lastCfgSend = now;
-      session.configure(Number($('roomBots').value), session.room.diff);
+      session.configure(Number($('roomBots').value), session.room.diff, session.room.mode);
     }
   });
   $('roomBots').addEventListener('change', () => {
-    if (session && session.kind === 'online' && session.room) session.configure(Number($('roomBots').value), session.room.diff);
+    if (session && session.kind === 'online' && session.room) session.configure(Number($('roomBots').value), session.room.diff, session.room.mode);
   });
+  for (const b of document.querySelectorAll('#roomMode button')) {
+    b.addEventListener('click', () => {
+      if (session && session.kind === 'online' && session.room) session.configure(Number($('roomBots').value), session.room.diff, b.dataset.v);
+    });
+  }
+  for (const b of document.querySelectorAll('#roomTeam button')) {
+    b.addEventListener('click', () => {
+      Sound.play('click');
+      if (session && session.kind === 'online' && session.room) session.setTeam(Number(b.dataset.v));
+    });
+  }
   for (const b of document.querySelectorAll('#roomDiff button')) {
     b.addEventListener('click', () => {
-      if (session && session.kind === 'online' && session.room) session.configure(Number($('roomBots').value), Number(b.dataset.v));
+      if (session && session.kind === 'online' && session.room) session.configure(Number($('roomBots').value), Number(b.dataset.v), session.room.mode);
     });
   }
   $('roomStart').addEventListener('click', () => {
@@ -1370,6 +1420,10 @@
             o.dead = ob[1] <= 0;
           }
         }
+        for (const id of view.bk || []) {
+          const b = cur.map.buildings[id];
+          if (b) b.broken = 1;
+        }
         if (view.cam !== view.you || view.spec) {
           const c = view.pl.find(p => p.i === view.cam);
           view.specName = c ? Renderer.nameOf(c) : '';
@@ -1434,8 +1488,34 @@
       return;
     }
     $('lobbyBanner').hidden = true;
+    const teamGame = view.tmode && view.tmode !== 'ffa';
+    if (!me.alive) {
+      gameOver.wasDown = true;
+    } else if (gameOver.wasDown) {
+      gameOver.wasDown = false;
+      gameOver.deathAt = 0;
+      gameOver.shown = false;
+      gameOver.spectating = false;
+      show('overlay', false);
+      show('specbar', false);
+      Sound.play('respawn');
+      renderer.banner(I.t('respawned'), '#8fe07a');
+    }
+    if (!me.alive && me.rsp >= 0) return;
     if (!me.alive && !gameOver.deathAt) gameOver.deathAt = performance.now();
-    const won = view.st === 'ended' && view.winId === view.you;
+    const won = view.st === 'ended' && (teamGame ? view.wt === me.tm : view.winId === view.you);
+    if (teamGame && gameOver.shown && !gameOver.final && view.st === 'ended') {
+      gameOver.spectating = false;
+      Sound.play(won ? 'win' : 'lose');
+      showGameOver(view, won);
+    }
+    if (teamGame && !gameOver.shown && me.alive && view.st === 'ended' && !won) {
+      if (!gameOver.lostAt) {
+        gameOver.lostAt = performance.now();
+        Sound.play('lose');
+      }
+      if (performance.now() - gameOver.lostAt > 1400) showGameOver(view, false);
+    }
     if (!gameOver.shown) {
       if (won) {
         if (!gameOver.wonAt) {

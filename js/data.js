@@ -138,6 +138,9 @@
   // The cold-chain zone shrinks with the share of players still alive, and on a timer after timeStart.
   D.ZONE = { startFrac: 0.72, minFrac: 0.04, speed: 40, timeStart: 90, timeDur: 330, dps: 20 };
 
+  // Plank wall health: base plus per pixel of wall length (a 100 px piece takes about 170).
+  D.PLANK_HP = [80, 0.9];
+
   D.OBST = {
     tree: { solid: true, blk: true, hp: 0 },
     bamboo: { solid: true, blk: true, hp: 0 },
@@ -145,6 +148,7 @@
     rock: { solid: true, blk: true, hp: 0 },
     crate: { solid: true, blk: true, hp: 70 },
     wall: { solid: true, blk: true, hp: 0 },
+    plank: { solid: true, blk: true, hp: 1 },
     table: { solid: true, blk: false, hp: 0 },
     stove: { solid: true, blk: true, hp: 0 },
     lantern: { solid: true, blk: false, hp: 0 },
@@ -155,14 +159,20 @@
   // Difficulty levels 1 to 5; 3, 4 and 5 are the earlier easy, normal and hard.
   // foeDmg: story enemy damage to the hero team. foeHp: story enemy health.
   // botDmg: bot damage to people in Paradise Brawl. foeFire: story enemy fire-delay multiplier.
+  // botFire: fire-delay multiplier for Paradise Brawl bots.
   D.BOT_SKILL = {
-    1: { react: 0.7, aimNoise: 0.32, turn: 3.2, sight: 480, lead: 0, shootAngle: 0.24, foeDmg: 0.2, foeHp: 0.6, botDmg: 0.55, foeFire: 1.35 },
-    2: { react: 0.55, aimNoise: 0.24, turn: 4, sight: 560, lead: 0.15, shootAngle: 0.2, foeDmg: 0.27, foeHp: 0.7, botDmg: 0.75, foeFire: 1.15 },
-    3: { react: 0.4, aimNoise: 0.16, turn: 5, sight: 650, lead: 0.3, shootAngle: 0.16, foeDmg: 0.35, foeHp: 0.8, botDmg: 1, foeFire: 1 },
-    4: { react: 0.27, aimNoise: 0.085, turn: 8, sight: 800, lead: 0.6, shootAngle: 0.12, foeDmg: 0.42, foeHp: 1, botDmg: 1, foeFire: 1 },
-    5: { react: 0.16, aimNoise: 0.04, turn: 13, sight: 950, lead: 0.9, shootAngle: 0.08, foeDmg: 0.7, foeHp: 1.25, botDmg: 1, foeFire: 1 }
+    1: { react: 0.7, aimNoise: 0.32, turn: 3.2, sight: 480, lead: 0, shootAngle: 0.24, foeDmg: 0.2, foeHp: 0.6, botDmg: 0.55, foeFire: 1.35, botFire: 1.6 },
+    2: { react: 0.55, aimNoise: 0.24, turn: 4, sight: 560, lead: 0.15, shootAngle: 0.2, foeDmg: 0.27, foeHp: 0.7, botDmg: 0.75, foeFire: 1.15, botFire: 1.3 },
+    3: { react: 0.4, aimNoise: 0.16, turn: 5, sight: 650, lead: 0.3, shootAngle: 0.16, foeDmg: 0.35, foeHp: 0.8, botDmg: 1, foeFire: 1, botFire: 1 },
+    4: { react: 0.27, aimNoise: 0.085, turn: 8, sight: 800, lead: 0.6, shootAngle: 0.12, foeDmg: 0.42, foeHp: 1, botDmg: 1, foeFire: 1, botFire: 1 },
+    5: { react: 0.16, aimNoise: 0.04, turn: 13, sight: 950, lead: 0.9, shootAngle: 0.08, foeDmg: 0.7, foeHp: 1.25, botDmg: 1, foeFire: 1, botFire: 1 }
   };
   D.DIFF_LEVELS = [1, 2, 3, 4, 5];
+  D.TEAM_MODES = ['ffa', 'teams', 'coop'];
+  // Coop matches: seconds before a fallen person returns next to a family member.
+  D.RESPAWN_TIME = 6;
+  // In coop every bot is after the family, so bots hit people this much softer than in a free-for-all.
+  D.COOP_BOT_DMG = 0.75;
   D.DIFF_DEFAULT = 4;
   // Saved settings and server flags from before the levels used names.
   const DIFF_NAMES = { easy: 3, normal: 4, hard: 5 };

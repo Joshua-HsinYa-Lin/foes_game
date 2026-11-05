@@ -22,8 +22,13 @@ const LEGACY_PLAYERS = Number(arg('players', 0));
 const DEFAULT_BOTS = Math.max(0, Math.min(MAX_TOTAL - 1, Number(arg('bots', LEGACY_PLAYERS ? LEGACY_PLAYERS - 1 : 13)) || 0));
 // Level 1 (beginner) to 5 (hard); the names easy, normal and hard from older versions mean 3, 4 and 5.
 const DIFFICULTY = D.diffLevel(arg('difficulty', '')) || D.DIFF_DEFAULT;
+// ffa: everyone for themselves; teams: red against blue; coop: everyone together against the bots.
+const MODE = D.TEAM_MODES.indexOf(arg('mode', '')) >= 0 ? arg('mode', '') : 'ffa';
+// Snapshots wait in the socket buffer no longer than this; a slow connection skips to the newest one.
+const SNAP_BUFFER = 96 * 1024;
 // Seconds before a match starts on its own once someone is in the room; 0 means the host presses Start.
 const AUTOSTART = Math.max(0, Number(arg('autostart', arg('lobby', 0))) || 0);
+const STATS = ARGS.indexOf('--stats') >= 0;
 const ROOT = __dirname;
 const MAX_FRAME = 64 * 1024;
 const MAX_CLIENTS = 64;
@@ -169,8 +174,17 @@ class WsConn {
 
   send(obj) {
     if (!this.open) return;
-    if (this.socket.writableLength > 2 * 1024 * 1024) return;
+    if (this.socket.writableLength > 8 * 1024 * 1024) return;
     this.sendFrame(0x1, Buffer.from(JSON.stringify(obj)));
+  }
+
+  // Game snapshots replace each other, so an old one still waiting to go out is not worth adding to.
+  sendSnap(obj) {
+    if (!this.open) return false;
+    if (this.socket.writableLength > SNAP_BUFFER) return false;
+    const buf = Buffer.from(JSON.stringify(obj));
+    this.sendFrame(0x1, buf);
+    return buf.length;
   }
 
   close() {
@@ -196,7 +210,8 @@ let endTimer = 0;
 let matchNo = 0;
 let nextCid = 1;
 let hostCid = 0;
-const room = { bots: DEFAULT_BOTS, diff: DIFFICULTY };
+const room = { bots: DEFAULT_BOTS, diff: DIFFICULTY, mode: MODE };
+const stats = { bytes: 0, snaps: 0, skipped: 0, tickMs: 0, ticks: 0 };
 
 function joined() {
   return [...clients].filter(c => c.joined).sort((a, b) => a.cid - b.cid);
@@ -219,10 +234,11 @@ function roomInfo(c) {
     you: c.cid,
     host: hostCid,
     state,
-    players: joined().map(h => ({ cid: h.cid, name: h.name, char: h.char, spec: state === 'playing' && h.spectator ? 1 : 0 })),
+    players: joined().map(h => ({ cid: h.cid, name: h.name, char: h.char, team: h.team || 0, spec: state === 'playing' && h.spectator ? 1 : 0 })),
     bots: room.bots,
     effBots: matchBots(),
     diff: room.diff,
+    mode: room.mode,
     max: MAX_TOTAL,
     tl: AUTOSTART ? Math.max(0, lobbyTimer) : -1,
     match: matchNo
@@ -237,25 +253,27 @@ function startMatch() {
   const humans = joined();
   if (!humans.length) return;
   matchNo++;
-  sim = new Sim({ difficulty: room.diff });
+  sim = new Sim({ difficulty: room.diff, teamMode: room.mode });
   for (const c of humans) {
-    c.pid = sim.addPlayer(c.name, false, { char: c.char });
+    c.pid = sim.addPlayer(c.name, false, { char: c.char, team: room.mode === 'teams' ? c.team || 0 : 0 });
     sim.setAspect(c.pid, c.aspect);
     c.spec = 0;
     c.spectator = false;
   }
   sim.fillBots(humans.length + matchBots());
+  sim.setupTeams();
   mapData = sim.getMapData();
   for (const c of humans) c.send({ t: 'welcome', id: c.pid, map: mapData, match: matchNo });
   state = 'playing';
   endTimer = 0;
   broadcastRoom();
-  console.log('Match ' + matchNo + ' started: ' + humans.length + ' player(s), ' + (sim.players.length - humans.length) + ' bot(s), difficulty ' + room.diff);
+  console.log('Match ' + matchNo + ' started: ' + humans.length + ' player(s), ' + (sim.players.length - humans.length) + ' bot(s), difficulty ' + room.diff + ', mode ' + room.mode);
 }
 
 function lateJoin(c) {
   if (sim.time < 40) {
-    c.pid = sim.addPlayer(c.name, false, { char: c.char });
+    c.pid = sim.addPlayer(c.name, false, { char: c.char, team: room.mode === 'teams' ? c.team || 0 : 0 });
+    sim.joinTeam(sim.playerMap.get(c.pid));
     sim.setAspect(c.pid, c.aspect);
     c.spectator = false;
   } else {
@@ -317,11 +335,19 @@ function onMessage(c, raw) {
     if (Number.isFinite(bots)) room.bots = Math.max(0, Math.min(MAX_TOTAL - 1, bots));
     const lv = D.diffLevel(m.diff);
     if (lv) room.diff = lv;
+    if (D.TEAM_MODES.indexOf(m.mode) >= 0) room.mode = m.mode;
     broadcastRoom();
     return;
   }
   if (m.t === 'start') {
     if (c.cid === hostCid && state === 'lobby') startMatch();
+    return;
+  }
+  if (m.t === 'team') {
+    const team = Number(m.team);
+    if (state !== 'lobby' || [0, 1, 2].indexOf(team) < 0) return;
+    c.team = team;
+    broadcastRoom();
     return;
   }
   if (m.t === 'char') {
@@ -382,6 +408,7 @@ function tick() {
     }
     return;
   }
+  const t0 = process.hrtime.bigint();
   sim.step(dt);
   for (const c of clients) {
     if (!c.joined || !c.pid) continue;
@@ -395,7 +422,23 @@ function tick() {
     const snap = sim.snapshotFor(c.pid, c.spec);
     if (!snap) continue;
     if (c.spectator) snap.spec = 1;
-    c.send({ t: 's', s: snap });
+    const n = c.sendSnap({ t: 's', s: snap });
+    if (n) {
+      stats.bytes += n;
+      stats.snaps++;
+    } else {
+      stats.skipped++;
+    }
+  }
+  stats.tickMs += Number(process.hrtime.bigint() - t0) / 1e6;
+  stats.ticks++;
+  if (STATS && stats.ticks >= D.TICK_RATE * 10) {
+    console.log('[stats] ' + joined().length + ' people, ' + sim.players.filter(p => p.alive).length + ' alive: ' + (stats.tickMs / stats.ticks).toFixed(2) + ' ms per tick, ' + (stats.bytes / 10 / 1024).toFixed(0) + ' KB/s sent, ' + (stats.snaps ? (stats.bytes / stats.snaps / 1024).toFixed(1) : 0) + ' KB per snapshot, ' + stats.skipped + ' skipped');
+    stats.bytes = 0;
+    stats.snaps = 0;
+    stats.skipped = 0;
+    stats.tickMs = 0;
+    stats.ticks = 0;
   }
   if (sim.state === 'ended') {
     endTimer += dt;

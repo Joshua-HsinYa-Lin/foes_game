@@ -183,6 +183,154 @@ function duel(charA, charB, opts) {
   check(JSON.stringify(twin.obstacles.map(o => [o.k, o.x, o.y])) === JSON.stringify(new Sim({ seed: 4242 }).obstacles.map(o => [o.k, o.x, o.y])), 'hidden details keep the map deterministic');
 }
 
+// ---------- breakable buildings ----------
+{
+  const sim = new Sim({ seed: 777 });
+  const weak = sim.buildings.filter(b => b.weak);
+  const solid = sim.buildings.filter(b => !b.weak);
+  check(weak.length >= 4 && sim.buildings.filter(b => b.type === 'stall').every(b => b.weak), 'food stalls and cabins are wooden (' + weak.length + ' wooden buildings)');
+  check(solid.some(b => b.type === 'restaurant') && solid.some(b => b.type === 'house'), 'the restaurant and brick houses stay solid');
+  const restWall = sim.obstacles.find(o => o.k === 'wall' && o.b === sim.restaurant.id);
+  sim.damageObstacle(restWall, 9999, 0);
+  check(!restWall.dead, 'restaurant walls cannot be broken');
+  const b = weak.find(q => q.type === 'house') || weak[0];
+  const pid = sim.addPlayer('Breaker', false, { char: 'luap' });
+  const p = sim.playerMap.get(pid);
+  const wall = sim.obstacles[b.walls[0]];
+  const horiz = wall.hw > wall.hh;
+  const out = horiz ? Math.sign(wall.y - b.y) : Math.sign(wall.x - b.x);
+  for (const it of [...sim.items.values()]) if (Math.hypot(it.x - wall.x, it.y - wall.y) < 120) sim.removeItem(it);
+  p.x = horiz ? wall.x : wall.x + out * 50;
+  p.y = horiz ? wall.y + out * 50 : wall.y;
+  p.slots[0] = { t: 'pan' };
+  p.act = 0;
+  const aim = Math.atan2(wall.y - p.y, wall.x - p.x);
+  let swings = 0;
+  for (let i = 0; i < 30 * 30 && !wall.dead; i++) {
+    sim.setInput(pid, { mx: 0, my: 0, aim, shoot: true });
+    sim.step(1 / 30);
+    if (sim.events.some(e => e.e === 'swing' && e.i === pid)) swings++;
+    p.x = horiz ? wall.x : wall.x + out * 50;
+    p.y = horiz ? wall.y + out * 50 : wall.y;
+  }
+  check(wall.dead && swings > 1 && swings < 20, 'a wooden wall breaks after repeated frying-pan hits (' + swings + ' swings)');
+  let collapsed = 0;
+  for (const id of b.walls) {
+    if (b.broken) break;
+    sim.damageObstacle(sim.obstacles[id], 9999, pid);
+    collapsed += sim.events.filter(e => e.e === 'collapse').length;
+  }
+  check(b.broken && b.walls.every(id => sim.obstacles[id].dead), 'breaking half the walls brings the whole building down');
+  const snap = sim.snapshotFor(pid, 0);
+  check(snap.bk.indexOf(b.id) >= 0 && sim.getMapData().buildings[b.id].broken === 1, 'collapsed buildings are sent to players');
+}
+
+// ---------- team matches ----------
+{
+  const coop = new Sim({ seed: 31, teamMode: 'coop', difficulty: 2 });
+  const people = [];
+  for (let i = 0; i < 8; i++) people.push(coop.playerMap.get(coop.addPlayer('Family' + i, false, { char: D.CHAR_IDS[i % 4] })));
+  coop.fillBots(20);
+  coop.setupTeams();
+  const bots = coop.players.filter(q => q.bot);
+  let spread = 0;
+  for (const a of people) for (const b of people) spread = Math.max(spread, Math.hypot(a.x - b.x, a.y - b.y));
+  let nearest = Infinity;
+  for (const a of people) for (const b of bots) nearest = Math.min(nearest, Math.hypot(a.x - b.x, a.y - b.y));
+  check(people.every(q => q.team === 1) && bots.every(q => q.team === 2) && bots.length === 12, 'coop: 8 people on one team against 12 bots');
+  check(spread < 700 && nearest > 400, 'coop: the family starts together (spread ' + Math.round(spread) + ') away from the bots (nearest ' + Math.round(nearest) + ')');
+  const hp0 = people[1].hp;
+  coop.damagePlayer(people[1], 30, people[0].id, 'pistol');
+  check(people[1].hp === hp0, 'no friendly fire inside the family');
+  coop.killPlayer(people[2], bots[0].id, 'pistol');
+  const left = coop.respawnLeft(people[2]);
+  check(left === D.RESPAWN_TIME, 'a fallen family member waits ' + D.RESPAWN_TIME + ' s to come back');
+  check(coop.camFor(people[2].id, 0).team === 1 && coop.camFor(people[2].id, 0).alive, 'while down, the camera follows a living family member');
+  steps(coop, Math.ceil(D.RESPAWN_TIME * 30) + 2);
+  const back = people[2];
+  const mateDist = Math.min(...people.filter(q => q !== back && q.alive).map(q => Math.hypot(q.x - back.x, q.y - back.y)));
+  check(back.alive && back.hp === back.maxHp && back.slots[0] && back.slots[0].t === 'pistol' && back.shieldT > coop.time && mateDist < 300, 'coop respawn: full health, a pistol, a short shield, next to family (' + Math.round(mateDist) + ' px)');
+  coop.damagePlayer(back, 50, bots[0].id, 'pistol');
+  check(back.hp === back.maxHp, 'the respawn shield blocks damage');
+  for (const q of people) coop.killPlayer(q, bots[0].id, 'pistol');
+  check(coop.state === 'ended' && coop.winTeam === 2, 'coop: when the whole family is down at once, the bots win');
+
+  const coop2 = new Sim({ seed: 32, teamMode: 'coop' });
+  const fam = coop2.playerMap.get(coop2.addPlayer('Mom', false, { char: 'meibao' }));
+  coop2.fillBots(5);
+  coop2.setupTeams();
+  for (const q of coop2.players) if (q.bot) coop2.killPlayer(q, fam.id, 'pistol');
+  check(coop2.state === 'ended' && coop2.winTeam === 1 && coop2.winner === fam, 'coop: beating every bot wins for the family');
+
+  const tm = new Sim({ seed: 33, teamMode: 'teams' });
+  const red = [0, 1, 2].map(i => tm.playerMap.get(tm.addPlayer('Red' + i, false, { char: 'luap', team: 1 })));
+  const auto = tm.playerMap.get(tm.addPlayer('Auto', false, { char: 'auhsoj', team: 0 }));
+  tm.fillBots(8);
+  tm.setupTeams();
+  const n1 = tm.players.filter(q => q.team === 1).length;
+  const n2 = tm.players.filter(q => q.team === 2).length;
+  check(red.every(q => q.team === 1) && auto.team === 2 && n1 === 4 && n2 === 4, 'teams: chosen sides are kept, the rest even out (red ' + n1 + ', blue ' + n2 + ')');
+  const c1 = [0, 0];
+  const c2 = [0, 0];
+  for (const q of tm.players) {
+    const c = q.team === 1 ? c1 : c2;
+    c[0] += q.x / 4;
+    c[1] += q.y / 4;
+  }
+  check(Math.hypot(c1[0] - c2[0], c1[1] - c2[1]) > 1500, 'teams start on opposite sides of the map');
+  const before = auto.hp;
+  tm.damagePlayer(auto, 20, red[0].id, 'pistol');
+  check(auto.hp < before, 'red and blue can hurt each other');
+  check(tm.respawnLeft(red[0]) === -1, 'no respawning in red vs blue');
+  for (const q of tm.players) if (q.team === 2) tm.killPlayer(q, red[0].id, 'pistol');
+  check(tm.state === 'ended' && tm.winTeam === 1 && tm.snapshotFor(red[0].id, 0).wt === 1, 'teams: the last side standing wins');
+  const late = new Sim({ seed: 34, teamMode: 'teams' });
+  for (let i = 0; i < 3; i++) late.addPlayer('A' + i, false, { team: 1 });
+  late.fillBots(6);
+  late.setupTeams();
+  const lj = late.playerMap.get(late.addPlayer('Late', false, {}));
+  late.joinTeam(lj);
+  check(lj.team === 2 || lj.team === 1, 'a late joiner gets a side (' + lj.team + ')');
+
+  for (const mode of ['coop', 'teams']) {
+    const sim = new Sim({ seed: 40, teamMode: mode, difficulty: 2 });
+    const ids = [];
+    for (let i = 0; i < 8; i++) {
+      const id = sim.addPlayer('P' + i, false, { char: D.CHAR_IDS[i % 4], team: mode === 'teams' ? 1 + (i % 2) : 0 });
+      sim.autopilot(id);
+      ids.push(id);
+    }
+    sim.fillBots(22);
+    sim.setupTeams();
+    let nan = false;
+    let n = 0;
+    let bytes = 0;
+    let maxBytes = 0;
+    let snaps = 0;
+    let respawns = 0;
+    const t0 = Date.now();
+    while (sim.state === 'playing' && sim.time < 900) {
+      sim.step(1 / 30);
+      n++;
+      respawns += sim.events.filter(e => e.e === 'respawn').length;
+      if (n % 15 === 0) {
+        for (const p of sim.players) if (!Number.isFinite(p.x + p.y + p.hp)) nan = true;
+        for (const id of ids) {
+          const len = JSON.stringify({ t: 's', s: sim.snapshotFor(id, 0) }).length;
+          bytes += len;
+          snaps++;
+          maxBytes = Math.max(maxBytes, len);
+        }
+      }
+    }
+    const avg = bytes / snaps / 1024;
+    console.log(mode + ' 8 people + 22 bots: ' + sim.time.toFixed(0) + 's, winTeam=' + sim.winTeam + ', respawns=' + respawns + ', ' + ((Date.now() - t0) / n).toFixed(3) + ' ms/step, snapshot avg ' + avg.toFixed(1) + ' KB, max ' + (maxBytes / 1024).toFixed(1) + ' KB, about ' + (avg * 30 * 8).toFixed(0) + ' KB/s for 8 people');
+    check(sim.state === 'ended' && sim.winTeam > 0 && !nan, mode + ': a full 30-player match with 8 people ends with a winning side');
+    if (mode === 'coop') check(respawns > 0 && sim.players.filter(q => q.pilot).every(q => q.team === 1), 'coop: family members come back during a full match (' + respawns + ' respawns)');
+    check(maxBytes < 60 * 1024, mode + ': snapshots stay small enough for home Wi-Fi (max ' + (maxBytes / 1024).toFixed(1) + ' KB)');
+  }
+}
+
 // ---------- royale ----------
 for (const [seed, diff] of [[1, 4], [2, 5], [3, 1]]) {
   const sim = new Sim({ seed, difficulty: diff });

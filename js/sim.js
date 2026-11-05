@@ -261,6 +261,9 @@
       opts = opts || {};
       this.mode = opts.mode === 'story' ? 'story' : 'royale';
       this.chapter = this.mode === 'story' ? D.STORY.find(c => c.id === opts.chapter) || D.STORY[0] : null;
+      // Paradise Brawl: 'ffa' everyone for themselves, 'teams' red (1) against blue (2), 'coop' people (1) against bots (2).
+      this.teamMode = this.mode === 'royale' && D.TEAM_MODES.indexOf(opts.teamMode) > 0 ? opts.teamMode : 'ffa';
+      this.winTeam = 0;
       const seed = this.chapter ? this.chapter.seed : opts.seed;
       this.seed = (seed >>> 0) || ((Math.random() * 4294967296) >>> 0);
       this.rng = mulberry32(this.seed);
@@ -396,7 +399,7 @@
       }
       let cabins = 0;
       for (let t = 0; t < 300 && cabins < 6; t++) {
-        if (this.tryBuilding(300 + R() * (S - 600), 300 + R() * (S - 600), 220, 190, 'house')) cabins++;
+        if (this.tryBuilding(300 + R() * (S - 600), 300 + R() * (S - 600), 220, 190, 'house', true)) cabins++;
       }
 
       let trees = 0;
@@ -607,7 +610,7 @@
       return o;
     }
 
-    tryBuilding(x, y, w, h, type) {
+    tryBuilding(x, y, w, h, type, weak) {
       const S = this.size;
       x = Math.round(x);
       y = Math.round(y);
@@ -621,7 +624,7 @@
       const blocked = q.length > 0;
       q.length = 0;
       if (blocked) return false;
-      this.addBuilding(x, y, w, h, type);
+      this.addBuilding(x, y, w, h, type, weak);
       return true;
     }
 
@@ -631,10 +634,19 @@
       const x1 = b.x + b.w / 2;
       const y0 = b.y - b.h / 2;
       const y1 = b.y + b.h / 2;
+      // Wooden buildings get plank walls that break after enough hits.
+      const kind = b.weak ? 'plank' : 'wall';
+      b.walls = [];
       const seg = (horizontal, lo, hi, fixed) => {
         if (hi - lo < 2) return;
-        if (horizontal) this.addObstacle('wall', 'r', (lo + hi) / 2, fixed, { hw: (hi - lo) / 2, hh: T / 2, b: b.id });
-        else this.addObstacle('wall', 'r', fixed, (lo + hi) / 2, { hw: T / 2, hh: (hi - lo) / 2, b: b.id });
+        let o;
+        if (horizontal) o = this.addObstacle(kind, 'r', (lo + hi) / 2, fixed, { hw: (hi - lo) / 2, hh: T / 2, b: b.id });
+        else o = this.addObstacle(kind, 'r', fixed, (lo + hi) / 2, { hw: T / 2, hh: (hi - lo) / 2, b: b.id });
+        if (b.weak) {
+          o.hp = Math.round(D.PLANK_HP[0] + (hi - lo) * D.PLANK_HP[1]);
+          o.mhp = o.hp;
+        }
+        b.walls.push(o.id);
       };
       // Doorways are kept for bot routing: centre point and outward normal.
       b.doors = [];
@@ -663,9 +675,9 @@
       }
     }
 
-    addBuilding(x, y, w, h, type) {
+    addBuilding(x, y, w, h, type, weak) {
       const R = this.rng;
-      const b = { id: this.buildings.length, x, y, w, h, type, roof: Math.floor(R() * D.ROOFS.length), floor: Math.floor(R() * D.FLOORS.length) };
+      const b = { id: this.buildings.length, x, y, w, h, type, roof: Math.floor(R() * D.ROOFS.length), floor: Math.floor(R() * D.FLOORS.length), weak: !!weak || type === 'stall', broken: false };
       this.buildings.push(b);
       if (type === 'stall') {
         const doors = {};
@@ -861,6 +873,7 @@
         skillCool: 2,
         skillUses: 0,
         boostT: 0,
+        shieldT: 0,
         burnT: 0,
         burnDps: 0,
         burnSrc: 0,
@@ -954,6 +967,7 @@
       const p = this.playerMap.get(id);
       if (!p) return;
       p.bot = true;
+      p.pilot = true;
       const collect = this.story && this.story.goal.type === 'collect';
       p.ai = this.makeAi(p.kind, { loot: true, hunt: this.mode === 'story' && !collect ? 1400 : 0 });
       p.ai.lastX = p.x;
@@ -1002,6 +1016,131 @@
         return [px, py];
       }
       return [clamp(x + d0, 80, S - 80), clamp(y, 80, S - 80)];
+    }
+
+    // Called once people and bots are in. Coop: every person on team 1, bots on team 2.
+    // Teams: people keep a chosen side (1 red, 2 blue), the rest and the bots even out the sides.
+    setupTeams() {
+      if (this.teamMode === 'ffa') return;
+      const people = this.players.filter(p => this.isPerson(p));
+      const bots = this.players.filter(p => !this.isPerson(p));
+      if (this.teamMode === 'coop') {
+        for (const p of people) p.team = 1;
+        for (const p of bots) p.team = 2;
+      } else {
+        const n = [0, 0, 0];
+        for (const p of people) if (p.team === 1 || p.team === 2) n[p.team]++;
+        for (const p of people.concat(bots)) {
+          if (p.team === 1 || p.team === 2) continue;
+          p.team = n[1] <= n[2] ? 1 : 2;
+          n[p.team]++;
+        }
+      }
+      this.placeTeams();
+    }
+
+    // Each side starts together: teams on opposite sides of the map, coop families in one group with bots spread out.
+    placeTeams() {
+      const S = this.size;
+      const a = this.rng() * TAU;
+      const anchors = [null, [S / 2 + Math.cos(a) * 1150, S / 2 + Math.sin(a) * 1150], [S / 2 - Math.cos(a) * 1150, S / 2 - Math.sin(a) * 1150]];
+      const sides = this.teamMode === 'coop' ? [1] : [1, 2];
+      for (const t of sides) {
+        const an = anchors[t];
+        for (const p of this.players) {
+          if (p.team !== t) continue;
+          const sp = this.findSpot(an[0], an[1], 0, 300, p.r);
+          p.x = sp[0];
+          p.y = sp[1];
+        }
+      }
+      if (this.teamMode === 'coop') {
+        for (const p of this.players) {
+          if (p.team !== 2) continue;
+          p.x = -9999;
+          p.y = -9999;
+        }
+        // Bots start well away from the family, since every one of them is after the family.
+        const fam = this.players.filter(p => p.team === 1);
+        const famDist = (x, y) => Math.min(...fam.map(f => Math.hypot(f.x - x, f.y - y)));
+        for (const p of this.players) {
+          if (p.team !== 2) continue;
+          for (let t = 0; t < 12; t++) {
+            this.spawnPoint(p);
+            if (famDist(p.x, p.y) > 1100) break;
+          }
+        }
+        for (const p of this.players) if (p.team === 1 && p.ai) p.ai.home = [p.x, p.y];
+      }
+    }
+
+    // People are the human players; an autopilot (used by tests) still counts as one.
+    isPerson(p) {
+      return !p.bot || !!p.pilot;
+    }
+
+    // A person who joins a running team match goes to the smaller side (always team 1 in coop), next to a teammate.
+    joinTeam(p) {
+      if (this.teamMode === 'ffa') return;
+      if (this.teamMode === 'coop') {
+        p.team = 1;
+      } else if (p.team !== 1 && p.team !== 2) {
+        const n = [0, 0, 0];
+        for (const q of this.players) if (q !== p && q.alive) n[q.team]++;
+        p.team = n[1] <= n[2] ? 1 : 2;
+      }
+      const mate = this.players.find(q => q !== p && q.alive && q.team === p.team);
+      if (mate) {
+        const sp = this.findSpot(mate.x, mate.y, 60, 220, p.r);
+        p.x = sp[0];
+        p.y = sp[1];
+      }
+    }
+
+    // Coop only: a fallen person comes back next to a living family member after D.RESPAWN_TIME seconds.
+    respawnLeft(p) {
+      if (this.teamMode !== 'coop' || p.alive || !this.isPerson(p) || p.left || this.state !== 'playing') return -1;
+      if (!this.players.some(q => q.alive && this.isPerson(q) && q.team === p.team)) return -1;
+      return Math.max(0, D.RESPAWN_TIME - (this.time - p.deadT));
+    }
+
+    updateRespawns() {
+      if (this.teamMode !== 'coop' || this.state !== 'playing') return;
+      for (const p of this.players) {
+        if (this.respawnLeft(p) !== 0) continue;
+        const mates = this.players.filter(q => q.alive && this.isPerson(q) && q.team === p.team);
+        this.respawn(p, mates[Math.floor(this.rng() * mates.length)]);
+      }
+    }
+
+    respawn(p, near) {
+      const sp = this.findSpot(near.x, near.y, 60, 220, p.r);
+      p.x = sp[0];
+      p.y = sp[1];
+      p.vx = 0;
+      p.vy = 0;
+      p.kx = 0;
+      p.ky = 0;
+      p.alive = true;
+      p.hp = p.maxHp;
+      p.stamina = 100;
+      p.burnT = 0;
+      p.slowT = 0;
+      p.jumpT = 0;
+      p.rushT = 0;
+      p.cool = 0;
+      p.reload = null;
+      p.inject = null;
+      p.slots = [{ t: 'pistol', m: D.WEAPONS.pistol.mag }, null, null, null];
+      p.act = 0;
+      p.nslots = D.SLOTS;
+      p.soups = 1;
+      p.killer = '';
+      p.killerNk = '';
+      p.killerId = 0;
+      p.placement = 0;
+      p.shieldT = this.time + 2;
+      this.ev({ e: 'respawn', i: p.id, x: p.x, y: p.y });
     }
 
     removePlayer(id) {
@@ -1459,7 +1598,7 @@
       const q = this.grid.query(Math.min(x0, x1), Math.min(y0, y1), Math.max(x0, x1), Math.max(y0, y1), this._q2);
       let hit = false;
       for (const o of q) {
-        if (!o.blk || o.dead || (wallsOnly && o.k !== 'wall')) continue;
+        if (!o.blk || o.dead || (wallsOnly && o.k !== 'wall' && o.k !== 'plank')) continue;
         if (obstacleSegT(o, x0, y0, x1, y1) >= 0) {
           hit = true;
           break;
@@ -1651,7 +1790,8 @@
         return;
       }
       s.m--;
-      p.cool = W.delay * (p.kind === 'player' ? 1 : (p.kind === 'boss' ? 2 : 1.8) * D.BOT_SKILL[this.difficulty].foeFire);
+      const L = D.BOT_SKILL[this.difficulty];
+      p.cool = W.delay * (p.kind === 'player' ? (p.bot && !p.pilot && !this.story ? L.botFire : 1) : (p.kind === 'boss' ? 2 : 1.8) * L.foeFire);
       p.lastShot = this.time;
       const moving = Math.hypot(p.vx, p.vy) > 40;
       const spread = W.spread * (moving ? 1.5 : 1) * DEG;
@@ -1727,11 +1867,11 @@
     }
 
     damagePlayer(p, amt, src, cause, quiet) {
-      if (!p.alive || amt <= 0) return;
+      if (!p.alive || amt <= 0 || p.shieldT > this.time) return;
       const att = src ? this.playerMap.get(src) : null;
       if (att && att !== p && !this.enemies(att, p)) return;
       if (att && att.kind !== 'player' && p.team === 1) amt *= D.BOT_SKILL[this.difficulty].foeDmg;
-      else if (att && att.bot && !p.bot && this.mode === 'royale') amt *= D.BOT_SKILL[this.difficulty].botDmg;
+      else if (att && att.bot && !p.bot && this.mode === 'royale') amt *= D.BOT_SKILL[this.difficulty].botDmg * (this.teamMode === 'coop' ? D.COOP_BOT_DMG : 1);
       p.hp -= amt;
       p.hitT = this.time;
       if (p.inject && cause !== 'zone' && cause !== 'burn') p.inject = null;
@@ -1789,6 +1929,19 @@
 
     checkWin() {
       if (this.state !== 'playing' || this.players.length < 2) return;
+      if (this.teamMode !== 'ffa') {
+        const left = new Set();
+        for (const q of this.players) if (q.alive) left.add(q.team);
+        if (left.size > 1) return;
+        const team = left.size ? [...left][0] : 0;
+        this.state = 'ended';
+        this.winTeam = team;
+        this.winner = this.players.find(q => q.alive) || null;
+        this.result = team ? 'win' : 'none';
+        for (const q of this.players) if (q.team === team) q.placement = 1;
+        this.ev({ e: 'win', g: 1, n: this.winner ? this.winner.name : '', i: this.winner ? this.winner.id : 0, tm: team });
+        return;
+      }
       let alive = 0;
       let last = null;
       for (const q of this.players) {
@@ -1822,10 +1975,26 @@
       o.hp = 0;
       o.dead = true;
       this.ev({ e: 'break', x: o.x, y: o.y, k: o.k, id: o.id });
+      if (o.k === 'plank' && o.b >= 0) this.checkCollapse(this.buildings[o.b]);
       if (o.k === 'crate') {
         this.spawnItem(o.x, o.y, this.rollItem(1));
         if (this.rng() < 0.35) this.spawnItem(o.x + 30, o.y + 10, this.rollItem(1));
       }
+    }
+
+    // A wooden building falls in once half of its wall pieces are broken: the rest of the walls and the roof go.
+    checkCollapse(b) {
+      if (!b || b.broken || !b.walls) return;
+      let down = 0;
+      for (const id of b.walls) if (this.obstacles[id].dead) down++;
+      if (down * 2 < b.walls.length) return;
+      b.broken = true;
+      for (const id of b.walls) {
+        const o = this.obstacles[id];
+        o.dead = true;
+        o.hp = 0;
+      }
+      this.ev({ e: 'collapse', x: b.x, y: b.y, w: b.w, h: b.h, id: b.id });
     }
 
     damageVehicle(v, dmg, src) {
@@ -2010,6 +2179,7 @@
       this.updateVehicles(dt);
       this.updateBullets(dt);
       this.updateSecrets(dt);
+      this.updateRespawns();
       this.updateStory(dt);
     }
 
@@ -2124,8 +2294,10 @@
         t.cool -= dt;
         const owner = this.playerMap.get(t.owner);
         if (!owner) continue;
+        // A bot's turret aims only as well as that bot would at this level.
+        const P = owner.bot && !owner.pilot ? D.BOT_SKILL[this.difficulty] : null;
         let best = null;
-        let bd = D.WEAPONS.turret.range;
+        let bd = P ? Math.min(D.WEAPONS.turret.range, P.sight) : D.WEAPONS.turret.range;
         for (const q of this.players) {
           if (!q.alive || q.veh || !this.enemies(owner, q)) continue;
           const d = Math.hypot(q.x - t.x, q.y - t.y);
@@ -2138,8 +2310,8 @@
         const want = Math.atan2(best.y - t.y, best.x - t.x);
         t.a += clamp(angleDiff(t.a, want), -8 * dt, 8 * dt);
         if (t.cool <= 0 && Math.abs(angleDiff(t.a, want)) < 0.2) {
-          t.cool = 0.28;
-          this.spawnBullet(owner, 'turret', t.a + (this.rng() - 0.5) * 0.06, t.x + Math.cos(t.a) * 20, t.y + Math.sin(t.a) * 20);
+          t.cool = 0.28 * (P ? 1 + P.react : 1);
+          this.spawnBullet(owner, 'turret', t.a + (this.rng() - 0.5) * (0.06 + (P ? P.aimNoise * 2 : 0)), t.x + Math.cos(t.a) * 20, t.y + Math.sin(t.a) * 20);
           this.ev({ e: 'shot', i: 0, x: t.x, y: t.y, a: t.a, w: 'turret' });
         }
       }
@@ -2461,7 +2633,8 @@
         const s = p.slots[gunSlot];
         if (s.m < D.WEAPONS[s.t].mag * 0.5) p.actions.push({ a: 'reload' });
       }
-      if (p.char && p.skillCool <= 0) {
+      // In Paradise Brawl bots hold their skills for the first 20 seconds, while everyone gears up.
+      if (p.char && p.skillCool <= 0 && !(this.mode === 'royale' && this.time < 20)) {
         const sk = D.CHARS[p.char].skill.id;
         if (sk === 'flame' && tgt && tdist < 150) p.actions.push({ a: 'skill' });
         else if (sk === 'rush' && tgt && ai.los && tdist > 120 && tdist < 330) {
@@ -2618,8 +2791,10 @@
 
     // Leaving a building for a goal outside it (or entering one from outside): head for the best doorway first.
     routeVia(p, gx, gy) {
-      const inB = this.insideBuilding(p.x, p.y, -4);
-      const gB = this.insideBuilding(gx, gy, -4);
+      let inB = this.insideBuilding(p.x, p.y, -4);
+      let gB = this.insideBuilding(gx, gy, -4);
+      if (inB && inB.broken) inB = null;
+      if (gB && gB.broken) gB = null;
       if (inB === gB) return null;
       const b = inB || gB;
       if (!b.doors || !b.doors.length) return null;
@@ -2801,7 +2976,7 @@
         yard: this.yard,
         secrets: this.secrets.map(sc => ({ id: sc.id, x: r1(sc.x), y: r1(sc.y) })),
         roads: this.roads.map(r => ({ w: r.w, pts: r.pts.map(p => [r1(p[0]), r1(p[1])]) })),
-        buildings: this.buildings.map(b => ({ id: b.id, x: b.x, y: b.y, w: b.w, h: b.h, type: b.type, roof: b.roof, floor: b.floor })),
+        buildings: this.buildings.map(b => ({ id: b.id, x: b.x, y: b.y, w: b.w, h: b.h, type: b.type, roof: b.roof, floor: b.floor, weak: b.weak ? 1 : 0, broken: b.broken ? 1 : 0 })),
         obstacles: this.obstacles.map(o => ({ id: o.id, k: o.k, s: o.s, x: r1(o.x), y: r1(o.y), r: r1(o.r), hw: r1(o.hw), hh: r1(o.hh), hp: o.hp, mhp: o.mhp, v: o.v, dead: o.dead ? 1 : 0, b: o.b }))
       };
     }
@@ -2812,6 +2987,11 @@
       if (!me.alive && spectateId) {
         const s = this.playerMap.get(spectateId);
         if (s) return s;
+      }
+      // In a team match a fallen player watches a living teammate.
+      if (!me.alive && this.teamMode !== 'ffa') {
+        const mate = this.players.find(q => q.alive && q.team === me.team && !q.bot) || this.players.find(q => q.alive && q.team === me.team);
+        if (mate) return mate;
       }
       return me;
     }
@@ -2865,6 +3045,9 @@
         killer: p.killer,
         killerNk: p.killerNk,
         killerId: p.killerId,
+        tm: p.team,
+        rsp: Math.round(this.respawnLeft(p) * 10) / 10,
+        sh: p.shieldT > this.time ? 1 : 0,
         pr: full ? this.promptFor(p) : null
       };
     }
@@ -2906,6 +3089,7 @@
           hp: q.kind !== 'player' || q.team !== 0 ? Math.round((q.hp / q.maxHp) * 100) / 100 : -1,
           hit: this.time - q.hitT < 0.12 ? 1 : 0,
           bu: q.inBush ? 1 : 0,
+          sh: q.shieldT > this.time ? 1 : 0,
           hu: q.bot ? 0 : 1
         });
       }
@@ -2973,6 +3157,10 @@
         obj: this.objective(),
         boss: boss ? { hp: Math.round(boss.hp), mhp: boss.maxHp } : null,
         marks,
+        bk: this.buildings.filter(b => b.broken).map(b => b.id),
+        tmode: this.teamMode,
+        ta: this.teamMode === 'ffa' ? null : [1, 2].map(t => this.players.filter(q => q.alive && q.team === t).length),
+        wt: this.winTeam,
         st: this.state,
         res: this.result,
         why: this.failReason,

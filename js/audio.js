@@ -452,6 +452,31 @@
           this.notes([784, 1047, 1319], 'triangle', 0.18 * att, 0.06);
           break;
         }
+        case 'woodHit': {
+          const d = this.out(0.32 * att, pan);
+          this.tone(d, 210, 120, 0.09, 'triangle', 0.8);
+          this.noiseBurst(d, 900, 'bandpass', 0.07, 1.5);
+          break;
+        }
+        case 'woodBreak': {
+          const d = this.out(0.5 * att, pan);
+          this.noiseBurst(d, 1500, 'bandpass', 0.18, 1.2);
+          this.noiseBurst(d, 3200, 'highpass', 0.06, 0, 0.02);
+          this.tone(d, 180, 70, 0.22, 'triangle', 0.7);
+          this.noiseBurst(d, 700, 'lowpass', 0.25, 0, 0.08);
+          break;
+        }
+        case 'collapse': {
+          const d = this.out(0.9 * att, pan);
+          this.noiseBurst(d, 300, 'lowpass', 1.4);
+          this.tone(d, 70, 30, 1.1, 'sine', 0.9);
+          for (let i = 0; i < 6; i++) this.noiseBurst(d, 900 + i * 300, 'bandpass', 0.15, 1.5, 0.08 + i * 0.12);
+          break;
+        }
+        case 'respawn':
+          this.notes([523, 659, 784, 1047], 'triangle', 0.22, 0.07);
+          this.tone(this.out(0.15, 0), 300, 900, 0.3, 'sine', 0.5);
+          break;
         case 'paper': {
           const d = this.out(0.22, 0);
           this.noiseBurst(d, 3000, 'bandpass', 0.12, 1);

@@ -131,7 +131,10 @@
     <div id="roomHost" class="form">
       <div class="field"><span data-i18n="bots"></span><div class="range"><input type="range" id="roomBots" min="0" max="29" value="13"><b id="roomBotsV">13</b></div></div>
       <div class="field"><span data-i18n="diff"></span><div class="seg diff-seg" id="roomDiff"></div></div>
+      <div class="field"><span data-i18n="matchMode"></span><div class="seg" id="roomMode"><button data-v="ffa" data-i18n="mode_ffa"></button><button data-v="teams" data-i18n="mode_teams"></button><button data-v="coop" data-i18n="mode_coop"></button></div></div>
     </div>
+    <p id="roomModeHint" class="note"></p>
+    <div class="field" id="roomTeamRow" hidden><span data-i18n="yourTeam"></span><div class="seg team-seg" id="roomTeam"><button data-v="0" data-i18n="team_0"></button><button data-v="1" data-i18n="team_1"></button><button data-v="2" data-i18n="team_2"></button></div></div>
     <p id="roomSummary" class="note"></p>
     <div class="btns">
       <button id="lobbyLeave" class="btn" data-i18n="leave"></button>

@@ -107,7 +107,7 @@
   const CAR_COL = ['#e0574a', '#4a8fe0', '#f0c043', '#5cc08a'];
   const BIKE_COL = ['#e07a2e', '#c43d7a', '#4f6fd0', '#2f2f2f'];
   const CONTAINER_COL = ['#c2563f', '#3f78b5', '#3f9a6b', '#d1932f', '#7c5aa6'];
-  const DEBRIS = { tree: '#5a3d22', bamboo: '#7fb24a', rock: '#a3a8ac', crate: '#d49a4a', bush: '#3f8f3a', wall: '#7a6450', container: '#8a6a52', table: '#ffffff', stove: '#444444', vehicle: '#555555' };
+  const DEBRIS = { plank: '#a87a4a', tree: '#5a3d22', bamboo: '#7fb24a', rock: '#a3a8ac', crate: '#d49a4a', bush: '#3f8f3a', wall: '#7a6450', container: '#8a6a52', table: '#ffffff', stove: '#444444', vehicle: '#555555' };
   const TRACER = { pistol: 60, uzi: 55, shotgun: 40, rifle: 90, sniper: 180, minigun: 80, turret: 50 };
 
   class Renderer {
@@ -363,6 +363,21 @@
             this.particles.push({ x: e.x + (Math.random() - 0.5) * 24, y: e.y - 16, vx: (Math.random() - 0.5) * 40, vy: -60 - Math.random() * 40, life: 1.4, max: 1.4, size: 8 + Math.random() * 4, color: '#ff6f9f', kind: 5, rot: 0, vr: 0 });
           }
           break;
+        case 'respawn':
+          this.rings.push({ x: e.x, y: e.y, r: 90, t: this.time, col: '#8fe07a', life: 0.6 });
+          this.addParticles(e.x, e.y, 14, '#c9ffc0', 180, 0.7, 5);
+          break;
+        case 'collapse': {
+          for (let i = 0; i < 26; i++) {
+            const px = e.x + (Math.random() - 0.5) * e.w;
+            const py = e.y + (Math.random() - 0.5) * e.h;
+            this.addParticles(px, py, 1, i % 4 ? '#a87a4a' : '#7a4a2a', 220, 1, 10, 1);
+          }
+          for (let i = 0; i < 10; i++) this.addParticles(e.x + (Math.random() - 0.5) * e.w, e.y + (Math.random() - 0.5) * e.h, 1, '#cbb89a', 90, 1.6, 34, 3);
+          const d = Math.hypot(e.x - camX, e.y - camY);
+          this.shake = Math.max(this.shake, clamp(16 - d / 60, 0, 14));
+          break;
+        }
         case 'land':
           this.rings.push({ x: e.x, y: e.y, r: 110, t: this.time, col: '#ffffff', life: 0.5 });
           this.addParticles(e.x, e.y, 12, '#d8c7a6', 150, 1.1, 18, 3);
@@ -422,6 +437,8 @@
       const z = this.zoom;
       this.camX = view.cx;
       this.camY = view.cy;
+      this.myTeam = view.me.tm || 0;
+      this.tmode = view.tmode || 'ffa';
       this.shake = Math.max(0, this.shake - dt * 40);
       const sx = (Math.random() - 0.5) * this.shake;
       const sy = (Math.random() - 0.5) * this.shake;
@@ -479,6 +496,7 @@
         if (o.k === 'rock') this.drawRock(ctx, o);
         else if (o.k === 'crate') this.drawCrate(ctx, o);
         else if (o.k === 'wall') this.drawWall(ctx, o);
+        else if (o.k === 'plank') this.drawPlank(ctx, o);
         else if (o.k === 'tree') this.drawTrunk(ctx, o);
         else if (o.k === 'table') this.drawTable(ctx, o);
         else if (o.k === 'stove') this.drawStove(ctx, o);
@@ -515,7 +533,7 @@
       }
       for (const b of map.buildings) {
         if (!vis(b.x, b.y, Math.max(b.w, b.h))) continue;
-        const tgt = camInside === b ? 0 : 1;
+        const tgt = camInside === b || b.broken ? 0 : 1;
         let a = this.roofAlpha.get(b.id);
         a = a == null ? tgt : lerp(a, tgt, Math.min(1, dt * 8));
         this.roofAlpha.set(b.id, a);
@@ -648,6 +666,28 @@
         ctx.lineTo(x + b.w, yy);
       }
       ctx.stroke();
+      if (b.broken) this.drawRubble(ctx, b);
+    }
+
+    // Broken planks and roof pieces left where a wooden building fell in.
+    drawRubble(ctx, b) {
+      const n = Math.round((b.w * b.h) / 2600);
+      for (let i = 0; i < n; i++) {
+        const px = b.x + (rnd(b.id * 97 + 3, i) - 0.5) * b.w * 0.92;
+        const py = b.y + (rnd(b.id * 89 + 7, i) - 0.5) * b.h * 0.92;
+        const len = 18 + rnd(b.id * 31 + 1, i) * 34;
+        ctx.save();
+        ctx.translate(px, py);
+        ctx.rotate(rnd(b.id * 13 + 5, i) * Math.PI);
+        ctx.fillStyle = 'rgba(0,0,0,0.15)';
+        ctx.fillRect(-len / 2 + 3, -2, len, 9);
+        ctx.fillStyle = i % 3 === 0 ? (b.type === 'stall' ? (i % 2 ? '#e05a4a' : '#ffffff') : '#7a4a2a') : '#a87a4a';
+        ctx.strokeStyle = OUT;
+        ctx.lineWidth = 2;
+        ctx.fillRect(-len / 2, -5, len, 9);
+        ctx.strokeRect(-len / 2, -5, len, 9);
+        ctx.restore();
+      }
     }
 
     drawRoof(ctx, b, alpha) {
@@ -682,7 +722,7 @@
         ctx.restore();
         return;
       }
-      const col = D.ROOFS[b.roof];
+      const col = b.weak ? '#8a5a34' : D.ROOFS[b.roof];
       roundRect(ctx, x, y, w, h, 10);
       fillStroke(ctx, col, 6);
       const horiz = w >= h;
@@ -835,6 +875,48 @@
       ctx.beginPath();
       ctx.rect(o.x - o.hw, o.y - o.hh, o.hw * 2, o.hh * 2);
       fillStroke(ctx, b && b.type === 'restaurant' ? '#8a2a22' : '#7a6450', 4);
+    }
+
+    drawPlank(ctx, o) {
+      const x = o.x - o.hw;
+      const y = o.y - o.hh;
+      const w = o.hw * 2;
+      const h = o.hh * 2;
+      ctx.beginPath();
+      ctx.rect(x, y, w, h);
+      fillStroke(ctx, '#a87a4a', 3.5);
+      ctx.strokeStyle = '#7a5530';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      const horiz = w >= h;
+      const L = horiz ? w : h;
+      for (let d = 22; d < L; d += 22 + (Math.floor(d) % 3) * 6) {
+        if (horiz) {
+          ctx.moveTo(x + d, y + 2);
+          ctx.lineTo(x + d, y + h - 2);
+        } else {
+          ctx.moveTo(x + 2, y + d);
+          ctx.lineTo(x + w - 2, y + d);
+        }
+      }
+      ctx.stroke();
+      const f = o.mhp ? o.hp / o.mhp : 1;
+      if (f < 0.7) {
+        const cracks = f < 0.35 ? 5 : 2;
+        ctx.strokeStyle = '#2b1a0e';
+        ctx.lineWidth = 2.2;
+        ctx.beginPath();
+        for (let i = 0; i < cracks; i++) {
+          const t = rnd(o.id * 7 + 1, i);
+          const cx = horiz ? x + 10 + t * (w - 20) : o.x;
+          const cy = horiz ? o.y : y + 10 + t * (h - 20);
+          const s = horiz ? h : w;
+          ctx.moveTo(cx - (horiz ? 4 : s / 2), cy - (horiz ? s / 2 : 4));
+          ctx.lineTo(cx + 3, cy);
+          ctx.lineTo(cx - (horiz ? 2 : -s / 2), cy + (horiz ? s / 2 : 3));
+        }
+        ctx.stroke();
+      }
     }
 
     drawTable(ctx, o) {
@@ -1722,6 +1804,20 @@
       const sc = (1 + jz * 0.28) * (R / PR);
       ctx.save();
       ctx.translate(p.x, p.y);
+      if ((this.tmode === 'teams' && p.tm) || (this.tmode === 'coop' && p.tm === 1)) {
+        circle(ctx, 0, 0, R + 8);
+        ctx.strokeStyle = this.tmode === 'coop' ? 'rgba(120,220,110,0.85)' : p.tm === 1 ? 'rgba(230,70,60,0.9)' : 'rgba(70,140,240,0.9)';
+        ctx.lineWidth = 4;
+        ctx.stroke();
+      }
+      if (p.sh) {
+        circle(ctx, 0, 0, R + 14);
+        ctx.fillStyle = 'rgba(160,230,255,' + (0.18 + Math.sin(this.time * 10) * 0.08) + ')';
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(200,245,255,0.8)';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
       if (p.rs) {
         ctx.save();
         ctx.rotate(aim);
@@ -2123,10 +2219,11 @@
         const b = this.buildingAt(p.x, p.y);
         if (b && b !== camInside) continue;
         const R = p.r || PR;
-        const ally = p.tm === 1;
-        const foe = p.tm === 2;
+        const ally = this.myTeam !== 0 && p.tm === this.myTeam;
+        const foe = view.mode === 'story' ? p.tm === 2 : this.myTeam !== 0 && p.tm !== 0 && p.tm !== this.myTeam;
         if (p.hp >= 0 && (foe || ally) && (p.hp < 1 || p.ch === 'boss' || ally)) this.bar(ctx, p.x, p.y + R + 10, R * 2.2, p.hp, foe ? '#e8453b' : '#7ad35e');
-        if (p.hu || ally) this.outlinedText(ctx, nameOf(p), p.x, p.y - R - 14, 16, ally ? '#b8f5a0' : '#ffffff');
+        const enemyCol = this.tmode === 'teams' ? (p.tm === 1 ? '#ffa294' : '#a8cfff') : '#ffffff';
+        if (p.hu || ally) this.outlinedText(ctx, nameOf(p), p.x, p.y - R - 14, 16, ally ? '#b8f5a0' : enemyCol);
       }
     }
 
@@ -2334,11 +2431,25 @@
         if (timer) this.outlinedText(ctx, timer, 26 * s, 86 * s, 15 * s, o.ty === 'collect' && o.tl < 30 ? '#ff8a7a' : '#9fdcff', 'left');
         ky = (timer ? 124 : 102) * s;
       } else {
-        this.panel(ctx, 14 * s, 14 * s, 170 * s, 46 * s);
-        this.outlinedText(ctx, I.t('alive', view.al), 26 * s, 46 * s, 22 * s, '#ffffff', 'left');
-        this.panel(ctx, 192 * s, 14 * s, 130 * s, 46 * s);
-        this.outlinedText(ctx, I.t('kills', me.k), 204 * s, 46 * s, 22 * s, '#ffd75e', 'left');
+        let kx = 192;
+        if (view.ta) {
+          const coop = view.tmode === 'coop';
+          this.panel(ctx, 14 * s, 14 * s, 250 * s, 46 * s);
+          if (coop) {
+            this.outlinedText(ctx, I.t('coopAlive', view.ta[0], view.ta[1]), 26 * s, 46 * s, 20 * s, '#b8f5a0', 'left');
+          } else {
+            const mine = me.tm === 1 ? '#ffa294' : '#a8cfff';
+            this.outlinedText(ctx, I.t('teamAlive', view.ta[0], view.ta[1]), 26 * s, 46 * s, 20 * s, mine, 'left');
+          }
+          kx = 272;
+        } else {
+          this.panel(ctx, 14 * s, 14 * s, 170 * s, 46 * s);
+          this.outlinedText(ctx, I.t('alive', view.al), 26 * s, 46 * s, 22 * s, '#ffffff', 'left');
+        }
+        this.panel(ctx, kx * s, 14 * s, 130 * s, 46 * s);
+        this.outlinedText(ctx, I.t('kills', me.k), (kx + 12) * s, 46 * s, 22 * s, '#ffd75e', 'left');
         ky = 90 * s;
+        if (!me.alive && me.rsp >= 0) this.outlinedText(ctx, I.t('respawnIn', Math.ceil(me.rsp)), this.W / 2, this.H * 0.32, 30 * s, '#b8f5a0');
       }
       if (ui.tip) {
         ctx.font = 'bold ' + Math.round(15 * s) + 'px ' + FONT;
@@ -2488,7 +2599,7 @@
         ctx.restore();
       }
       for (const p of view.pl) {
-        if (p.d || p.i === view.cam || p.tm !== 1) continue;
+        if (p.d || p.i === view.cam || !this.myTeam || p.tm !== this.myTeam) continue;
         circle(ctx, tx(p.x), ty(p.y), full ? 5 : 3.5);
         ctx.fillStyle = '#8fe07a';
         ctx.fill();
