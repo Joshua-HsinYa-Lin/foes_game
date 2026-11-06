@@ -850,3 +850,333 @@ input[type='range']:disabled {
   overflow-y: auto;
   align-items: flex-start;
 }
+
+/* ---------- phones and tablets ---------- */
+
+html,
+body {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  -webkit-text-size-adjust: 100%;
+  overscroll-behavior: none;
+}
+
+input {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+canvas#game {
+  touch-action: none;
+}
+
+.chip[hidden] {
+  display: none;
+}
+
+.touch-help {
+  display: none;
+}
+
+body.touch .controls table.touch-help {
+  display: table;
+}
+
+body.touch .controls table:not(.touch-help) {
+  display: none;
+}
+
+#touchUI {
+  position: fixed;
+  inset: 0;
+  z-index: 8;
+  pointer-events: none;
+}
+
+#touchUI[hidden] {
+  display: none;
+}
+
+.stick {
+  position: absolute;
+  width: 128px;
+  height: 128px;
+  margin: -64px 0 0 -64px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  border: 3px solid rgba(255, 255, 255, 0.4);
+  opacity: 0.45;
+}
+
+.stick.active {
+  opacity: 1;
+}
+
+.stick .knob {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 56px;
+  height: 56px;
+  margin: -28px 0 0 -28px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.75);
+  border: 3px solid rgba(43, 42, 40, 0.55);
+}
+
+.stick.aim .knob {
+  background: rgba(255, 138, 106, 0.85);
+}
+
+.tb {
+  position: absolute;
+  pointer-events: auto;
+  touch-action: none;
+  width: 54px;
+  height: 54px;
+  padding: 0;
+  border-radius: 50%;
+  border: 3px solid rgba(43, 42, 40, 0.7);
+  background: rgba(243, 234, 214, 0.82);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 26px;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tb[hidden] {
+  display: none;
+}
+
+.tb.down {
+  background: #ffd75e;
+}
+
+.tb.small {
+  width: 44px;
+  height: 44px;
+  font-size: 22px;
+}
+
+#tbPause {
+  left: calc(50% - 22px);
+  top: calc(6px + env(safe-area-inset-top));
+}
+
+#tbReload {
+  right: calc(16px + env(safe-area-inset-right));
+  bottom: 200px;
+}
+
+#tbJump {
+  right: calc(78px + env(safe-area-inset-right));
+  bottom: 200px;
+}
+
+#tbUse {
+  right: calc(16px + env(safe-area-inset-right));
+  bottom: 136px;
+  width: auto;
+  min-width: 108px;
+  max-width: 220px;
+  height: 52px;
+  padding: 0 14px;
+  border-radius: 26px;
+  font-size: 15px;
+  line-height: 1.15;
+  background: rgba(255, 215, 94, 0.92);
+  white-space: normal;
+  text-align: center;
+}
+
+.rotate-icon {
+  font-size: 46px;
+  text-align: center;
+  margin-bottom: 6px;
+}
+
+#rotate {
+  z-index: 20;
+}
+
+@media (max-height: 560px) {
+  .screen {
+    padding: 8px calc(8px + env(safe-area-inset-right)) 8px calc(8px + env(safe-area-inset-left));
+  }
+  .card {
+    border-width: 6px;
+    outline-offset: -11px;
+    padding: 14px 18px;
+  }
+  .logo {
+    gap: 10px;
+  }
+  .logo h1 {
+    font-size: 32px;
+    letter-spacing: 3px;
+  }
+  .logo-en {
+    font-size: 10px;
+    letter-spacing: 4px;
+  }
+  .seal {
+    width: 44px;
+    height: 44px;
+    font-size: 14px;
+    line-height: 17px;
+  }
+  .tagline {
+    margin: 4px 0 10px;
+    font-size: 13px;
+  }
+  .modes {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+  .mode {
+    padding: 8px 10px;
+  }
+  .mode b {
+    font-size: 16px;
+  }
+  .mode span {
+    font-size: 11px;
+  }
+  .toggles {
+    margin-top: 10px;
+  }
+  h2 {
+    font-size: 20px;
+    margin-bottom: 8px;
+  }
+  .hero-cards {
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+  }
+  .hero-card {
+    padding: 6px;
+    gap: 2px;
+  }
+  .hero-card canvas {
+    width: 60px;
+    height: 60px;
+  }
+  .hero-card b {
+    font-size: 15px;
+  }
+  .hero-card .role {
+    font-size: 11px;
+  }
+  .hero-card .desc {
+    font-size: 10px;
+  }
+  .form {
+    margin-top: 8px;
+  }
+  .field {
+    margin: 6px 0;
+  }
+  .btns {
+    flex-direction: row;
+    margin-top: 10px;
+  }
+  .btn {
+    padding: 9px 12px;
+    font-size: 15px;
+  }
+  .chapter {
+    padding: 6px 10px;
+    gap: 10px;
+  }
+  .chapter .num {
+    width: 30px;
+    height: 30px;
+    font-size: 14px;
+  }
+  .chapter .txt b {
+    font-size: 15px;
+  }
+  .chapter .txt span {
+    font-size: 11px;
+  }
+  .scroll {
+    margin-bottom: 2vh;
+    padding: 6px;
+  }
+  .scroll-inner {
+    flex-direction: row;
+    text-align: left;
+    min-height: 0;
+    padding: 10px 14px;
+    gap: 12px;
+  }
+  #portrait {
+    width: 70px;
+    height: 70px;
+  }
+  .line {
+    font-size: 16px;
+    min-height: 0;
+  }
+  .stats b {
+    font-size: 18px;
+  }
+  .stats div {
+    padding: 6px 4px;
+  }
+  .room-players {
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 6px;
+    margin: 8px 0;
+  }
+  .room-player canvas {
+    width: 30px;
+    height: 30px;
+  }
+  .note-card {
+    padding: 12px 16px;
+  }
+  .note-card #noteBody {
+    font-size: 14px;
+    line-height: 24px;
+  }
+  .specbar {
+    top: 54px;
+    padding: 4px 8px;
+  }
+}
+
+@media (min-height: 700px) {
+  .tb {
+    width: 64px;
+    height: 64px;
+  }
+  #tbReload,
+  #tbJump {
+    bottom: 240px;
+  }
+  #tbJump {
+    right: calc(92px + env(safe-area-inset-right));
+  }
+  #tbUse {
+    bottom: 160px;
+    height: 60px;
+    font-size: 17px;
+  }
+}
+
+@media (max-height: 560px) {
+  .menu .card .btns {
+    position: sticky;
+    bottom: -14px;
+    background: var(--paper);
+    padding: 8px 0 10px;
+    margin-bottom: -10px;
+    z-index: 1;
+  }
+}

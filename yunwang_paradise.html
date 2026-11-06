@@ -2,7 +2,13 @@
 <html lang="zh-Hant">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="允望樂園">
+<meta name="theme-color" content="#1d2a18">
+<meta name="format-detection" content="telephone=no">
 <title>允望樂園 Yunwang Paradise</title>
 <style>
 :root {
@@ -857,6 +863,336 @@ input[type='range']:disabled {
   overflow-y: auto;
   align-items: flex-start;
 }
+
+/* ---------- phones and tablets ---------- */
+
+html,
+body {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  -webkit-text-size-adjust: 100%;
+  overscroll-behavior: none;
+}
+
+input {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+canvas#game {
+  touch-action: none;
+}
+
+.chip[hidden] {
+  display: none;
+}
+
+.touch-help {
+  display: none;
+}
+
+body.touch .controls table.touch-help {
+  display: table;
+}
+
+body.touch .controls table:not(.touch-help) {
+  display: none;
+}
+
+#touchUI {
+  position: fixed;
+  inset: 0;
+  z-index: 8;
+  pointer-events: none;
+}
+
+#touchUI[hidden] {
+  display: none;
+}
+
+.stick {
+  position: absolute;
+  width: 128px;
+  height: 128px;
+  margin: -64px 0 0 -64px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  border: 3px solid rgba(255, 255, 255, 0.4);
+  opacity: 0.45;
+}
+
+.stick.active {
+  opacity: 1;
+}
+
+.stick .knob {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 56px;
+  height: 56px;
+  margin: -28px 0 0 -28px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.75);
+  border: 3px solid rgba(43, 42, 40, 0.55);
+}
+
+.stick.aim .knob {
+  background: rgba(255, 138, 106, 0.85);
+}
+
+.tb {
+  position: absolute;
+  pointer-events: auto;
+  touch-action: none;
+  width: 54px;
+  height: 54px;
+  padding: 0;
+  border-radius: 50%;
+  border: 3px solid rgba(43, 42, 40, 0.7);
+  background: rgba(243, 234, 214, 0.82);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 26px;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tb[hidden] {
+  display: none;
+}
+
+.tb.down {
+  background: #ffd75e;
+}
+
+.tb.small {
+  width: 44px;
+  height: 44px;
+  font-size: 22px;
+}
+
+#tbPause {
+  left: calc(50% - 22px);
+  top: calc(6px + env(safe-area-inset-top));
+}
+
+#tbReload {
+  right: calc(16px + env(safe-area-inset-right));
+  bottom: 200px;
+}
+
+#tbJump {
+  right: calc(78px + env(safe-area-inset-right));
+  bottom: 200px;
+}
+
+#tbUse {
+  right: calc(16px + env(safe-area-inset-right));
+  bottom: 136px;
+  width: auto;
+  min-width: 108px;
+  max-width: 220px;
+  height: 52px;
+  padding: 0 14px;
+  border-radius: 26px;
+  font-size: 15px;
+  line-height: 1.15;
+  background: rgba(255, 215, 94, 0.92);
+  white-space: normal;
+  text-align: center;
+}
+
+.rotate-icon {
+  font-size: 46px;
+  text-align: center;
+  margin-bottom: 6px;
+}
+
+#rotate {
+  z-index: 20;
+}
+
+@media (max-height: 560px) {
+  .screen {
+    padding: 8px calc(8px + env(safe-area-inset-right)) 8px calc(8px + env(safe-area-inset-left));
+  }
+  .card {
+    border-width: 6px;
+    outline-offset: -11px;
+    padding: 14px 18px;
+  }
+  .logo {
+    gap: 10px;
+  }
+  .logo h1 {
+    font-size: 32px;
+    letter-spacing: 3px;
+  }
+  .logo-en {
+    font-size: 10px;
+    letter-spacing: 4px;
+  }
+  .seal {
+    width: 44px;
+    height: 44px;
+    font-size: 14px;
+    line-height: 17px;
+  }
+  .tagline {
+    margin: 4px 0 10px;
+    font-size: 13px;
+  }
+  .modes {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+  .mode {
+    padding: 8px 10px;
+  }
+  .mode b {
+    font-size: 16px;
+  }
+  .mode span {
+    font-size: 11px;
+  }
+  .toggles {
+    margin-top: 10px;
+  }
+  h2 {
+    font-size: 20px;
+    margin-bottom: 8px;
+  }
+  .hero-cards {
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+  }
+  .hero-card {
+    padding: 6px;
+    gap: 2px;
+  }
+  .hero-card canvas {
+    width: 60px;
+    height: 60px;
+  }
+  .hero-card b {
+    font-size: 15px;
+  }
+  .hero-card .role {
+    font-size: 11px;
+  }
+  .hero-card .desc {
+    font-size: 10px;
+  }
+  .form {
+    margin-top: 8px;
+  }
+  .field {
+    margin: 6px 0;
+  }
+  .btns {
+    flex-direction: row;
+    margin-top: 10px;
+  }
+  .btn {
+    padding: 9px 12px;
+    font-size: 15px;
+  }
+  .chapter {
+    padding: 6px 10px;
+    gap: 10px;
+  }
+  .chapter .num {
+    width: 30px;
+    height: 30px;
+    font-size: 14px;
+  }
+  .chapter .txt b {
+    font-size: 15px;
+  }
+  .chapter .txt span {
+    font-size: 11px;
+  }
+  .scroll {
+    margin-bottom: 2vh;
+    padding: 6px;
+  }
+  .scroll-inner {
+    flex-direction: row;
+    text-align: left;
+    min-height: 0;
+    padding: 10px 14px;
+    gap: 12px;
+  }
+  #portrait {
+    width: 70px;
+    height: 70px;
+  }
+  .line {
+    font-size: 16px;
+    min-height: 0;
+  }
+  .stats b {
+    font-size: 18px;
+  }
+  .stats div {
+    padding: 6px 4px;
+  }
+  .room-players {
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 6px;
+    margin: 8px 0;
+  }
+  .room-player canvas {
+    width: 30px;
+    height: 30px;
+  }
+  .note-card {
+    padding: 12px 16px;
+  }
+  .note-card #noteBody {
+    font-size: 14px;
+    line-height: 24px;
+  }
+  .specbar {
+    top: 54px;
+    padding: 4px 8px;
+  }
+}
+
+@media (min-height: 700px) {
+  .tb {
+    width: 64px;
+    height: 64px;
+  }
+  #tbReload,
+  #tbJump {
+    bottom: 240px;
+  }
+  #tbJump {
+    right: calc(92px + env(safe-area-inset-right));
+  }
+  #tbUse {
+    bottom: 160px;
+    height: 60px;
+    font-size: 17px;
+  }
+}
+
+@media (max-height: 560px) {
+  .menu .card .btns {
+    position: sticky;
+    bottom: -14px;
+    background: var(--paper);
+    padding: 8px 0 10px;
+    margin-bottom: -10px;
+    z-index: 1;
+  }
+}
 </style>
 </head>
 <body>
@@ -881,6 +1217,7 @@ input[type='range']:disabled {
       <button id="tLang" class="chip">中文 / EN</button>
       <button id="tMusic" class="chip"></button>
       <button id="tSfx" class="chip"></button>
+      <button id="tFull" class="chip" hidden data-i18n="fullscreen"></button>
     </div>
     <details id="secrets" class="controls secrets"><summary id="secretsSum"></summary><ul id="secretsList"></ul></details>
     <p id="lanNote" class="note"></p>
@@ -901,6 +1238,14 @@ input[type='range']:disabled {
         <tr><td>C</td><td data-i18n="ctl_c"></td></tr>
         <tr><td>M</td><td data-i18n="ctl_m"></td></tr>
         <tr><td>Esc</td><td data-i18n="ctl_esc"></td></tr>
+      </table>
+      <table class="touch-help">
+        <tr><td data-i18n="th_left"></td><td data-i18n="th_left_do"></td></tr>
+        <tr><td data-i18n="th_right"></td><td data-i18n="th_right_do"></td></tr>
+        <tr><td data-i18n="th_tap"></td><td data-i18n="th_tap_do"></td></tr>
+        <tr><td data-i18n="th_slots"></td><td data-i18n="th_slots_do"></td></tr>
+        <tr><td data-i18n="th_hud"></td><td data-i18n="th_hud_do"></td></tr>
+        <tr><td data-i18n="th_buttons"></td><td data-i18n="th_buttons_do"></td></tr>
       </table>
     </details>
   </div>
@@ -1004,6 +1349,24 @@ input[type='range']:disabled {
 </div>
 
 <div id="lobbyBanner" class="banner" hidden></div>
+
+<div id="touchUI" hidden>
+  <div id="stickL" class="stick"><div class="knob"></div></div>
+  <div id="stickR" class="stick aim"><div class="knob"></div></div>
+  <button id="tbPause" class="tb small" aria-label="menu">☰</button>
+  <button id="tbUse" class="tb use" hidden></button>
+  <button id="tbReload" class="tb" aria-label="reload">⟳</button>
+  <button id="tbJump" class="tb" aria-label="jump">⤒</button>
+</div>
+
+<div id="rotate" class="screen dim" hidden>
+  <div class="card small">
+    <div class="rotate-icon">📱↻</div>
+    <h2 data-i18n="rotateTitle"></h2>
+    <p class="note" data-i18n="rotateText"></p>
+    <button id="rotateAnyway" class="btn" data-i18n="rotateAnyway"></button>
+  </div>
+</div>
 
 <div id="note" class="note-card" hidden>
   <h3 id="noteTitle"></h3>
@@ -1428,6 +1791,28 @@ input[type='range']:disabled {
       tip_skill: '右鍵或 X 施放角色技能',
       tip_crate: '打破「?」食材箱可以拿到好東西',
       tip_heal: '受傷了？按 H 喝雞湯',
+      tip_move_t: '左手拇指拖曳移動，推到底會奔跑',
+      tip_pick_t: '走到武器旁，點右邊黃色按鈕撿起來',
+      tip_attack_t: '右手拇指朝敵人拖曳就會攻擊',
+      tip_skill_t: '點武器欄左邊的圓形按鈕施放技能',
+      tip_crate_t: '打破「?」食材箱可以拿到好東西',
+      tip_heal_t: '受傷了？點武器欄右邊的雞湯',
+      fullscreen: '⛶ 全螢幕',
+      th_left: '左半邊螢幕',
+      th_left_do: '拇指拖曳移動，推到底奔跑',
+      th_right: '右半邊螢幕',
+      th_right_do: '拇指往哪拖就瞄準哪裡並攻擊（會自動對準附近的敵人）',
+      th_tap: '輕點右半邊',
+      th_tap_do: '朝面對的方向攻擊一下',
+      th_slots: '武器欄',
+      th_slots_do: '點一下換武器，長按丟掉',
+      th_hud: '技能圓鈕／雞湯／小地圖',
+      th_hud_do: '點一下施放技能、喝湯、打開大地圖',
+      th_buttons: '右側按鈕',
+      th_buttons_do: '黃色：撿起／開車／閱讀；⟳ 換彈；⤒ 跳躍；上方 ☰ 暫停',
+      rotateTitle: '請把手機轉成橫向',
+      rotateText: '橫向畫面比較大，兩隻拇指也比較好操作。',
+      rotateAnyway: '直向繼續玩',
       medPouch: '雞湯',
       msg_zone: '冷鏈正在失溫！冷鏈圈開始縮小！',
       msg_wave: '鹹水幫第 {0} 波來襲！',
@@ -1645,6 +2030,28 @@ input[type='range']:disabled {
       tip_skill: 'Right click or X uses your character skill',
       tip_crate: 'Break "?" ingredient crates for good loot',
       tip_heal: 'Hurt? Press H to drink chicken soup',
+      tip_move_t: 'Drag your left thumb to move; push all the way to run',
+      tip_pick_t: 'Walk to a weapon and tap the yellow button on the right',
+      tip_attack_t: 'Drag your right thumb toward an enemy to attack',
+      tip_skill_t: 'Tap the round button left of your weapons to use your skill',
+      tip_crate_t: 'Break "?" ingredient crates for good loot',
+      tip_heal_t: 'Hurt? Tap the soup right of your weapons',
+      fullscreen: '⛶ Fullscreen',
+      th_left: 'Left half of the screen',
+      th_left_do: 'Drag to move; push all the way to run',
+      th_right: 'Right half of the screen',
+      th_right_do: 'Drag toward where you want to aim and attack (snaps to nearby enemies)',
+      th_tap: 'Tap the right half',
+      th_tap_do: 'Attack once where you face',
+      th_slots: 'Weapon slots',
+      th_slots_do: 'Tap to switch, hold to drop',
+      th_hud: 'Skill circle / soup / minimap',
+      th_hud_do: 'Tap to use the skill, drink soup, open the big map',
+      th_buttons: 'Buttons on the right',
+      th_buttons_do: 'Yellow: pick up / drive / read; ⟳ reload; ⤒ jump; ☰ at the top pauses',
+      rotateTitle: 'Turn your phone sideways',
+      rotateText: 'Landscape gives a bigger view and room for both thumbs.',
+      rotateAnyway: 'Keep playing upright',
       medPouch: 'Soup',
       msg_zone: 'The cold chain is failing! The zone is shrinking!',
       msg_wave: 'Brine Gang wave {0} incoming!',
@@ -5032,6 +5439,18 @@ input[type='range']:disabled {
         this.ctx = null;
         return;
       }
+      // iPhones: play sound even with the ring switch on silent, and unlock Web Audio with a silent sound inside the tap.
+      if (navigator.audioSession) {
+        try {
+          navigator.audioSession.type = 'playback';
+        } catch (e) {
+          this.sessionError = e.message;
+        }
+      }
+      const unlock = this.ctx.createBufferSource();
+      unlock.buffer = this.ctx.createBuffer(1, 1, 22050);
+      unlock.connect(this.ctx.destination);
+      unlock.start(0);
       this.master = this.ctx.createGain();
       this.master.gain.value = this.sfxOn ? this.volume : 0;
       this.master.connect(this.ctx.destination);
@@ -5654,6 +6073,7 @@ input[type='range']:disabled {
       this.shake = 0;
       this.hitMarkT = -10;
       this.hurtT = -10;
+      this.hit = { slots: [], heal: null, skill: null, mini: null };
       this.rockCache = new Map();
       this.groundPattern = this.makeGroundPattern();
       this.plazaPattern = this.makePlazaPattern();
@@ -5661,7 +6081,9 @@ input[type='range']:disabled {
     }
 
     resize() {
-      this.dpr = Math.min(window.devicePixelRatio || 1, 2);
+      // Phones get a lower pixel density: much less drawing work for a small loss in sharpness.
+      const coarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+      this.dpr = Math.min(window.devicePixelRatio || 1, coarse ? 1.75 : 2);
       this.W = window.innerWidth;
       this.H = window.innerHeight;
       this.cv.width = Math.round(this.W * this.dpr);
@@ -5944,7 +6366,9 @@ input[type='range']:disabled {
 
     computeZoom(veh) {
       const vh = D.VIEW_H * (veh ? 1.2 : 1);
-      return Math.max(this.H / vh, this.W / (vh * D.MAX_ASPECT));
+      // Small phone screens zoom in a little so characters and names stay readable.
+      const phone = Math.min(this.W, this.H) < 500 ? 1.2 : 1;
+      return Math.max(this.H / vh, this.W / (vh * D.MAX_ASPECT)) * phone;
     }
 
     draw(view, ui, dt) {
@@ -7744,7 +8168,7 @@ input[type='range']:disabled {
         const foe = view.mode === 'story' ? p.tm === 2 : this.myTeam !== 0 && p.tm !== 0 && p.tm !== this.myTeam;
         if (p.hp >= 0 && (foe || ally) && (p.hp < 1 || p.ch === 'boss' || ally)) this.bar(ctx, p.x, p.y + R + 10, R * 2.2, p.hp, foe ? '#e8453b' : '#7ad35e');
         const enemyCol = this.tmode === 'teams' ? (p.tm === 1 ? '#ffa294' : '#a8cfff') : '#ffffff';
-        if (p.hu || ally) this.outlinedText(ctx, nameOf(p), p.x, p.y - R - 14, 16, ally ? '#b8f5a0' : enemyCol);
+        if (p.hu || ally) this.outlinedText(ctx, nameOf(p), p.x, p.y - R - 14, Math.max(16, 11 / (this.zoom || 1)), ally ? '#b8f5a0' : enemyCol);
       }
     }
 
@@ -7917,6 +8341,8 @@ input[type='range']:disabled {
     drawHUD(ctx, view, ui) {
       const W = this.W;
       const H = this.H;
+      // Screen areas a tap can hit, filled in as the HUD is drawn.
+      this.hit = { slots: [], heal: null, skill: null, mini: null };
       const s = clamp(Math.min(H / 860, W / 1400), 0.65, 1.3);
       const me = view.me;
       const hud = view.cme || me;
@@ -7996,8 +8422,9 @@ input[type='range']:disabled {
       const mx = W - ms - 14 * s;
       const my = 14 * s;
       this.drawMinimap(ctx, view, mx, my, ms, 1800);
+      this.hit.mini = { x: mx, y: my, w: ms, h: ms };
       let ly = my + ms + 12 * s;
-      if (view.lb && view.lb.length) {
+      if (view.lb && view.lb.length && H >= 480) {
         this.panel(ctx, mx, ly, ms, (view.lb.length * 20 + 34) * s);
         this.outlinedText(ctx, I.t('leaderboard'), mx + 10 * s, ly + 22 * s, 14 * s, '#ffffff', 'left');
         ly += 44 * s;
@@ -8053,7 +8480,7 @@ input[type='range']:disabled {
         this.outlinedText(ctx, I.t('mapClose'), W / 2, (H + bs) / 2 + 28, 15, '#ffffff');
       }
 
-      if (me.alive && !ui.bigMap && ui.mouseX != null) this.drawCrosshair(ctx, ui, me);
+      if (me.alive && !ui.bigMap && ui.mouseX != null && !ui.touch) this.drawCrosshair(ctx, ui, me);
     }
 
     drawMinimap(ctx, view, x, y, size, span) {
@@ -8146,10 +8573,12 @@ input[type='range']:disabled {
       const total = n * bw + (n - 1) * gap;
       let x = W / 2 - total / 2;
       const y = H - bh - 16 * s;
+      const own = hud === view.me;
       for (let i = 0; i < n; i++) {
         const sl = hud.sl[i];
         const active = hud.act === i;
         const yy = active ? y - 6 * s : y;
+        if (own) this.hit.slots.push({ x, y: yy, w: bw, h: bh, i });
         const rare = sl && D.WEAPONS[sl.t] && D.WEAPONS[sl.t].rare;
         roundRect(ctx, x, yy, bw, bh, 12 * s);
         ctx.fillStyle = active ? 'rgba(255,255,255,0.32)' : 'rgba(30,30,28,0.55)';
@@ -8173,6 +8602,7 @@ input[type='range']:disabled {
       if (hud.so != null) {
         const px = W / 2 + total / 2 + 18 * s;
         const pw = 72 * s;
+        if (own) this.hit.heal = { x: px, y, w: pw, h: bh };
         roundRect(ctx, px, y, pw, bh, 12 * s);
         ctx.fillStyle = 'rgba(30,30,28,0.55)';
         ctx.fill();
@@ -8192,6 +8622,7 @@ input[type='range']:disabled {
         const r = 34 * s;
         const cx = W / 2 - total / 2 - r - 20 * s;
         const cy = y + bh / 2 - 4 * s;
+        if (own) this.hit.skill = { x: cx - r, y: cy - r, w: r * 2, h: r * 2 };
         circle(ctx, cx, cy, r);
         ctx.fillStyle = hud.sc <= 0 ? 'rgba(255,215,94,0.9)' : 'rgba(30,30,28,0.6)';
         ctx.fill();
@@ -8208,7 +8639,7 @@ input[type='range']:disabled {
           ctx.fill();
           this.outlinedText(ctx, String(hud.scs), cx, cy + 8 * s, 22 * s, '#ffffff');
         }
-        this.outlinedText(ctx, I.lang === 'zh' ? '右鍵 / X' : 'RMB / X', cx, cy + r + 16 * s, 11 * s, '#ffffff');
+        this.outlinedText(ctx, ui.touch ? I.t('skill') : I.lang === 'zh' ? '右鍵 / X' : 'RMB / X', cx, cy + r + 16 * s, 11 * s, '#ffffff');
       }
 
       const hbw = Math.max(total, 330 * s);
@@ -8234,7 +8665,7 @@ input[type='range']:disabled {
       }
 
       const me = view.me;
-      if (me.alive && me.pr && !ui.bigMap) {
+      if (me.alive && me.pr && !ui.bigMap && !ui.touch) {
         const pr = me.pr;
         const name = pr.k === 'drive' ? I.pick(D.VEHICLES[pr.t].name) : pr.t ? itemName(pr.t) : '';
         this.outlinedText(ctx, '[F]  ' + I.t(pr.k, name), W / 2, hy - 18 * s, 18 * s, '#ffffff');
@@ -9435,12 +9866,13 @@ input[type='range']:disabled {
   function tipFor(view) {
     if (view.chap !== 'ch1' || !view.obj || view.st !== 'playing') return '';
     const me = view.me;
-    if (view.t < 6) return I.t('tip_move');
-    if (!me.sl.some(s => s && D.WEAPONS[s.t])) return I.t('tip_pick');
-    if (view.obj.cur === 0) return I.t('tip_attack');
-    if (me.su === 0) return I.t('tip_skill');
-    if (me.so > 0 && me.hp < me.mhp * 0.8) return I.t('tip_heal');
-    return I.t('tip_crate');
+    const t = touch.on ? '_t' : '';
+    if (view.t < 6) return I.t('tip_move' + t);
+    if (!me.sl.some(s => s && D.WEAPONS[s.t])) return I.t('tip_pick' + t);
+    if (view.obj.cur === 0) return I.t('tip_attack' + t);
+    if (me.su === 0) return I.t('tip_skill' + t);
+    if (me.so > 0 && me.hp < me.mhp * 0.8) return I.t('tip_heal' + t);
+    return I.t('tip_crate' + t);
   }
 
   // ---------- input ----------
@@ -9452,6 +9884,7 @@ input[type='range']:disabled {
     if (keys.has('KeyS') || keys.has('ArrowDown')) my += 1;
     if (keys.has('KeyA') || keys.has('ArrowLeft')) mx -= 1;
     if (keys.has('KeyD') || keys.has('ArrowRight')) mx += 1;
+    if (touch.on) return touchInput(mx, my);
     let aim = lastAim;
     if (ui.mouseX != null) {
       aim = Math.atan2(ui.mouseY - renderer.H / 2, ui.mouseX - renderer.W / 2);
@@ -9549,6 +9982,7 @@ input[type='range']:disabled {
   });
 
   canvas.addEventListener('mousedown', e => {
+    if (touch.on && performance.now() - touch.last < 1000) return;
     Sound.init();
     if (e.button === 0) mouseDown = true;
     if (e.button === 2 && inGame()) act({ a: 'skill' });
@@ -9576,6 +10010,349 @@ input[type='range']:disabled {
     if (session) session.setAspect(a);
     if (demo) demo.setAspect(a);
   });
+
+  // ---------- touch controls ----------
+
+  // Left half of the screen: a movement stick that appears under the thumb (pushed all the way, it runs).
+  // Right half: an aim stick that attacks once dragged past a small dead zone, with aim pulled toward a
+  // nearby enemy; a quick tap attacks once. Weapon slots (hold to drop), the skill circle, the soup pouch
+  // and the minimap are tappable. Buttons on the right: use, reload, jump; pause at the top.
+  const touch = { on: false, move: null, aim: null, tapUntil: 0, last: 0, press: null, portraitOk: false, rotatePaused: false };
+  const STICK_R = 56;
+  const IOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+  function canFullscreen() {
+    const el = document.documentElement;
+    return !IOS && !!(el.requestFullscreen || el.webkitRequestFullscreen);
+  }
+
+  function setTouchMode(on) {
+    if (touch.on === on) return;
+    touch.on = on;
+    ui.touch = on;
+    document.body.classList.toggle('touch', on);
+    $('tFull').hidden = !on || !canFullscreen();
+    if (!on) {
+      touch.move = null;
+      touch.aim = null;
+      $('touchUI').hidden = true;
+    }
+  }
+
+  // Android: fullscreen and landscape lock once a game starts. iPhone browsers have no fullscreen for pages;
+  // adding the game to the home screen gives the same effect there.
+  function goFullscreen() {
+    if (!touch.on || !canFullscreen() || document.fullscreenElement || document.webkitFullscreenElement) return;
+    const el = document.documentElement;
+    const req = el.requestFullscreen || el.webkitRequestFullscreen;
+    try {
+      const p = req.call(el, { navigationUI: 'hide' });
+      const lock = () => {
+        if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(() => {});
+      };
+      if (p && p.then) p.then(lock).catch(() => {});
+      else lock();
+    } catch (e) {
+      return;
+    }
+  }
+
+  function inRect(r, x, y) {
+    return !!r && x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
+  }
+
+  function hudTarget(x, y) {
+    const h = renderer.hit;
+    if (ui.bigMap || inRect(h.mini, x, y)) return { k: 'map' };
+    if (inRect(h.skill, x, y)) return { k: 'skill' };
+    if (inRect(h.heal, x, y)) return { k: 'heal' };
+    for (const sl of h.slots) if (inRect(sl, x, y)) return { k: 'slot', i: sl.i };
+    return null;
+  }
+
+  // The stick's centre follows a thumb that slides past the rim, so it never feels stuck.
+  function follow(st) {
+    const dx = st.x - st.ox;
+    const dy = st.y - st.oy;
+    const len = Math.hypot(dx, dy);
+    if (len > STICK_R * 1.3) {
+      st.ox = st.x - (dx / len) * STICK_R * 1.3;
+      st.oy = st.y - (dy / len) * STICK_R * 1.3;
+    }
+  }
+
+  function stickVec(st) {
+    if (!st) return null;
+    const dx = st.x - st.ox;
+    const dy = st.y - st.oy;
+    const len = Math.hypot(dx, dy);
+    return { dx, dy, len, k: Math.min(1, len / STICK_R) };
+  }
+
+  // Thumbs are less exact than a mouse: an attack within about 22 degrees of a visible enemy goes at that
+  // enemy. A quick tap, which has no direction of its own, looks wider (about 60 degrees of where you face).
+  function assistAim(a, cone) {
+    const v = lastView;
+    if (!v || !v.me.alive) return a;
+    let best = null;
+    let bd = cone || 0.38;
+    for (const p of v.pl) {
+      if (p.i === v.you || p.d || p.veh) continue;
+      if (v.me.tm && p.tm === v.me.tm) continue;
+      const dx = p.x - v.me.x;
+      const dy = p.y - v.me.y;
+      const d = Math.hypot(dx, dy);
+      if (d < 1 || d > 900 || (p.bu && d > 160)) continue;
+      const pa = Math.atan2(dy, dx);
+      const diff = Math.abs(SIM.angleDiff(a, pa));
+      if (diff < bd) {
+        bd = diff;
+        best = pa;
+      }
+    }
+    return best == null ? a : best;
+  }
+
+  function touchInput(kx, ky) {
+    const now = performance.now();
+    let mx = kx;
+    let my = ky;
+    let sprint = keys.has('Space');
+    let shoot = false;
+    let aim = lastAim;
+    const mv = stickVec(touch.move);
+    if (mv && mv.len > 6) {
+      mx = (mv.dx / mv.len) * mv.k;
+      my = (mv.dy / mv.len) * mv.k;
+      sprint = mv.k >= 0.96;
+    }
+    const av = stickVec(touch.aim);
+    if (av && av.len > 10) {
+      aim = Math.atan2(av.dy, av.dx);
+      shoot = av.len > 22;
+    } else if (!av && (mx || my) && now > touch.tapUntil) {
+      aim = Math.atan2(my, mx);
+    }
+    const tapping = now < touch.tapUntil;
+    if (tapping) shoot = true;
+    if (shoot) aim = assistAim(aim, tapping && !(av && av.len > 10) ? 1.05 : 0.38);
+    lastAim = aim;
+    return { mx, my, aim, shoot: shoot && !ui.bigMap, sprint, brake: false };
+  }
+
+  canvas.addEventListener('pointerdown', e => {
+    if (e.pointerType === 'mouse') return;
+    e.preventDefault();
+    setTouchMode(true);
+    touch.last = performance.now();
+    if (!inGame()) {
+      if (gameOver.spectating && session) session.spectateNext();
+      return;
+    }
+    const x = e.clientX;
+    const y = e.clientY;
+    const hit = hudTarget(x, y);
+    if (hit) {
+      if (hit.k === 'map') ui.bigMap = !ui.bigMap;
+      else if (hit.k === 'skill') act({ a: 'skill' });
+      else if (hit.k === 'heal') act({ a: 'heal' });
+      else {
+        act({ a: 'slot', i: hit.i });
+        const id = e.pointerId;
+        touch.press = {
+          id,
+          timer: setTimeout(() => {
+            if (touch.press && touch.press.id === id && inGame()) act({ a: 'drop' });
+            touch.press = null;
+          }, 550)
+        };
+      }
+      return;
+    }
+    const st = { id: e.pointerId, ox: x, oy: y, x, y, t: performance.now() };
+    if (x < renderer.W / 2) {
+      if (!touch.move) touch.move = st;
+    } else if (!touch.aim) {
+      touch.aim = st;
+    }
+    try {
+      canvas.setPointerCapture(e.pointerId);
+    } catch (err) {
+      return;
+    }
+  });
+
+  canvas.addEventListener('pointermove', e => {
+    if (e.pointerType === 'mouse') {
+      if (touch.on && performance.now() - touch.last > 1500) setTouchMode(false);
+      return;
+    }
+    for (const st of [touch.move, touch.aim]) {
+      if (st && st.id === e.pointerId) {
+        st.x = e.clientX;
+        st.y = e.clientY;
+        follow(st);
+      }
+    }
+  });
+
+  const endTouch = e => {
+    if (e.pointerType === 'mouse') return;
+    touch.last = performance.now();
+    if (touch.press && touch.press.id === e.pointerId) {
+      clearTimeout(touch.press.timer);
+      touch.press = null;
+    }
+    if (touch.move && touch.move.id === e.pointerId) touch.move = null;
+    if (touch.aim && touch.aim.id === e.pointerId) {
+      const a = touch.aim;
+      if (e.type === 'pointerup' && performance.now() - a.t < 260 && Math.hypot(a.x - a.ox, a.y - a.oy) < 14) touch.tapUntil = performance.now() + 150;
+      touch.aim = null;
+    }
+  };
+  canvas.addEventListener('pointerup', endTouch);
+  canvas.addEventListener('pointercancel', endTouch);
+
+  const touchButton = (id, fn) => {
+    const b = $(id);
+    b.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      setTouchMode(true);
+      touch.last = performance.now();
+      b.classList.add('down');
+      fn();
+    });
+    const up = () => b.classList.remove('down');
+    b.addEventListener('pointerup', up);
+    b.addEventListener('pointercancel', up);
+    b.addEventListener('pointerleave', up);
+    b.addEventListener('click', e => e.preventDefault());
+  };
+  touchButton('tbUse', () => {
+    if (inGame()) act({ a: 'interact' });
+  });
+  touchButton('tbReload', () => {
+    if (inGame()) act({ a: 'reload' });
+  });
+  touchButton('tbJump', () => {
+    if (inGame()) act({ a: 'jump' });
+  });
+  touchButton('tbPause', () => {
+    if (!$('note').hidden) closeNote();
+    else if (session && $('overlay').hidden && $('lobby').hidden) togglePause();
+  });
+
+  function placeStick(id, st, rx, ry) {
+    const el = $(id);
+    const knob = el.firstElementChild;
+    const x = st ? st.ox : rx;
+    const y = st ? st.oy : ry;
+    el.style.left = x + 'px';
+    el.style.top = y + 'px';
+    el.classList.toggle('active', !!st);
+    let kx = 0;
+    let ky = 0;
+    if (st) {
+      const v = stickVec(st);
+      if (v.len > 0) {
+        kx = (v.dx / v.len) * Math.min(v.len, STICK_R);
+        ky = (v.dy / v.len) * Math.min(v.len, STICK_R);
+      }
+    }
+    knob.style.transform = 'translate(' + kx.toFixed(1) + 'px,' + ky.toFixed(1) + 'px)';
+  }
+
+  function updateTouchUI(view) {
+    const show = touch.on && !!session && !!view && !dlg && $('pause').hidden && $('overlay').hidden && $('lobby').hidden && !view.spec;
+    $('touchUI').hidden = !show;
+    if (!show) {
+      touch.move = null;
+      touch.aim = null;
+      return;
+    }
+    const me = view.me;
+    const playing = me.alive && view.st === 'playing';
+    $('stickL').hidden = !playing;
+    $('stickR').hidden = !playing;
+    $('tbReload').hidden = !playing || !!me.veh;
+    $('tbJump').hidden = !playing || !!me.veh;
+    const pr = playing ? me.pr : null;
+    const use = $('tbUse');
+    if (pr) {
+      const name = pr.k === 'drive' ? I.pick(D.VEHICLES[pr.t].name) : pr.t ? Renderer.itemName(pr.t) : '';
+      const label = I.t(pr.k, name).trim();
+      if (use.textContent !== label) use.textContent = label;
+    }
+    use.hidden = !pr;
+    const W = renderer.W;
+    const H = renderer.H;
+    placeStick('stickL', touch.move, 96, H - 92);
+    placeStick('stickR', touch.aim, W - 220, H - 84);
+  }
+
+  // A home-screen icon drawn from the 允望樓 seal, so "Add to Home Screen" on a phone gets a proper icon.
+  function homeIcon() {
+    try {
+      const c = document.createElement('canvas');
+      c.width = 180;
+      c.height = 180;
+      const g = c.getContext('2d');
+      g.fillStyle = '#1d2a18';
+      g.fillRect(0, 0, 180, 180);
+      g.translate(90, 90);
+      g.rotate(-0.1);
+      g.fillStyle = '#b8322a';
+      g.fillRect(-62, -62, 124, 124);
+      g.strokeStyle = 'rgba(246,230,200,0.7)';
+      g.lineWidth = 6;
+      g.strokeRect(-52, -52, 104, 104);
+      g.fillStyle = '#f6e6c8';
+      g.font = "bold 46px 'PingFang TC','Noto Sans TC','Microsoft JhengHei',sans-serif";
+      g.textAlign = 'center';
+      g.textBaseline = 'middle';
+      g.fillText('允望', 0, -18);
+      g.fillText('樓', 0, 30);
+      const url = c.toDataURL('image/png');
+      for (const rel of ['apple-touch-icon', 'icon']) {
+        const l = document.createElement('link');
+        l.rel = rel;
+        l.href = url;
+        document.head.appendChild(l);
+      }
+    } catch (e) {
+      return;
+    }
+  }
+  homeIcon();
+
+  // Phones: no pinch zoom, audio unlocks on the first tap (iOS needs a touch end), and the game pauses
+  // its music when the app goes to the background.
+  document.addEventListener('gesturestart', e => e.preventDefault());
+  document.addEventListener('touchend', () => Sound.init(), { passive: true });
+  document.addEventListener('pointerup', () => Sound.init());
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      Sound.setMusic(false);
+      if (session && session.kind === 'offline' && $('pause').hidden && !dlg) togglePause();
+    } else {
+      Sound.setMusic(prefs.music);
+    }
+  });
+  if (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) setTouchMode(true);
+  $('tFull').addEventListener('click', () => goFullscreen());
+  $('rotateAnyway').addEventListener('click', () => {
+    touch.portraitOk = true;
+    $('rotate').hidden = true;
+  });
+  const onViewport = () => {
+    renderer.resize();
+    const a = window.innerWidth / window.innerHeight;
+    if (session) session.setAspect(a);
+    if (demo) demo.setAspect(a);
+  };
+  window.addEventListener('orientationchange', () => setTimeout(onViewport, 250));
+  if (window.visualViewport) window.visualViewport.addEventListener('resize', onViewport);
 
   // ---------- menu wiring ----------
 
@@ -9620,6 +10397,7 @@ input[type='range']:disabled {
   let hoverEl = null;
   let hoverAt = 0;
   document.addEventListener('pointerover', e => {
+    if (e.pointerType !== 'mouse') return;
     const b = e.target && e.target.closest ? e.target.closest('button, summary') : null;
     if (b === hoverEl) return;
     hoverEl = b;
@@ -9678,6 +10456,7 @@ input[type='range']:disabled {
   $('heroBack').addEventListener('click', () => onlyScreen('title'));
   $('heroGo').addEventListener('click', () => {
     Sound.play('click');
+    goFullscreen();
     if (pickMode === 'story') {
       onlyScreen('chapters');
       renderChapters();
@@ -9757,6 +10536,18 @@ input[type='range']:disabled {
   function frame(now) {
     const dt = Math.min(0.1, Math.max(0, (now - last) / 1000));
     last = now;
+    // Phones held upright get a prompt to turn sideways; a solo game waits meanwhile.
+    const portrait = touch.on && !!session && window.innerHeight > window.innerWidth && !touch.portraitOk;
+    if ($('rotate').hidden === portrait) $('rotate').hidden = !portrait;
+    if (session && session.kind === 'offline') {
+      if (portrait && !session.paused) {
+        session.paused = true;
+        touch.rotatePaused = true;
+      } else if (!portrait && touch.rotatePaused) {
+        touch.rotatePaused = false;
+        if ($('pause').hidden && !dlg) session.paused = false;
+      }
+    }
     const isDemo = !session || (session.kind === 'online' && !session.map);
     if (isDemo && !demo) startDemo();
     const active = isDemo ? demo : session;
@@ -9796,6 +10587,8 @@ input[type='range']:disabled {
         ui.aim = !isDemo && view.me.alive && !view.me.veh ? input.aim : null;
         ui.tip = isDemo ? '' : tipFor(view);
         renderer.draw(view, ui, cur.paused ? 0 : dt);
+        if (!isDemo) updateTouchUI(view);
+        else $('touchUI').hidden = true;
         if (!isDemo) {
           afterFrame(view);
           if (!cur.paused && $('lobby').hidden) ownSounds(view, dt);
@@ -9910,6 +10703,12 @@ input[type='range']:disabled {
       },
       get dialogue() {
         return dlg;
+      },
+      get renderer() {
+        return renderer;
+      },
+      get touch() {
+        return touch;
       },
       startChapter,
       advanceDialogue,

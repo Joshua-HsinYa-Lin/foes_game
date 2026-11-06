@@ -14,6 +14,28 @@ The single HTML file is the whole game, both music tracks included, and runs off
 
 Music: the 允望樓 theme plays first, then 「two halves of a quiet room」, and they keep alternating. The multiplayer waiting room plays 「two halves of a quiet room」.
 
+## 📱 Phones and tablets (Android and iPhone)
+
+The game runs in the phone's browser with on-screen controls. Phones cannot run the downloaded HTML file well (an iPhone only previews it, without running the game), so a phone opens the game from a computer on the same Wi-Fi:
+
+1. On a computer, start the server (see Multiplayer below): `node server.js`, or double-click `start-lan-server.bat`. It prints an address such as `192.168.1.23:8080`.
+2. On the phone, connected to the same Wi-Fi, open Chrome (Android) or Safari (iPhone) and go to `http://192.168.1.23:8080` (your address). Story mode, Paradise Brawl and LAN battles all work from there.
+3. Hold the phone sideways. On Android the game goes fullscreen when a match starts. On iPhone, tap Share → **Add to Home Screen** and start the game from the new icon to get the full screen without the browser bars.
+
+Touch controls:
+
+| Where | What it does |
+| --- | --- |
+| Left half of the screen | Drag to move; push all the way to run |
+| Right half of the screen | Drag toward where you want to aim; past a short distance you attack. Aim snaps to an enemy within about 20 degrees |
+| Quick tap on the right half | Attack once where you face |
+| Weapon slots | Tap to switch, hold to drop |
+| Skill circle, soup pouch, minimap | Tap to use the skill, drink soup, open the big map |
+| Yellow button | Pick up, swap, drive, read (shows what it will do) |
+| ⟳ / ⤒ / ☰ | Reload / jump / pause menu |
+
+Phones zoom in a little compared with a computer screen so characters stay readable, so a phone player sees slightly less of the map. Tested in emulated Android and iPhone browsers (screen sizes, multi-touch, fullscreen, rotation); not yet on a physical device.
+
 ## Characters
 
 | Character | Role | Passive | Skill (right click or X) |
@@ -113,7 +135,7 @@ This was tested with 8 browsers in one room. Each player received 30 updates a s
 
 - Put the host computer on the same Wi-Fi as everyone, or better, on a cable to the router. Keep it plugged in.
 - Everyone else needs only a browser: visit `http://<host address>` (no download needed), or open `yunwang_paradise.html` and type the address.
-- Each person needs a keyboard and mouse; the game has no touch controls yet.
+- Each person can use a computer (keyboard and mouse) or a phone or tablet (touch controls, see Phones and tablets above).
 - For mixed ages, 全家合作 Family co-op on level 1 or 2 keeps everyone in the game. Every bot hunts the family in co-op, so start with about 1.5 bots per person (12 bots for 8 people) and add more if it is too easy. For a family rivalry, 紅藍對戰 Red vs Blue with each side picked in the waiting room.
 - Several people can play the same character; names and team rings tell them apart.
 
@@ -158,4 +180,4 @@ node tests/sim_test.js
 
 Runs without dependencies. It checks the map, the difficulty levels, every hidden detail and the airdrop, breakable buildings, the team and family co-op modes (including full 30-player matches with 8 people and their snapshot sizes), three full Paradise Brawl rounds, every character skill and passive, the kitchen weapon effects (knockback, burn, slow, bounce, pierce), the backpack slots and medical pouch, pickups, friendly fire, and plays each story chapter with an AI-controlled hero on levels 1 to 4 to confirm each chapter can be won on levels 1 to 3.
 
-The browser tests (`tests/browser_test.js`, `tests/scenario_test.js`, `tests/details_test.js`, `tests/lan_test.js`, `tests/family_test.js`) drive the real page with Playwright and save screenshots. They are optional and need Playwright, which this project does not install. `tests/lan_test.js` and `tests/family_test.js` (8 people in one room) need a server running first: `node server.js --port 8099 --stats`. `tests/playtest.js [shots dir] [level] [character] [rounds]` plays Paradise Brawl rounds through the keyboard and mouse and reports how each went.
+The browser tests (`tests/browser_test.js`, `tests/scenario_test.js`, `tests/details_test.js`, `tests/mobile_test.js`, `tests/lan_test.js`, `tests/family_test.js`) drive the real page with Playwright and save screenshots. They are optional and need Playwright, which this project does not install. `tests/lan_test.js` and `tests/family_test.js` (8 people in one room) need a server running first: `node server.js --port 8099 --stats`. `tests/playtest.js [shots dir] [level] [character] [rounds]` plays Paradise Brawl rounds through the keyboard and mouse and reports how each went.

@@ -2,7 +2,13 @@
 <html lang="zh-Hant">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="允望樂園">
+<meta name="theme-color" content="#1d2a18">
+<meta name="format-detection" content="telephone=no">
 <title>允望樂園 Yunwang Paradise</title>
 <link rel="stylesheet" href="css/style.css">
 </head>
@@ -28,6 +34,7 @@
       <button id="tLang" class="chip">中文 / EN</button>
       <button id="tMusic" class="chip"></button>
       <button id="tSfx" class="chip"></button>
+      <button id="tFull" class="chip" hidden data-i18n="fullscreen"></button>
     </div>
     <details id="secrets" class="controls secrets"><summary id="secretsSum"></summary><ul id="secretsList"></ul></details>
     <p id="lanNote" class="note"></p>
@@ -48,6 +55,14 @@
         <tr><td>C</td><td data-i18n="ctl_c"></td></tr>
         <tr><td>M</td><td data-i18n="ctl_m"></td></tr>
         <tr><td>Esc</td><td data-i18n="ctl_esc"></td></tr>
+      </table>
+      <table class="touch-help">
+        <tr><td data-i18n="th_left"></td><td data-i18n="th_left_do"></td></tr>
+        <tr><td data-i18n="th_right"></td><td data-i18n="th_right_do"></td></tr>
+        <tr><td data-i18n="th_tap"></td><td data-i18n="th_tap_do"></td></tr>
+        <tr><td data-i18n="th_slots"></td><td data-i18n="th_slots_do"></td></tr>
+        <tr><td data-i18n="th_hud"></td><td data-i18n="th_hud_do"></td></tr>
+        <tr><td data-i18n="th_buttons"></td><td data-i18n="th_buttons_do"></td></tr>
       </table>
     </details>
   </div>
@@ -151,6 +166,24 @@
 </div>
 
 <div id="lobbyBanner" class="banner" hidden></div>
+
+<div id="touchUI" hidden>
+  <div id="stickL" class="stick"><div class="knob"></div></div>
+  <div id="stickR" class="stick aim"><div class="knob"></div></div>
+  <button id="tbPause" class="tb small" aria-label="menu">☰</button>
+  <button id="tbUse" class="tb use" hidden></button>
+  <button id="tbReload" class="tb" aria-label="reload">⟳</button>
+  <button id="tbJump" class="tb" aria-label="jump">⤒</button>
+</div>
+
+<div id="rotate" class="screen dim" hidden>
+  <div class="card small">
+    <div class="rotate-icon">📱↻</div>
+    <h2 data-i18n="rotateTitle"></h2>
+    <p class="note" data-i18n="rotateText"></p>
+    <button id="rotateAnyway" class="btn" data-i18n="rotateAnyway"></button>
+  </div>
+</div>
 
 <div id="note" class="note-card" hidden>
   <h3 id="noteTitle"></h3>

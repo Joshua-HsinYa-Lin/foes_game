@@ -1072,12 +1072,13 @@
   function tipFor(view) {
     if (view.chap !== 'ch1' || !view.obj || view.st !== 'playing') return '';
     const me = view.me;
-    if (view.t < 6) return I.t('tip_move');
-    if (!me.sl.some(s => s && D.WEAPONS[s.t])) return I.t('tip_pick');
-    if (view.obj.cur === 0) return I.t('tip_attack');
-    if (me.su === 0) return I.t('tip_skill');
-    if (me.so > 0 && me.hp < me.mhp * 0.8) return I.t('tip_heal');
-    return I.t('tip_crate');
+    const t = touch.on ? '_t' : '';
+    if (view.t < 6) return I.t('tip_move' + t);
+    if (!me.sl.some(s => s && D.WEAPONS[s.t])) return I.t('tip_pick' + t);
+    if (view.obj.cur === 0) return I.t('tip_attack' + t);
+    if (me.su === 0) return I.t('tip_skill' + t);
+    if (me.so > 0 && me.hp < me.mhp * 0.8) return I.t('tip_heal' + t);
+    return I.t('tip_crate' + t);
   }
 
   // ---------- input ----------
@@ -1089,6 +1090,7 @@
     if (keys.has('KeyS') || keys.has('ArrowDown')) my += 1;
     if (keys.has('KeyA') || keys.has('ArrowLeft')) mx -= 1;
     if (keys.has('KeyD') || keys.has('ArrowRight')) mx += 1;
+    if (touch.on) return touchInput(mx, my);
     let aim = lastAim;
     if (ui.mouseX != null) {
       aim = Math.atan2(ui.mouseY - renderer.H / 2, ui.mouseX - renderer.W / 2);
@@ -1186,6 +1188,7 @@
   });
 
   canvas.addEventListener('mousedown', e => {
+    if (touch.on && performance.now() - touch.last < 1000) return;
     Sound.init();
     if (e.button === 0) mouseDown = true;
     if (e.button === 2 && inGame()) act({ a: 'skill' });
@@ -1213,6 +1216,349 @@
     if (session) session.setAspect(a);
     if (demo) demo.setAspect(a);
   });
+
+  // ---------- touch controls ----------
+
+  // Left half of the screen: a movement stick that appears under the thumb (pushed all the way, it runs).
+  // Right half: an aim stick that attacks once dragged past a small dead zone, with aim pulled toward a
+  // nearby enemy; a quick tap attacks once. Weapon slots (hold to drop), the skill circle, the soup pouch
+  // and the minimap are tappable. Buttons on the right: use, reload, jump; pause at the top.
+  const touch = { on: false, move: null, aim: null, tapUntil: 0, last: 0, press: null, portraitOk: false, rotatePaused: false };
+  const STICK_R = 56;
+  const IOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+  function canFullscreen() {
+    const el = document.documentElement;
+    return !IOS && !!(el.requestFullscreen || el.webkitRequestFullscreen);
+  }
+
+  function setTouchMode(on) {
+    if (touch.on === on) return;
+    touch.on = on;
+    ui.touch = on;
+    document.body.classList.toggle('touch', on);
+    $('tFull').hidden = !on || !canFullscreen();
+    if (!on) {
+      touch.move = null;
+      touch.aim = null;
+      $('touchUI').hidden = true;
+    }
+  }
+
+  // Android: fullscreen and landscape lock once a game starts. iPhone browsers have no fullscreen for pages;
+  // adding the game to the home screen gives the same effect there.
+  function goFullscreen() {
+    if (!touch.on || !canFullscreen() || document.fullscreenElement || document.webkitFullscreenElement) return;
+    const el = document.documentElement;
+    const req = el.requestFullscreen || el.webkitRequestFullscreen;
+    try {
+      const p = req.call(el, { navigationUI: 'hide' });
+      const lock = () => {
+        if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(() => {});
+      };
+      if (p && p.then) p.then(lock).catch(() => {});
+      else lock();
+    } catch (e) {
+      return;
+    }
+  }
+
+  function inRect(r, x, y) {
+    return !!r && x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
+  }
+
+  function hudTarget(x, y) {
+    const h = renderer.hit;
+    if (ui.bigMap || inRect(h.mini, x, y)) return { k: 'map' };
+    if (inRect(h.skill, x, y)) return { k: 'skill' };
+    if (inRect(h.heal, x, y)) return { k: 'heal' };
+    for (const sl of h.slots) if (inRect(sl, x, y)) return { k: 'slot', i: sl.i };
+    return null;
+  }
+
+  // The stick's centre follows a thumb that slides past the rim, so it never feels stuck.
+  function follow(st) {
+    const dx = st.x - st.ox;
+    const dy = st.y - st.oy;
+    const len = Math.hypot(dx, dy);
+    if (len > STICK_R * 1.3) {
+      st.ox = st.x - (dx / len) * STICK_R * 1.3;
+      st.oy = st.y - (dy / len) * STICK_R * 1.3;
+    }
+  }
+
+  function stickVec(st) {
+    if (!st) return null;
+    const dx = st.x - st.ox;
+    const dy = st.y - st.oy;
+    const len = Math.hypot(dx, dy);
+    return { dx, dy, len, k: Math.min(1, len / STICK_R) };
+  }
+
+  // Thumbs are less exact than a mouse: an attack within about 22 degrees of a visible enemy goes at that
+  // enemy. A quick tap, which has no direction of its own, looks wider (about 60 degrees of where you face).
+  function assistAim(a, cone) {
+    const v = lastView;
+    if (!v || !v.me.alive) return a;
+    let best = null;
+    let bd = cone || 0.38;
+    for (const p of v.pl) {
+      if (p.i === v.you || p.d || p.veh) continue;
+      if (v.me.tm && p.tm === v.me.tm) continue;
+      const dx = p.x - v.me.x;
+      const dy = p.y - v.me.y;
+      const d = Math.hypot(dx, dy);
+      if (d < 1 || d > 900 || (p.bu && d > 160)) continue;
+      const pa = Math.atan2(dy, dx);
+      const diff = Math.abs(SIM.angleDiff(a, pa));
+      if (diff < bd) {
+        bd = diff;
+        best = pa;
+      }
+    }
+    return best == null ? a : best;
+  }
+
+  function touchInput(kx, ky) {
+    const now = performance.now();
+    let mx = kx;
+    let my = ky;
+    let sprint = keys.has('Space');
+    let shoot = false;
+    let aim = lastAim;
+    const mv = stickVec(touch.move);
+    if (mv && mv.len > 6) {
+      mx = (mv.dx / mv.len) * mv.k;
+      my = (mv.dy / mv.len) * mv.k;
+      sprint = mv.k >= 0.96;
+    }
+    const av = stickVec(touch.aim);
+    if (av && av.len > 10) {
+      aim = Math.atan2(av.dy, av.dx);
+      shoot = av.len > 22;
+    } else if (!av && (mx || my) && now > touch.tapUntil) {
+      aim = Math.atan2(my, mx);
+    }
+    const tapping = now < touch.tapUntil;
+    if (tapping) shoot = true;
+    if (shoot) aim = assistAim(aim, tapping && !(av && av.len > 10) ? 1.05 : 0.38);
+    lastAim = aim;
+    return { mx, my, aim, shoot: shoot && !ui.bigMap, sprint, brake: false };
+  }
+
+  canvas.addEventListener('pointerdown', e => {
+    if (e.pointerType === 'mouse') return;
+    e.preventDefault();
+    setTouchMode(true);
+    touch.last = performance.now();
+    if (!inGame()) {
+      if (gameOver.spectating && session) session.spectateNext();
+      return;
+    }
+    const x = e.clientX;
+    const y = e.clientY;
+    const hit = hudTarget(x, y);
+    if (hit) {
+      if (hit.k === 'map') ui.bigMap = !ui.bigMap;
+      else if (hit.k === 'skill') act({ a: 'skill' });
+      else if (hit.k === 'heal') act({ a: 'heal' });
+      else {
+        act({ a: 'slot', i: hit.i });
+        const id = e.pointerId;
+        touch.press = {
+          id,
+          timer: setTimeout(() => {
+            if (touch.press && touch.press.id === id && inGame()) act({ a: 'drop' });
+            touch.press = null;
+          }, 550)
+        };
+      }
+      return;
+    }
+    const st = { id: e.pointerId, ox: x, oy: y, x, y, t: performance.now() };
+    if (x < renderer.W / 2) {
+      if (!touch.move) touch.move = st;
+    } else if (!touch.aim) {
+      touch.aim = st;
+    }
+    try {
+      canvas.setPointerCapture(e.pointerId);
+    } catch (err) {
+      return;
+    }
+  });
+
+  canvas.addEventListener('pointermove', e => {
+    if (e.pointerType === 'mouse') {
+      if (touch.on && performance.now() - touch.last > 1500) setTouchMode(false);
+      return;
+    }
+    for (const st of [touch.move, touch.aim]) {
+      if (st && st.id === e.pointerId) {
+        st.x = e.clientX;
+        st.y = e.clientY;
+        follow(st);
+      }
+    }
+  });
+
+  const endTouch = e => {
+    if (e.pointerType === 'mouse') return;
+    touch.last = performance.now();
+    if (touch.press && touch.press.id === e.pointerId) {
+      clearTimeout(touch.press.timer);
+      touch.press = null;
+    }
+    if (touch.move && touch.move.id === e.pointerId) touch.move = null;
+    if (touch.aim && touch.aim.id === e.pointerId) {
+      const a = touch.aim;
+      if (e.type === 'pointerup' && performance.now() - a.t < 260 && Math.hypot(a.x - a.ox, a.y - a.oy) < 14) touch.tapUntil = performance.now() + 150;
+      touch.aim = null;
+    }
+  };
+  canvas.addEventListener('pointerup', endTouch);
+  canvas.addEventListener('pointercancel', endTouch);
+
+  const touchButton = (id, fn) => {
+    const b = $(id);
+    b.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      setTouchMode(true);
+      touch.last = performance.now();
+      b.classList.add('down');
+      fn();
+    });
+    const up = () => b.classList.remove('down');
+    b.addEventListener('pointerup', up);
+    b.addEventListener('pointercancel', up);
+    b.addEventListener('pointerleave', up);
+    b.addEventListener('click', e => e.preventDefault());
+  };
+  touchButton('tbUse', () => {
+    if (inGame()) act({ a: 'interact' });
+  });
+  touchButton('tbReload', () => {
+    if (inGame()) act({ a: 'reload' });
+  });
+  touchButton('tbJump', () => {
+    if (inGame()) act({ a: 'jump' });
+  });
+  touchButton('tbPause', () => {
+    if (!$('note').hidden) closeNote();
+    else if (session && $('overlay').hidden && $('lobby').hidden) togglePause();
+  });
+
+  function placeStick(id, st, rx, ry) {
+    const el = $(id);
+    const knob = el.firstElementChild;
+    const x = st ? st.ox : rx;
+    const y = st ? st.oy : ry;
+    el.style.left = x + 'px';
+    el.style.top = y + 'px';
+    el.classList.toggle('active', !!st);
+    let kx = 0;
+    let ky = 0;
+    if (st) {
+      const v = stickVec(st);
+      if (v.len > 0) {
+        kx = (v.dx / v.len) * Math.min(v.len, STICK_R);
+        ky = (v.dy / v.len) * Math.min(v.len, STICK_R);
+      }
+    }
+    knob.style.transform = 'translate(' + kx.toFixed(1) + 'px,' + ky.toFixed(1) + 'px)';
+  }
+
+  function updateTouchUI(view) {
+    const show = touch.on && !!session && !!view && !dlg && $('pause').hidden && $('overlay').hidden && $('lobby').hidden && !view.spec;
+    $('touchUI').hidden = !show;
+    if (!show) {
+      touch.move = null;
+      touch.aim = null;
+      return;
+    }
+    const me = view.me;
+    const playing = me.alive && view.st === 'playing';
+    $('stickL').hidden = !playing;
+    $('stickR').hidden = !playing;
+    $('tbReload').hidden = !playing || !!me.veh;
+    $('tbJump').hidden = !playing || !!me.veh;
+    const pr = playing ? me.pr : null;
+    const use = $('tbUse');
+    if (pr) {
+      const name = pr.k === 'drive' ? I.pick(D.VEHICLES[pr.t].name) : pr.t ? Renderer.itemName(pr.t) : '';
+      const label = I.t(pr.k, name).trim();
+      if (use.textContent !== label) use.textContent = label;
+    }
+    use.hidden = !pr;
+    const W = renderer.W;
+    const H = renderer.H;
+    placeStick('stickL', touch.move, 96, H - 92);
+    placeStick('stickR', touch.aim, W - 220, H - 84);
+  }
+
+  // A home-screen icon drawn from the 允望樓 seal, so "Add to Home Screen" on a phone gets a proper icon.
+  function homeIcon() {
+    try {
+      const c = document.createElement('canvas');
+      c.width = 180;
+      c.height = 180;
+      const g = c.getContext('2d');
+      g.fillStyle = '#1d2a18';
+      g.fillRect(0, 0, 180, 180);
+      g.translate(90, 90);
+      g.rotate(-0.1);
+      g.fillStyle = '#b8322a';
+      g.fillRect(-62, -62, 124, 124);
+      g.strokeStyle = 'rgba(246,230,200,0.7)';
+      g.lineWidth = 6;
+      g.strokeRect(-52, -52, 104, 104);
+      g.fillStyle = '#f6e6c8';
+      g.font = "bold 46px 'PingFang TC','Noto Sans TC','Microsoft JhengHei',sans-serif";
+      g.textAlign = 'center';
+      g.textBaseline = 'middle';
+      g.fillText('允望', 0, -18);
+      g.fillText('樓', 0, 30);
+      const url = c.toDataURL('image/png');
+      for (const rel of ['apple-touch-icon', 'icon']) {
+        const l = document.createElement('link');
+        l.rel = rel;
+        l.href = url;
+        document.head.appendChild(l);
+      }
+    } catch (e) {
+      return;
+    }
+  }
+  homeIcon();
+
+  // Phones: no pinch zoom, audio unlocks on the first tap (iOS needs a touch end), and the game pauses
+  // its music when the app goes to the background.
+  document.addEventListener('gesturestart', e => e.preventDefault());
+  document.addEventListener('touchend', () => Sound.init(), { passive: true });
+  document.addEventListener('pointerup', () => Sound.init());
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      Sound.setMusic(false);
+      if (session && session.kind === 'offline' && $('pause').hidden && !dlg) togglePause();
+    } else {
+      Sound.setMusic(prefs.music);
+    }
+  });
+  if (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) setTouchMode(true);
+  $('tFull').addEventListener('click', () => goFullscreen());
+  $('rotateAnyway').addEventListener('click', () => {
+    touch.portraitOk = true;
+    $('rotate').hidden = true;
+  });
+  const onViewport = () => {
+    renderer.resize();
+    const a = window.innerWidth / window.innerHeight;
+    if (session) session.setAspect(a);
+    if (demo) demo.setAspect(a);
+  };
+  window.addEventListener('orientationchange', () => setTimeout(onViewport, 250));
+  if (window.visualViewport) window.visualViewport.addEventListener('resize', onViewport);
 
   // ---------- menu wiring ----------
 
@@ -1257,6 +1603,7 @@
   let hoverEl = null;
   let hoverAt = 0;
   document.addEventListener('pointerover', e => {
+    if (e.pointerType !== 'mouse') return;
     const b = e.target && e.target.closest ? e.target.closest('button, summary') : null;
     if (b === hoverEl) return;
     hoverEl = b;
@@ -1315,6 +1662,7 @@
   $('heroBack').addEventListener('click', () => onlyScreen('title'));
   $('heroGo').addEventListener('click', () => {
     Sound.play('click');
+    goFullscreen();
     if (pickMode === 'story') {
       onlyScreen('chapters');
       renderChapters();
@@ -1394,6 +1742,18 @@
   function frame(now) {
     const dt = Math.min(0.1, Math.max(0, (now - last) / 1000));
     last = now;
+    // Phones held upright get a prompt to turn sideways; a solo game waits meanwhile.
+    const portrait = touch.on && !!session && window.innerHeight > window.innerWidth && !touch.portraitOk;
+    if ($('rotate').hidden === portrait) $('rotate').hidden = !portrait;
+    if (session && session.kind === 'offline') {
+      if (portrait && !session.paused) {
+        session.paused = true;
+        touch.rotatePaused = true;
+      } else if (!portrait && touch.rotatePaused) {
+        touch.rotatePaused = false;
+        if ($('pause').hidden && !dlg) session.paused = false;
+      }
+    }
     const isDemo = !session || (session.kind === 'online' && !session.map);
     if (isDemo && !demo) startDemo();
     const active = isDemo ? demo : session;
@@ -1433,6 +1793,8 @@
         ui.aim = !isDemo && view.me.alive && !view.me.veh ? input.aim : null;
         ui.tip = isDemo ? '' : tipFor(view);
         renderer.draw(view, ui, cur.paused ? 0 : dt);
+        if (!isDemo) updateTouchUI(view);
+        else $('touchUI').hidden = true;
         if (!isDemo) {
           afterFrame(view);
           if (!cur.paused && $('lobby').hidden) ownSounds(view, dt);
@@ -1547,6 +1909,12 @@
       },
       get dialogue() {
         return dlg;
+      },
+      get renderer() {
+        return renderer;
+      },
+      get touch() {
+        return touch;
       },
       startChapter,
       advanceDialogue,

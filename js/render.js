@@ -133,6 +133,7 @@
       this.shake = 0;
       this.hitMarkT = -10;
       this.hurtT = -10;
+      this.hit = { slots: [], heal: null, skill: null, mini: null };
       this.rockCache = new Map();
       this.groundPattern = this.makeGroundPattern();
       this.plazaPattern = this.makePlazaPattern();
@@ -140,7 +141,9 @@
     }
 
     resize() {
-      this.dpr = Math.min(window.devicePixelRatio || 1, 2);
+      // Phones get a lower pixel density: much less drawing work for a small loss in sharpness.
+      const coarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+      this.dpr = Math.min(window.devicePixelRatio || 1, coarse ? 1.75 : 2);
       this.W = window.innerWidth;
       this.H = window.innerHeight;
       this.cv.width = Math.round(this.W * this.dpr);
@@ -423,7 +426,9 @@
 
     computeZoom(veh) {
       const vh = D.VIEW_H * (veh ? 1.2 : 1);
-      return Math.max(this.H / vh, this.W / (vh * D.MAX_ASPECT));
+      // Small phone screens zoom in a little so characters and names stay readable.
+      const phone = Math.min(this.W, this.H) < 500 ? 1.2 : 1;
+      return Math.max(this.H / vh, this.W / (vh * D.MAX_ASPECT)) * phone;
     }
 
     draw(view, ui, dt) {
@@ -2223,7 +2228,7 @@
         const foe = view.mode === 'story' ? p.tm === 2 : this.myTeam !== 0 && p.tm !== 0 && p.tm !== this.myTeam;
         if (p.hp >= 0 && (foe || ally) && (p.hp < 1 || p.ch === 'boss' || ally)) this.bar(ctx, p.x, p.y + R + 10, R * 2.2, p.hp, foe ? '#e8453b' : '#7ad35e');
         const enemyCol = this.tmode === 'teams' ? (p.tm === 1 ? '#ffa294' : '#a8cfff') : '#ffffff';
-        if (p.hu || ally) this.outlinedText(ctx, nameOf(p), p.x, p.y - R - 14, 16, ally ? '#b8f5a0' : enemyCol);
+        if (p.hu || ally) this.outlinedText(ctx, nameOf(p), p.x, p.y - R - 14, Math.max(16, 11 / (this.zoom || 1)), ally ? '#b8f5a0' : enemyCol);
       }
     }
 
@@ -2396,6 +2401,8 @@
     drawHUD(ctx, view, ui) {
       const W = this.W;
       const H = this.H;
+      // Screen areas a tap can hit, filled in as the HUD is drawn.
+      this.hit = { slots: [], heal: null, skill: null, mini: null };
       const s = clamp(Math.min(H / 860, W / 1400), 0.65, 1.3);
       const me = view.me;
       const hud = view.cme || me;
@@ -2475,8 +2482,9 @@
       const mx = W - ms - 14 * s;
       const my = 14 * s;
       this.drawMinimap(ctx, view, mx, my, ms, 1800);
+      this.hit.mini = { x: mx, y: my, w: ms, h: ms };
       let ly = my + ms + 12 * s;
-      if (view.lb && view.lb.length) {
+      if (view.lb && view.lb.length && H >= 480) {
         this.panel(ctx, mx, ly, ms, (view.lb.length * 20 + 34) * s);
         this.outlinedText(ctx, I.t('leaderboard'), mx + 10 * s, ly + 22 * s, 14 * s, '#ffffff', 'left');
         ly += 44 * s;
@@ -2532,7 +2540,7 @@
         this.outlinedText(ctx, I.t('mapClose'), W / 2, (H + bs) / 2 + 28, 15, '#ffffff');
       }
 
-      if (me.alive && !ui.bigMap && ui.mouseX != null) this.drawCrosshair(ctx, ui, me);
+      if (me.alive && !ui.bigMap && ui.mouseX != null && !ui.touch) this.drawCrosshair(ctx, ui, me);
     }
 
     drawMinimap(ctx, view, x, y, size, span) {
@@ -2625,10 +2633,12 @@
       const total = n * bw + (n - 1) * gap;
       let x = W / 2 - total / 2;
       const y = H - bh - 16 * s;
+      const own = hud === view.me;
       for (let i = 0; i < n; i++) {
         const sl = hud.sl[i];
         const active = hud.act === i;
         const yy = active ? y - 6 * s : y;
+        if (own) this.hit.slots.push({ x, y: yy, w: bw, h: bh, i });
         const rare = sl && D.WEAPONS[sl.t] && D.WEAPONS[sl.t].rare;
         roundRect(ctx, x, yy, bw, bh, 12 * s);
         ctx.fillStyle = active ? 'rgba(255,255,255,0.32)' : 'rgba(30,30,28,0.55)';
@@ -2652,6 +2662,7 @@
       if (hud.so != null) {
         const px = W / 2 + total / 2 + 18 * s;
         const pw = 72 * s;
+        if (own) this.hit.heal = { x: px, y, w: pw, h: bh };
         roundRect(ctx, px, y, pw, bh, 12 * s);
         ctx.fillStyle = 'rgba(30,30,28,0.55)';
         ctx.fill();
@@ -2671,6 +2682,7 @@
         const r = 34 * s;
         const cx = W / 2 - total / 2 - r - 20 * s;
         const cy = y + bh / 2 - 4 * s;
+        if (own) this.hit.skill = { x: cx - r, y: cy - r, w: r * 2, h: r * 2 };
         circle(ctx, cx, cy, r);
         ctx.fillStyle = hud.sc <= 0 ? 'rgba(255,215,94,0.9)' : 'rgba(30,30,28,0.6)';
         ctx.fill();
@@ -2687,7 +2699,7 @@
           ctx.fill();
           this.outlinedText(ctx, String(hud.scs), cx, cy + 8 * s, 22 * s, '#ffffff');
         }
-        this.outlinedText(ctx, I.lang === 'zh' ? '右鍵 / X' : 'RMB / X', cx, cy + r + 16 * s, 11 * s, '#ffffff');
+        this.outlinedText(ctx, ui.touch ? I.t('skill') : I.lang === 'zh' ? '右鍵 / X' : 'RMB / X', cx, cy + r + 16 * s, 11 * s, '#ffffff');
       }
 
       const hbw = Math.max(total, 330 * s);
@@ -2713,7 +2725,7 @@
       }
 
       const me = view.me;
-      if (me.alive && me.pr && !ui.bigMap) {
+      if (me.alive && me.pr && !ui.bigMap && !ui.touch) {
         const pr = me.pr;
         const name = pr.k === 'drive' ? I.pick(D.VEHICLES[pr.t].name) : pr.t ? itemName(pr.t) : '';
         this.outlinedText(ctx, '[F]  ' + I.t(pr.k, name), W / 2, hy - 18 * s, 18 * s, '#ffffff');

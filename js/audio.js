@@ -35,6 +35,18 @@
         this.ctx = null;
         return;
       }
+      // iPhones: play sound even with the ring switch on silent, and unlock Web Audio with a silent sound inside the tap.
+      if (navigator.audioSession) {
+        try {
+          navigator.audioSession.type = 'playback';
+        } catch (e) {
+          this.sessionError = e.message;
+        }
+      }
+      const unlock = this.ctx.createBufferSource();
+      unlock.buffer = this.ctx.createBuffer(1, 1, 22050);
+      unlock.connect(this.ctx.destination);
+      unlock.start(0);
       this.master = this.ctx.createGain();
       this.master.gain.value = this.sfxOn ? this.volume : 0;
       this.master.connect(this.ctx.destination);
