@@ -146,23 +146,36 @@ const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebK
   await page.screenshot({ path: path.join(outDir, 'm5_big_map_android.png') });
   await page.touchscreen.tap(450, 200);
   await page.waitForTimeout(200);
-  await page.evaluate(() => {
+  const facing = await page.evaluate(() => {
     const s = PF_DEBUG.session.sim;
     const me = s.playerMap.get(PF_DEBUG.session.myId);
     const foe = s.players.find(p => p !== me && p.alive);
-    foe.x = me.x + 260;
-    foe.y = me.y - 60;
+    // Clear the line of fire where the player stands now, and put the enemy in an open spot about
+    // 13 degrees off a straight line, so only the aim decides whether shots land.
+    for (const o of s.obstacles) if (Math.hypot(o.x - me.x, o.y - me.y) < 380 && o.k !== 'wall' && o.k !== 'plank') o.dead = true;
+    let face = 0;
+    for (const base of [0, Math.PI, Math.PI / 2, -Math.PI / 2]) {
+      const a = base - 0.23;
+      const x = me.x + Math.cos(a) * 268;
+      const y = me.y + Math.sin(a) * 268;
+      if (s.blockedAt(x, y, 34) || s.insideBuilding(x, y, 30) || s.losBlocked(me.x, me.y, x, y)) continue;
+      face = base;
+      break;
+    }
+    foe.x = me.x + Math.cos(face - 0.23) * 268;
+    foe.y = me.y + Math.sin(face - 0.23) * 268;
     foe.hp = 1000;
     foe.maxHp = 1000;
     me.slots[0] = { t: 'rifle', m: 30 };
     me.act = 0;
+    return face;
   });
   await page.waitForTimeout(150);
   const before = (await view(page)).dd;
   // Face right with a short nudge of the left thumb, then quick taps on the right half: the enemy is about
   // 13 degrees off, and aim assist should land the shots.
   await touches(A.cdp, 'touchStart', [[7, 140, 300]]);
-  await touches(A.cdp, 'touchMove', [[7, 160, 300]]);
+  await touches(A.cdp, 'touchMove', [[7, 140 + Math.cos(facing) * 20, 300 + Math.sin(facing) * 20]]);
   await page.waitForTimeout(80);
   await touches(A.cdp, 'touchEnd', []);
   for (let i = 0; i < 4; i++) {
@@ -171,6 +184,14 @@ const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebK
   }
   const after = (await view(page)).dd;
   expect(after > before, 'quick taps on the right half shoot, with aim pulled onto a nearby enemy (' + Math.round(after - before) + ' damage)');
+  const diag = await page.evaluate(() => {
+    const s = PF_DEBUG.session.sim;
+    const me = s.playerMap.get(PF_DEBUG.session.myId);
+    const foe = s.players.find(p => p !== me && p.alive && p.maxHp === 1000);
+    const el = document.elementFromPoint(720, 230);
+    return { under: el && (el.id || el.tagName), useLabel: document.getElementById('tbUse').hidden ? '' : document.getElementById('tbUse').textContent, ammo: me.slots[0] && me.slots[0].m, act: me.act, slots: me.slots.map(x => x && x.t).join('/'), aim: me.a.toFixed(2), toFoe: foe ? Math.atan2(foe.y - me.y, foe.x - me.x).toFixed(2) : '-', blocked: foe ? s.losBlocked(me.x, me.y, foe.x, foe.y) : '-' };
+  });
+  notes.push('     tap diagnostics: ' + JSON.stringify(diag));
 
   await page.tap('#tbPause');
   await page.waitForTimeout(200);
