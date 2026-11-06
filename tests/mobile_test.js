@@ -152,16 +152,9 @@ const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebK
     const foe = s.players.find(p => p !== me && p.alive);
     // Clear the line of fire where the player stands now, and put the enemy in an open spot about
     // 13 degrees off a straight line, so only the aim decides whether shots land.
-    for (const o of s.obstacles) if (Math.hypot(o.x - me.x, o.y - me.y) < 380 && o.k !== 'wall' && o.k !== 'plank') o.dead = true;
-    let face = 0;
-    for (const base of [0, Math.PI, Math.PI / 2, -Math.PI / 2]) {
-      const a = base - 0.23;
-      const x = me.x + Math.cos(a) * 268;
-      const y = me.y + Math.sin(a) * 268;
-      if (s.blockedAt(x, y, 34) || s.insideBuilding(x, y, 30) || s.losBlocked(me.x, me.y, x, y)) continue;
-      face = base;
-      break;
-    }
+    for (const o of s.obstacles) if (Math.hypot(o.x - me.x, o.y - me.y) < 420) o.dead = true;
+    for (const v of s.vehicles) if (Math.hypot(v.x - me.x, v.y - me.y) < 420) v.x += 900;
+    const face = Math.atan2(s.size / 2 - me.y, s.size / 2 - me.x);
     foe.x = me.x + Math.cos(face - 0.23) * 268;
     foe.y = me.y + Math.sin(face - 0.23) * 268;
     foe.hp = 1000;
@@ -240,6 +233,16 @@ const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebK
   await B.page.tap('#btnRoyale');
   await B.page.tap('#heroGo');
   await B.page.waitForTimeout(900);
+  // Log anything solid in the walking path, then clear it: this check is about the thumb stick, not the map.
+  const path0 = await B.page.evaluate(() => {
+    const s = PF_DEBUG.session.sim;
+    const me = s.playerMap.get(PF_DEBUG.session.myId);
+    const inPath = s.obstacles.filter(o => !o.dead && o.solid && Math.abs(o.x - me.x) < 60 + (o.hw || o.r) && o.y < me.y && me.y - o.y < 420 + (o.hh || o.r)).map(o => o.k);
+    for (const o of s.obstacles) if (Math.hypot(o.x - me.x, o.y - me.y) < 460) o.dead = true;
+    for (const p of s.players) if (p !== me) p.ai.sleepT = 9999;
+    return inPath.join(',') || 'nothing';
+  });
+  notes.push('     iPhone walking path had: ' + path0 + ' (cleared)');
   const i0 = await view(B.page);
   await touches(B.cdp, 'touchStart', [[1, 120, 280]]);
   for (let i = 1; i <= 6; i++) {
@@ -270,16 +273,40 @@ const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebK
     });
     if (startBtn) await C.page.tap('#roomStart');
     await C.page.waitForFunction(() => document.getElementById('lobby').hidden && PF_DEBUG.view && PF_DEBUG.view.st === 'playing', null, { timeout: 15000 });
+    // The map lives on the server here, so instead of clearing a path, pick a direction the phone's own
+    // copy of the map shows as open for 420 px.
+    const dir = await C.page.evaluate(() => {
+      const v = PF_DEBUG.view;
+      const obs = PF_DEBUG.session.map.obstacles.filter(o => !o.dead && ['bush', 'lantern', 'board'].indexOf(o.k) < 0);
+      const size = PF_DEBUG.session.map.size;
+      const others = v.ve.map(q => [q.x, q.y, 90]).concat(v.pl.filter(q => q.i !== v.you && !q.d).map(q => [q.x, q.y, 60]));
+      const blocked = a => {
+        for (let d = 0; d <= 420; d += 20) {
+          const x = v.me.x + Math.cos(a) * d;
+          const y = v.me.y + Math.sin(a) * d;
+          if (x < 60 || y < 60 || x > size - 60 || y > size - 60) return true;
+          if (others.some(q => Math.hypot(x - q[0], y - q[1]) < q[2])) return true;
+          if (obs.some(o => Math.hypot(x - o.x, y - o.y) < (o.s === 'c' ? o.r : Math.max(o.hw, o.hh)) + 34)) return true;
+        }
+        return false;
+      };
+      for (let k = 0; k < 16; k++) {
+        const a = (k / 16) * Math.PI * 2;
+        if (!blocked(a)) return a;
+      }
+      return Math.PI;
+    });
     const l0 = await view(C.page);
     await touches(C.cdp, 'touchStart', [[1, 140, 300]]);
     for (let i = 1; i <= 6; i++) {
-      await touches(C.cdp, 'touchMove', [[1, 140 - i * 10, 300]]);
+      await touches(C.cdp, 'touchMove', [[1, 140 + Math.cos(dir) * i * 10, 300 + Math.sin(dir) * i * 10]]);
       await C.page.waitForTimeout(30);
     }
     await C.page.waitForTimeout(900);
     await touches(C.cdp, 'touchEnd', []);
     const l1 = await view(C.page);
-    expect(l0.x - l1.x > 80 && !(await C.page.evaluate(() => document.getElementById('touchUI').hidden)), 'a phone in a LAN match moves with the thumb stick (' + Math.round(l0.x - l1.x) + ' px)');
+    const went = (l1.x - l0.x) * Math.cos(dir) + (l1.y - l0.y) * Math.sin(dir);
+    expect(went > 80 && !(await C.page.evaluate(() => document.getElementById('touchUI').hidden)), 'a phone in a LAN match moves with the thumb stick (' + Math.round(went) + ' px toward ' + Math.round((dir * 180) / Math.PI) + ' degrees)');
     await C.page.screenshot({ path: path.join(outDir, 'm13_lan_phone.png') });
   }
 

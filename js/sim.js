@@ -1585,7 +1585,7 @@
       const q = this.grid.query(x - 60, y - 60, x + 60, y + 60, this._q2);
       let hit = false;
       for (const o of q) {
-        if (o.k === 'bush' && (x - o.x) * (x - o.x) + (y - o.y) * (y - o.y) < o.r * o.r) {
+        if (o.k === 'bush' && !o.dead && (x - o.x) * (x - o.x) + (y - o.y) * (y - o.y) < o.r * o.r) {
           hit = true;
           break;
         }
