@@ -49,6 +49,7 @@
       unlock.start(0);
       this.master = this.ctx.createGain();
       this.master.gain.value = this.sfxOn ? this.volume : 0;
+      this.loadSamples();
       this.master.connect(this.ctx.destination);
       const len = this.ctx.sampleRate;
       this.noise = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
@@ -72,6 +73,106 @@
       this.music.preload = 'auto';
       this.music.addEventListener('ended', () => this.onTrackEnded());
       this.setTrack('theme');
+    },
+
+    // Recorded effects: { win, kill, dead } as file paths or data URIs. They are decoded into Web Audio
+    // buffers once audio is unlocked; if decoding is not possible (a page opened straight from disk cannot
+    // fetch files), a plain audio element plays them instead.
+    initSamples(srcs) {
+      this.sampleSrc = srcs || {};
+      this.samples = {};
+      this.sampleBad = {};
+      this.sampleBusy = {};
+    },
+
+    loadSamples() {
+      if (!this.ctx || !this.sampleSrc) return;
+      for (const k of Object.keys(this.sampleSrc)) {
+        if (this.samples[k] || this.sampleBusy[k]) continue;
+        this.sampleBusy[k] = true;
+        const src = this.sampleSrc[k];
+        if (window.location.protocol === 'file:' && src.indexOf('data:') !== 0) {
+          this.sampleBad[k] = true;
+          continue;
+        }
+        let bytes;
+        if (src.indexOf('data:') === 0) {
+          const bin = atob(src.slice(src.indexOf(',') + 1));
+          const buf = new Uint8Array(bin.length);
+          for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+          bytes = Promise.resolve(buf.buffer);
+        } else {
+          bytes = fetch(src).then(r => {
+            if (!r.ok) throw new Error('missing ' + src);
+            return r.arrayBuffer();
+          });
+        }
+        bytes
+          .then(ab => new Promise((res, rej) => this.ctx.decodeAudioData(ab, res, rej)))
+          .then(b => {
+            this.samples[k] = b;
+          })
+          .catch(() => {
+            this.sampleBad[k] = true;
+          });
+      }
+    },
+
+    // Plays a recorded effect through the sound-effects volume. Returns false if it could not start.
+    sample(k, vol) {
+      if (!this.ctx || !this.sfxOn || this.ctx.state !== 'running') return false;
+      return this.startSample(k, this.out(vol, 0), vol * this.volume);
+    },
+
+    startSample(k, dest, elVol) {
+      const b = this.samples && this.samples[k];
+      if (b) {
+        const s = this.ctx.createBufferSource();
+        s.buffer = b;
+        s.connect(dest);
+        s.start();
+        return { stop: () => s.stop(), dur: b.duration };
+      }
+      if (this.sampleBad && this.sampleBad[k] && this.sampleSrc[k]) {
+        const a = new window.Audio(this.sampleSrc[k]);
+        a.volume = Math.max(0, Math.min(1, elVol));
+        const p = a.play();
+        if (p && p.catch) p.catch(() => {});
+        return { stop: () => a.pause(), dur: 20 };
+      }
+      return false;
+    },
+
+    // The winner music counts as music: it follows the music switch, and the background track goes
+    // quiet while it plays and comes back after.
+    playWinner() {
+      this.stopWinner();
+      if (!this.ctx || !this.musicOn || this.ctx.state !== 'running') return false;
+      const g = this.ctx.createGain();
+      g.gain.value = 0.85;
+      g.connect(this.ctx.destination);
+      const w = this.startSample('win', g, 0.85);
+      if (!w) return false;
+      this.winner = w;
+      this.duckMusic(0.15);
+      this.winnerTimer = setTimeout(() => {
+        this.winner = null;
+        this.duckMusic(1);
+      }, w.dur * 1000);
+      return true;
+    },
+
+    stopWinner() {
+      clearTimeout(this.winnerTimer);
+      if (this.winner) {
+        try {
+          this.winner.stop();
+        } catch (e) {
+          this.winner = null;
+        }
+        this.winner = null;
+        this.duckMusic(1);
+      }
     },
 
     setTrack(name) {
@@ -111,6 +212,7 @@
 
     setMusic(on) {
       this.musicOn = on;
+      if (!on) this.stopWinner();
       if (!this.music) return;
       if (on) this.playMusic();
       else this.music.pause();
@@ -489,6 +591,12 @@
           this.notes([523, 659, 784, 1047], 'triangle', 0.22, 0.07);
           this.tone(this.out(0.15, 0), 300, 900, 0.3, 'sine', 0.5);
           break;
+        case 'skid': {
+          const d = this.out(0.12 * att, pan);
+          this.noiseBurst(d, 1900, 'bandpass', 0.3, 5);
+          this.tone(d, 900, 760, 0.28, 'sawtooth', 0.12);
+          break;
+        }
         case 'paper': {
           const d = this.out(0.22, 0);
           this.noiseBurst(d, 3000, 'bandpass', 0.12, 1);

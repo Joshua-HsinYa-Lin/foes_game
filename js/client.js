@@ -38,11 +38,12 @@
     progress: SIM.clamp(Number(store.get('progress', 0)) || 0, 0, D.STORY.length)
   };
   Sound.initMusic(window.YW_MUSIC || { theme: 'assets/yunwang_theme.mp3', quiet: 'assets/quiet_room.mp3' });
+  Sound.initSamples(window.YW_SFX || { win: 'assets/sfx/winner_music.mp3', kill: 'assets/sfx/kill_effect.mp3', dead: 'assets/sfx/dead_effect.mp3' });
   const SERVED = window.location.protocol === 'http:' || window.location.protocol === 'https:';
   Sound.setMusic(prefs.music);
   Sound.setSfx(prefs.sfx);
 
-  const ui = { killfeed: [], notices: [], pickups: [], bigMap: false, mouseX: null, mouseY: null, aim: null, noHud: false, tip: '' };
+  const ui = { killSfxAt: 0, killfeed: [], notices: [], pickups: [], bigMap: false, mouseX: null, mouseY: null, aim: null, noHud: false, tip: '' };
   const keys = new Set();
   let mouseDown = false;
   let lastAim = 0;
@@ -569,6 +570,7 @@
 
   function startSolo(opts) {
     Sound.init();
+    Sound.stopWinner();
     if (session) session.destroy();
     if (demo) {
       demo.destroy();
@@ -606,6 +608,7 @@
     resetUi();
     session = new OnlineSession(opts, {
       onWelcome: () => {
+        Sound.stopWinner();
         resetUi();
         show('lobby', false);
         canvas.classList.add('playing');
@@ -742,6 +745,7 @@
   }
 
   function backToMenu(note) {
+    Sound.stopWinner();
     if (session) session.destroy();
     session = null;
     flow = null;
@@ -957,10 +961,13 @@
           else txt = I.t('kill_other', vn);
           ui.killfeed.push({ txt, t: renderer.time, mine: e.kid === myId || e.vid === myId });
           if (ui.killfeed.length > 6) ui.killfeed.shift();
-          if (e.kid === myId && e.vid !== myId) {
-            ui.notices.push({ txt: I.t('youKilled', vn), t: renderer.time, col: '#ffd75e' });
-            Sound.play('kill');
+          if (e.kid === myId && e.vid !== myId) ui.notices.push({ txt: I.t('youKilled', vn), t: renderer.time, col: '#ffd75e' });
+          // Recorded effects for the player on screen (yourself, or whoever you are watching).
+          if (e.kid && e.kid === view.cam && e.vid !== view.cam && performance.now() - ui.killSfxAt > 150) {
+            ui.killSfxAt = performance.now();
+            if (!Sound.sample('kill', 0.9)) Sound.play('kill');
           }
+          if (e.vid && e.vid === view.cam) Sound.sample('dead', 0.9);
           break;
         }
       }
@@ -1042,6 +1049,14 @@
     }
     if (s.act != null && me.act !== s.act && me.sl[me.act]) Sound.play('switch');
     s.act = me.act;
+    if (me.veh) {
+      const mv = view.ve.find(q => q.d === view.you);
+      s.skT = (s.skT || 0) - dt;
+      if (mv && mv.sl && s.skT <= 0) {
+        Sound.play('skid');
+        s.skT = 0.28;
+      }
+    }
     const inVeh = me.veh ? 1 : 0;
     if (s.veh != null && inVeh !== s.veh) Sound.play('door');
     s.veh = inVeh;
@@ -1825,7 +1840,8 @@
         const now = performance.now();
         if (!flow.endAt) {
           flow.endAt = now;
-          Sound.play(view.res === 'win' ? 'win' : 'lose');
+          if (view.res !== 'win') Sound.play('lose');
+          else if (!Sound.playWinner()) Sound.play('win');
         }
         if (now - flow.endAt > 1400) {
           flow.handled = true;
@@ -1868,7 +1884,8 @@
     const won = view.st === 'ended' && (teamGame ? view.wt === me.tm : view.winId === view.you);
     if (teamGame && gameOver.shown && !gameOver.final && view.st === 'ended') {
       gameOver.spectating = false;
-      Sound.play(won ? 'win' : 'lose');
+      if (!won) Sound.play('lose');
+      else if (!Sound.playWinner()) Sound.play('win');
       showGameOver(view, won);
     }
     if (teamGame && !gameOver.shown && me.alive && view.st === 'ended' && !won) {
@@ -1882,11 +1899,10 @@
       if (won) {
         if (!gameOver.wonAt) {
           gameOver.wonAt = performance.now();
-          Sound.play('win');
+          if (!Sound.playWinner()) Sound.play('win');
         }
         if (performance.now() - gameOver.wonAt > 1200) showGameOver(view, true);
       } else if (!me.alive && performance.now() - gameOver.deathAt > 1400) {
-        Sound.play('lose');
         showGameOver(view, false);
       }
     } else if (gameOver.spectating && view.st === 'ended') {

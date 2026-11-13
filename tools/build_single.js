@@ -21,13 +21,14 @@ function dataUri(file) {
   return 'data:audio/mpeg;base64,' + fs.readFileSync(p).toString('base64');
 }
 const music = { theme: dataUri('yunwang_theme.mp3'), quiet: dataUri('quiet_room.mp3') };
+const sfx = { win: dataUri('sfx/winner_music.mp3'), kill: dataUri('sfx/kill_effect.mp3'), dead: dataUri('sfx/dead_effect.mp3') };
 
 const scriptRe = /<script src="(js\/[\w.-]+\.js)"><\/script>/g;
 let count = 0;
 html = html.replace(scriptRe, (m, rel) => {
   const code = fs.readFileSync(path.join(root, rel), 'utf8');
   if (/<\/script/i.test(code)) throw new Error(rel + ' contains a closing script tag and cannot be inlined');
-  const prefix = count === 0 ? '<script>window.YW_MUSIC = ' + JSON.stringify(music) + ';</script>\n' : '';
+  const prefix = count === 0 ? '<script>window.YW_MUSIC = ' + JSON.stringify(music) + ';\nwindow.YW_SFX = ' + JSON.stringify(sfx) + ';</script>\n' : '';
   count++;
   return prefix + '<script>\n' + code + '</script>';
 });
@@ -94,4 +95,4 @@ function zipOne(name, data) {
 
 const zip = zipOne(outName, htmlBuf);
 fs.writeFileSync(path.join(root, 'yunwang_paradise.zip'), zip);
-console.log('wrote ' + outName + ' (' + count + ' scripts, 2 music tracks, ' + (htmlBuf.length / 1048576).toFixed(1) + ' MB) and yunwang_paradise.zip (' + (zip.length / 1048576).toFixed(1) + ' MB)');
+console.log('wrote ' + outName + ' (' + count + ' scripts, 2 music tracks, 3 sound clips, ' + (htmlBuf.length / 1048576).toFixed(1) + ' MB) and yunwang_paradise.zip (' + (zip.length / 1048576).toFixed(1) + ' MB)');

@@ -516,7 +516,18 @@
       const plMap = new Map();
       for (const p of view.pl) plMap.set(p.i, p);
       for (const v of view.ve) {
-        if (vis(v.x, v.y, 90)) this.drawVehicle(ctx, v, plMap);
+        if (!vis(v.x, v.y, 90)) continue;
+        // Tyre smoke from the rear wheels while a vehicle slides sideways.
+        if (v.sl && Math.random() < 0.6) {
+          const L = D.VEHICLES[v.t].len * 0.35;
+          const Wd = D.VEHICLES[v.t].wid * 0.4;
+          for (const side of [-1, 1]) {
+            const px = v.x - Math.cos(v.a) * L - Math.sin(v.a) * Wd * side;
+            const py = v.y - Math.sin(v.a) * L + Math.cos(v.a) * Wd * side;
+            this.addParticles(px, py, 1, '#d9d4cc', 30, 0.7, 12, 3);
+          }
+        }
+        this.drawVehicle(ctx, v, plMap);
       }
       for (const q of extras) {
         if (q.k === 'cat' && vis(q.x, q.y, 40)) this.drawCat(ctx, q);

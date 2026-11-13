@@ -6,6 +6,8 @@
   D.TITLE_EN = 'Yunwang Paradise';
   D.MAP_SIZE = 4000;
   D.PLAYER_R = 24;
+  // A person's mass relative to a delivery van (about 75 kg against 1500 kg).
+  D.PLAYER_MASS = 0.05;
   D.MAX_HP = 100;
   D.TICK_RATE = 30;
 
@@ -130,9 +132,11 @@
     ['bag', 3, 6]
   ];
 
+  // Vehicles: max is top speed (air drag balances the engine there), grip the sideways acceleration the tyres
+  // can hold, turnR the tightest turning circle at low speed, mass relative to a van.
   D.VEHICLES = {
-    car: { name: { zh: '小貨車', en: 'Delivery Van' }, r: 46, len: 124, wid: 70, max: 720, accel: 500, rev: 240, turn: 2.3, hp: 350, ram: 0.11 },
-    bike: { name: { zh: '外送機車', en: 'Delivery Scooter' }, r: 26, len: 78, wid: 26, max: 820, accel: 650, rev: 160, turn: 3.1, hp: 150, ram: 0.07 }
+    car: { name: { zh: '小貨車', en: 'Delivery Van' }, r: 46, len: 124, wid: 70, max: 720, accel: 500, rev: 240, turn: 2.3, hp: 350, ram: 0.11, mass: 1, grip: 1500, brake: 1000, turnR: 130 },
+    bike: { name: { zh: '外送機車', en: 'Delivery Scooter' }, r: 26, len: 78, wid: 26, max: 820, accel: 650, rev: 160, turn: 3.1, hp: 150, ram: 0.07, mass: 0.4, grip: 1700, brake: 1100, turnR: 80 }
   };
 
   // The cold-chain zone shrinks with the share of players still alive, and on a timer after timeStart.

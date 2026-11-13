@@ -80,11 +80,14 @@ Six things are hidden in every map. The title screen counts how many you have fo
 - Rare kitchen weapons (gold ring on the ground, extra damage): 平底鍋 frying pan (big knockback), 菜刀 cleaver, 擀麵棍 rolling pin (huge knockback), 中華炒鍋 wok (sets foes on fire), 飛筷 chopsticks (thrown, pierce one target), 飛碗 flying bowl (thrown, bounces off walls), and the legendary 冷凍旗魚 frozen swordfish (80 damage, slows). The captain drops his 魚叉槍 harpoon gun.
 - Everyone carries a backpack with 3 weapon slots. The 保溫外送袋 thermal bag upgrades it to 4 weapon slots.
 - Healing items never take a weapon slot. 雞湯 chicken soup goes into a separate medical pouch when you walk over it (up to 3, or 5 with the thermal bag); press H to drink one and heal 60. 小籠包 soup dumplings heal 40 on the spot. 「?」 ingredient crates break open for better loot.
-- Delivery vans and scooters can be driven, and they hurt anyone they hit.
+- Delivery vans and scooters can be driven, and they hurt anyone they hit. They keep their momentum: take a corner too fast and the tyres slide, and Space (the handbrake) drifts. Scraping a wall keeps you moving along it, a head-on crash bounces you back, a van shoves a parked scooter much further than another van, and a hit only hurts as much as the vehicle was actually coming at the person.
+- People cannot walk through each other, a knockback into a wall bounces off it, and heavier bodies such as the boss are thrown less far.
 - Wooden buildings break: the striped food stalls and the brown-roofed cabins have plank walls that crack and give way after enough hits (bullets, melee, flame bursts, or driving into them). Once half of a building's walls are down, the whole thing collapses into rubble and its roof is gone. Brick houses and 允望樓 itself do not break.
 - Every minute or two a cold-chain cargo plane crosses the map and parachutes a crate into the safe area. Press F on the landed crate for a rare kitchen weapon, one more item and something to heal with.
 
 ## Sound
+
+Recorded effects: a victory song when you win a Paradise Brawl, your team wins, or you clear a story chapter (the background music steps back while it plays); a knockout sound when you take someone out; and a sound when you are knocked out. While you watch someone after falling, you hear theirs. The originals are in `assets/sfx/original/`; the game plays MP3 copies of them.
 
 Besides weapon sounds: wood knocks, cracks and a crash when a wooden building comes down, footsteps (faster when running), rustling in bushes, a thump on landing a jump, weapon switch clicks, van and scooter doors, a heartbeat below 30% health, a sizzle while standing in the thawing zone, heavy breathing when stamina runs out, a gong when a match or chapter starts, the cargo plane's engines and its crate landing, and a few more for the hidden details. All sounds are generated in the browser; nothing extra is downloaded.
 

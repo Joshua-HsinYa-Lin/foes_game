@@ -331,6 +331,31 @@ function duel(charA, charB, opts) {
   }
 }
 
+// ---------- physics ----------
+{
+  const sim = new Sim({ seed: 99 });
+  for (const o of sim.obstacles) o.dead = true;
+  sim.vehicles.length = 0;
+  sim.addObstacle('wall', 'r', 2000, 1800, { hw: 600, hh: 10 });
+  const v = sim.spawnVehicle('car', 1700, 1858, 0);
+  v.vx = 600;
+  v.vy = -60;
+  steps(sim, 10);
+  check(v.vx > 400, 'a van scraping along a wall keeps sliding along it (' + Math.round(v.vx) + ' px/s)');
+  const a = sim.playerMap.get(sim.addPlayer('A', false, {}));
+  const b = sim.playerMap.get(sim.addPlayer('B', false, {}));
+  a.x = 2000;
+  a.y = 2400;
+  b.x = 2010;
+  b.y = 2400;
+  steps(sim, 1);
+  check(Math.hypot(a.x - b.x, a.y - b.y) >= a.r + b.r - 1, 'two people cannot stand on the same spot');
+  const boss = sim.playerMap.get(sim.addPlayer('', true, { kind: 'boss' }));
+  sim.knock(boss, 400, 0);
+  sim.knock(a, 400, 0);
+  check(boss.kx < a.kx, 'the heavy boss is knocked back less than a person by the same hit');
+}
+
 // ---------- royale ----------
 for (const [seed, diff] of [[1, 4], [2, 5], [3, 1]]) {
   const sim = new Sim({ seed, difficulty: diff });

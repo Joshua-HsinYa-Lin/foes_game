@@ -42,7 +42,7 @@ const MIME = {
   '.ico': 'image/x-icon',
   '.mp3': 'audio/mpeg'
 };
-const ALLOWED_DIRS = ['', 'js', 'css', 'assets'];
+const ALLOWED_DIRS = ['', 'js', 'css', 'assets', 'assets/sfx'];
 
 function serveFile(req, res) {
   let urlPath;
@@ -57,7 +57,7 @@ function serveFile(req, res) {
   const rel = path.normalize(urlPath).replace(/^([/\\])+/, '');
   const full = path.join(ROOT, rel);
   const ext = path.extname(full).toLowerCase();
-  const dir = path.dirname(rel) === '.' ? '' : path.dirname(rel);
+  const dir = path.dirname(rel) === '.' ? '' : path.dirname(rel).split(path.sep).join('/');
   if (!full.startsWith(ROOT + path.sep) || !MIME[ext] || ALLOWED_DIRS.indexOf(dir) < 0 || rel.startsWith('server')) {
     res.writeHead(404);
     res.end('Not found');

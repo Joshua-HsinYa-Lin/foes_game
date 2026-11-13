@@ -770,7 +770,7 @@
 
     spawnVehicle(t, x, y, a) {
       const V = D.VEHICLES[t];
-      const v = { id: this.nextId++, t, x, y, a, sp: 0, hp: V.hp, mhp: V.hp, driver: 0, dead: false, col: Math.floor(this.rng() * 4) };
+      const v = { id: this.nextId++, t, x, y, a, sp: 0, vx: 0, vy: 0, slip: 0, hp: V.hp, mhp: V.hp, driver: 0, dead: false, col: Math.floor(this.rng() * 4) };
       this.vehicles.push(v);
       return v;
     }
@@ -1492,8 +1492,7 @@
           const d = Math.hypot(q.x - p.x, q.y - p.y);
           if (d > R + q.r) continue;
           const n = Math.max(1, d);
-          q.kx += ((q.x - p.x) / n) * 380;
-          q.ky += ((q.y - p.y) / n) * 380;
+          this.knock(q, ((q.x - p.x) / n) * 380, ((q.y - p.y) / n) * 380);
           this.burn(q, 7, 3, p.id);
           this.damagePlayer(q, 40, p.id, 'flame');
         }
@@ -1608,13 +1607,69 @@
       return hit;
     }
 
+    // Heavier bodies (the boss, elites) are thrown less far by the same hit.
+    massOf(p) {
+      return (p.r / D.PLAYER_R) * (p.r / D.PLAYER_R);
+    }
+
+    knock(p, ix, iy) {
+      const m = this.massOf(p);
+      p.kx += ix / m;
+      p.ky += iy / m;
+    }
+
+    // Against a wall: walking into it slides along it, and being knocked into it stops with a small bounce
+    // instead of pressing into the wall until the knockback fades.
+    wallStop(p, n) {
+      const kn = p.kx * n[0] + p.ky * n[1];
+      if (kn < 0) {
+        p.kx -= 1.25 * kn * n[0];
+        p.ky -= 1.25 * kn * n[1];
+      }
+      const vn = p.vx * n[0] + p.vy * n[1];
+      if (vn < 0) {
+        p.vx -= vn * n[0];
+        p.vy -= vn * n[1];
+      }
+    }
+
+    // People on foot do not walk through each other: overlapping pairs are pushed apart, the lighter one more.
+    separatePlayers() {
+      const ps = this.players.filter(p => p.alive && !p.veh && p.jumpT <= 0);
+      for (let i = 0; i < ps.length; i++) {
+        const a = ps[i];
+        for (let j = i + 1; j < ps.length; j++) {
+          const b = ps[j];
+          const m = a.r + b.r;
+          const dx = a.x - b.x;
+          const dy = a.y - b.y;
+          const d2 = dx * dx + dy * dy;
+          if (d2 >= m * m) continue;
+          const d = Math.sqrt(d2);
+          const nx = d > 1e-6 ? dx / d : 1;
+          const ny = d > 1e-6 ? dy / d : 0;
+          const ia = 1 / this.massOf(a);
+          const ib = 1 / this.massOf(b);
+          const pen = m - d;
+          a.x += (nx * pen * ia) / (ia + ib);
+          a.y += (ny * pen * ia) / (ia + ib);
+          b.x -= (nx * pen * ib) / (ia + ib);
+          b.y -= (ny * pen * ib) / (ia + ib);
+          this.resolvePlayer(a);
+          this.resolvePlayer(b);
+        }
+      }
+    }
+
     resolvePlayer(p) {
       const S = this.size;
       const r = p.r;
       for (let iter = 0; iter < 2; iter++) {
         const q = this.grid.query(p.x - r - 4, p.y - r - 4, p.x + r + 4, p.y + r + 4, this._q);
         for (const o of q) {
-          if (o.solid && !o.dead) pushOut(p, r, o);
+          if (!o.solid || o.dead) continue;
+          const n = pushOut(p, r, o);
+          if (n) this.wallStop(p, n);
         }
         q.length = 0;
       }
@@ -1748,8 +1803,7 @@
         if (!q.alive || q.veh || !this.enemies(p, q) || p.rushHit.has(q.id)) continue;
         if (Math.hypot(q.x - p.x, q.y - p.y) > p.r + q.r + 10) continue;
         p.rushHit.add(q.id);
-        q.kx += p.rx * 520;
-        q.ky += p.ry * 520;
+        this.knock(q, p.rx * 520, p.ry * 520);
         this.damagePlayer(q, 45, p.id, 'rush');
         this.ev({ e: 'hit', x: q.x, y: q.y, ty: 'p', by: p.id, w: 'fists' });
       }
@@ -1830,8 +1884,7 @@
       if (best) {
         const n = Math.max(1, bd);
         const kb = (M.kb || 70) * (best.kind === 'boss' ? 0.3 : 1);
-        best.kx += ((best.x - p.x) / n) * kb;
-        best.ky += ((best.y - p.y) / n) * kb;
+        this.knock(best, ((best.x - p.x) / n) * kb, ((best.y - p.y) / n) * kb);
         if (M.burn) this.burn(best, M.burn.dps, M.burn.t, p.id);
         if (M.slow) {
           best.slowT = M.slow.t;
@@ -2017,8 +2070,7 @@
         let f = 1 - Math.max(0, d - p.r) / radius;
         if (this.losBlocked(x, y, p.x, p.y, true)) f *= 0.25;
         const n = Math.max(1, d);
-        p.kx += ((p.x - x) / n) * 420 * f;
-        p.ky += ((p.y - y) / n) * 420 * f;
+        this.knock(p, ((p.x - x) / n) * 420 * f, ((p.y - y) / n) * 420 * f);
         this.damagePlayer(p, dmg * f, src, 'explosion');
       }
       for (const v of this.vehicles) {
@@ -2175,6 +2227,7 @@
         if (p.bot && p.alive) this.botUpdate(p, dt);
       }
       for (const p of this.players) this.updatePlayer(p, dt);
+      this.separatePlayers();
       this.updateTurrets(dt);
       this.updateVehicles(dt);
       this.updateBullets(dt);
@@ -2317,6 +2370,10 @@
       }
     }
 
+    // Vehicles keep their momentum in the world; the tyres pull the sideways part of it back toward the
+    // heading, up to their grip, so hard cornering at speed slides and the handbrake drifts. The engine
+    // pushes along the heading against air drag (which sets top speed) and rolling resistance. Steering
+    // follows a fixed turning circle at low speed and the tyres' grip at high speed.
     updateVehicles(dt) {
       const S = this.size;
       for (const v of this.vehicles) {
@@ -2325,92 +2382,165 @@
         const drv = v.driver ? this.playerMap.get(v.driver) : null;
         if (drv && !drv.alive) v.driver = 0;
         const inp = drv && drv.alive ? drv.input : null;
-        const thr = inp ? -inp.my : 0;
-        const steer = inp ? inp.mx : 0;
-        if (thr > 0.1) {
-          v.sp += (v.sp < 0 ? V.accel * 2 : V.accel * thr) * dt;
-        } else if (thr < -0.1) {
-          v.sp -= (v.sp > 0 ? V.accel * 1.6 : V.accel * 0.6) * dt;
-        } else {
-          v.sp -= Math.sign(v.sp) * Math.min(Math.abs(v.sp), 240 * dt);
-        }
-        if (inp && inp.brake) v.sp -= Math.sign(v.sp) * Math.min(Math.abs(v.sp), 900 * dt);
-        v.sp = clamp(v.sp, -V.rev, V.max);
-        v.a += steer * V.turn * clamp(v.sp / 220, -1, 1) * dt;
-        v.x += Math.cos(v.a) * v.sp * dt;
-        v.y += Math.sin(v.a) * v.sp * dt;
+        const thr = inp ? clamp(-inp.my, -1, 1) : 0;
+        const steer = inp ? clamp(inp.mx, -1, 1) : 0;
+        const handbrake = !!(inp && inp.brake);
+        const fx = Math.cos(v.a);
+        const fy = Math.sin(v.a);
+        let vf = v.vx * fx + v.vy * fy;
+        let vr = -v.vx * fy + v.vy * fx;
+        if (thr > 0.05) vf += (vf < -20 ? V.brake : V.accel * thr) * dt;
+        else if (thr < -0.05) vf += (vf > 20 ? -V.brake : V.accel * 0.6 * thr) * dt;
+        vf -= (V.accel / (V.max * V.max)) * vf * Math.abs(vf) * dt;
+        const roll = (Math.abs(thr) > 0.05 ? 30 : 170) * dt;
+        vf -= Math.sign(vf) * Math.min(Math.abs(vf), roll);
+        if (handbrake) vf -= Math.sign(vf) * Math.min(Math.abs(vf), V.brake * 0.8 * dt);
+        if (vf < -V.rev) vf = -V.rev;
+        const grip = V.grip * (handbrake ? 0.3 : 1);
+        vr -= Math.sign(vr) * Math.min(Math.abs(vr), grip * dt);
+        const sp = Math.abs(vf);
+        const yaw = Math.min(sp / V.turnR, V.turn, (V.grip * (handbrake ? 1.6 : 1.1)) / Math.max(sp, 1));
+        v.vx = fx * vf - fy * vr;
+        v.vy = fy * vf + fx * vr;
+        v.a += steer * yaw * Math.sign(vf) * dt;
+        v.x += v.vx * dt;
+        v.y += v.vy * dt;
+        v.sp = vf;
+        v.slip = Math.abs(vr);
         const q = this.grid.query(v.x - V.r - 4, v.y - V.r - 4, v.x + V.r + 4, v.y + V.r + 4, this._q);
         for (const o of q) {
           if (!o.solid || o.dead) continue;
-          if (!pushOut(v, V.r, o)) continue;
-          const impact = Math.abs(v.sp);
-          if (o.k === 'crate' && impact > 260) {
-            this.damageObstacle(o, impact * 0.5, v.driver);
-            v.sp *= 0.7;
-          } else {
-            if (impact > 220) this.damageVehicle(v, (impact - 200) * 0.08, 0);
-            if (impact > 120) this.ev({ e: 'crash', x: v.x, y: v.y });
-            v.sp *= -0.25;
+          const n = pushOut(v, V.r, o);
+          if (!n) continue;
+          const vn = v.vx * n[0] + v.vy * n[1];
+          if (vn >= 0) continue;
+          const impact = -vn;
+          // Crates and wooden walls give way to a hard enough hit; the vehicle loses some speed going through.
+          if ((o.k === 'crate' && impact > 260) || (o.k === 'plank' && impact > 220)) {
+            this.damageObstacle(o, impact * (o.k === 'plank' ? 0.7 : 0.5), v.driver);
+            if (o.dead) {
+              v.vx *= 0.75;
+              v.vy *= 0.75;
+              continue;
+            }
           }
+          this.bounce(v, n, vn, 0.3);
+          if (impact > 220) this.damageVehicle(v, (impact - 200) * 0.08, 0);
+          if (impact > 120) this.ev({ e: 'crash', x: v.x, y: v.y });
         }
         q.length = 0;
         if (v.dead) continue;
-        if (v.x < V.r || v.x > S - V.r || v.y < V.r || v.y > S - V.r) {
-          v.x = clamp(v.x, V.r, S - V.r);
-          v.y = clamp(v.y, V.r, S - V.r);
-          v.sp *= -0.25;
+        const edge = [[v.x < V.r, 1, 0], [v.x > S - V.r, -1, 0], [v.y < V.r, 0, 1], [v.y > S - V.r, 0, -1]];
+        v.x = clamp(v.x, V.r, S - V.r);
+        v.y = clamp(v.y, V.r, S - V.r);
+        for (const [hitEdge, nx, ny] of edge) {
+          const vn = v.vx * nx + v.vy * ny;
+          if (hitEdge && vn < 0) this.bounce(v, [nx, ny], vn, 0.3);
         }
-        for (const u of this.vehicles) {
-          if (u === v || u.dead) continue;
-          const m = V.r + D.VEHICLES[u.t].r;
-          const dx = v.x - u.x;
-          const dy = v.y - u.y;
-          const d2 = dx * dx + dy * dy;
-          if (d2 < m * m) {
-            const d = Math.sqrt(d2) || 1;
-            v.x = u.x + (dx / d) * m;
-            v.y = u.y + (dy / d) * m;
-            const impact = Math.abs(v.sp - u.sp * Math.cos(u.a - v.a));
-            if (impact > 220) {
-              this.damageVehicle(v, impact * 0.04, u.driver);
-              this.damageVehicle(u, impact * 0.04, v.driver);
-            }
-            v.sp *= -0.3;
-          }
-        }
+      }
+      this.vehicleCollisions();
+      for (const v of this.vehicles) {
         if (v.dead) continue;
-        for (const p of this.players) {
-          if (!p.alive || p.veh) continue;
-          const m = V.r + p.r;
-          const dx = p.x - v.x;
-          const dy = p.y - v.y;
-          const d2 = dx * dx + dy * dy;
-          if (d2 >= m * m) continue;
-          const d = Math.sqrt(d2) || 1;
-          const nx = dx / d;
-          const ny = dy / d;
-          const sp = Math.abs(v.sp);
-          if (sp > 150 && this.time - p.ranT > 0.6 && (!drv || this.enemies(drv, p))) {
-            p.ranT = this.time;
-            p.kx += nx * sp * 0.9;
-            p.ky += ny * sp * 0.9;
-            this.damagePlayer(p, sp * V.ram, v.driver, 'vehicle');
-            this.ev({ e: 'hit', x: p.x, y: p.y, ty: 'p', by: v.driver });
-            v.sp *= 0.75;
-          }
-          p.x = v.x + nx * m;
-          p.y = v.y + ny * m;
-          this.resolvePlayer(p);
-        }
+        this.vehicleHitsPlayers(v);
+        const drv = v.driver ? this.playerMap.get(v.driver) : null;
         if (drv && drv.alive) {
           drv.x = v.x;
           drv.y = v.y;
-          drv.vx = Math.cos(v.a) * v.sp;
-          drv.vy = Math.sin(v.a) * v.sp;
+          drv.vx = v.vx;
+          drv.vy = v.vy;
         }
       }
       for (let i = this.vehicles.length - 1; i >= 0; i--) {
         if (this.vehicles[i].dead) this.vehicles.splice(i, 1);
+      }
+    }
+
+    // Reflects the part of the velocity going into a surface (restitution e) and scrapes a little off the
+    // part sliding along it; the sliding part is otherwise kept.
+    bounce(v, n, vn, e) {
+      v.vx -= (1 + e) * vn * n[0];
+      v.vy -= (1 + e) * vn * n[1];
+      const scrape = 1 - 0.15 * Math.min(1, -vn / 400);
+      const tn = v.vx * n[0] + v.vy * n[1];
+      v.vx = n[0] * tn + (v.vx - n[0] * tn) * scrape;
+      v.vy = n[1] * tn + (v.vy - n[1] * tn) * scrape;
+    }
+
+    // Vehicle against vehicle: separate them and exchange momentum by mass along the contact line.
+    vehicleCollisions() {
+      const vs = this.vehicles;
+      for (let i = 0; i < vs.length; i++) {
+        const a = vs[i];
+        if (a.dead) continue;
+        const A = D.VEHICLES[a.t];
+        for (let j = i + 1; j < vs.length; j++) {
+          const b = vs[j];
+          if (b.dead) continue;
+          const B = D.VEHICLES[b.t];
+          const m = A.r + B.r;
+          const dx = a.x - b.x;
+          const dy = a.y - b.y;
+          const d2 = dx * dx + dy * dy;
+          if (d2 >= m * m) continue;
+          const d = Math.sqrt(d2) || 1;
+          const nx = d2 > 0 ? dx / d : 1;
+          const ny = d2 > 0 ? dy / d : 0;
+          const inv = 1 / A.mass + 1 / B.mass;
+          const pen = m - d;
+          a.x += nx * pen * (1 / A.mass) / inv;
+          a.y += ny * pen * (1 / A.mass) / inv;
+          b.x -= nx * pen * (1 / B.mass) / inv;
+          b.y -= ny * pen * (1 / B.mass) / inv;
+          const rel = (a.vx - b.vx) * nx + (a.vy - b.vy) * ny;
+          if (rel >= 0) continue;
+          const imp = (-(1 + 0.25) * rel) / inv;
+          a.vx += (imp * nx) / A.mass;
+          a.vy += (imp * ny) / A.mass;
+          b.vx -= (imp * nx) / B.mass;
+          b.vy -= (imp * ny) / B.mass;
+          const impact = -rel;
+          if (impact > 220) {
+            this.damageVehicle(a, impact * 0.04 * (B.mass / A.mass), b.driver);
+            this.damageVehicle(b, impact * 0.04 * (A.mass / B.mass), a.driver);
+          }
+          if (impact > 120) this.ev({ e: 'crash', x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+        }
+      }
+    }
+
+    // A person is far lighter than a vehicle: on contact they are pushed out and, if the vehicle is coming
+    // at them, thrown off at about the vehicle's closing speed; the vehicle loses a little speed in return.
+    // Only the closing speed along the line between them counts, so a glancing touch does little.
+    vehicleHitsPlayers(v) {
+      const V = D.VEHICLES[v.t];
+      const drv = v.driver ? this.playerMap.get(v.driver) : null;
+      for (const p of this.players) {
+        if (!p.alive || p.veh) continue;
+        const m = V.r + p.r;
+        const dx = p.x - v.x;
+        const dy = p.y - v.y;
+        const d2 = dx * dx + dy * dy;
+        if (d2 >= m * m) continue;
+        const d = Math.sqrt(d2) || 1;
+        const nx = dx / d;
+        const ny = dy / d;
+        p.x = v.x + nx * m;
+        p.y = v.y + ny * m;
+        const rel = v.vx * nx + v.vy * ny - ((p.vx + p.kx) * nx + (p.vy + p.ky) * ny);
+        if (rel > 0) {
+          const pm = D.PLAYER_MASS * this.massOf(p);
+          const dvp = (1.3 * rel * V.mass) / (V.mass + pm);
+          p.kx += nx * dvp;
+          p.ky += ny * dvp;
+          v.vx -= (nx * dvp * pm) / V.mass;
+          v.vy -= (ny * dvp * pm) / V.mass;
+          if (rel > 150 && this.time - p.ranT > 0.6 && (!drv || this.enemies(drv, p))) {
+            p.ranT = this.time;
+            this.damagePlayer(p, rel * V.ram, v.driver, 'vehicle');
+            this.ev({ e: 'hit', x: p.x, y: p.y, ty: 'p', by: v.driver });
+          }
+        }
+        this.resolvePlayer(p);
       }
     }
 
@@ -2495,8 +2625,7 @@
           this.ev({ e: 'hit', x: hx, y: hy, ty: 'p', by: b.owner, w: b.w });
           if (W.kb) {
             const k = W.kb * (hit.kind === 'boss' ? 0.3 : 1);
-            hit.kx += b.dx * k;
-            hit.ky += b.dy * k;
+            this.knock(hit, b.dx * k, b.dy * k);
           }
           this.damagePlayer(hit, dmg, b.owner, b.w === 'turret' ? 'turret' : b.w);
           if (b.pierce > 0) {
@@ -3116,7 +3245,7 @@
       if (pn) sx.push({ i: -3, k: 'plane', x: r1(pn.x), y: r1(pn.y), a: Math.round(pn.a * 1000) / 1000 });
       const ve = [];
       for (const v of this.vehicles) {
-        if (inView(v.x, v.y, 100)) ve.push({ i: v.id, t: v.t, x: r1(v.x), y: r1(v.y), a: Math.round(v.a * 1000) / 1000, hp: Math.round((v.hp / v.mhp) * 100) / 100, d: v.driver, c: v.col, sp: Math.round(v.sp) });
+        if (inView(v.x, v.y, 100)) ve.push({ i: v.id, t: v.t, x: r1(v.x), y: r1(v.y), a: Math.round(v.a * 1000) / 1000, hp: Math.round((v.hp / v.mhp) * 100) / 100, d: v.driver, c: v.col, sp: Math.round(v.sp), sl: v.slip > 160 ? 1 : 0 });
       }
       const ob = [];
       for (const o of this.grid.query(x0, y0, x1, y1, [])) {
