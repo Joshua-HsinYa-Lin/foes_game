@@ -518,6 +518,7 @@
         if (vis(it.x, it.y, 40)) this.drawGroundItem(ctx, it);
       }
       for (const m of view.mi || []) this.drawMine(ctx, m, m.o === view.you || (this.myTeam && m.tm === this.myTeam));
+      if (ui.guide) this.drawAimGuide(ctx, view, ui.guide);
       const obs = [];
       for (const o of map.obstacles) {
         if (o.dead) continue;
@@ -2342,6 +2343,126 @@
       ctx.globalAlpha = 1;
     }
 
+    // ---------- aiming ----------
+
+    // How far a shot from (x, y) at angle a travels before a bullet-stopping obstacle, up to range.
+    rayLength(x, y, a, range) {
+      const SIM = globalThis.PF_SIM;
+      const x1 = x + Math.cos(a) * range;
+      const y1 = y + Math.sin(a) * range;
+      const minx = Math.min(x, x1) - 80;
+      const maxx = Math.max(x, x1) + 80;
+      const miny = Math.min(y, y1) - 80;
+      const maxy = Math.max(y, y1) + 80;
+      let best = 1;
+      for (const o of this.map.obstacles) {
+        if (o.dead || o.x < minx || o.x > maxx || o.y < miny || o.y > maxy) continue;
+        const def = D.OBST[o.k];
+        if (!def || !def.blk) continue;
+        const t = o.s === 'c' ? SIM.segCircle(x, y, x1, y1, o.x, o.y, o.r) : SIM.segRect(x, y, x1, y1, o.x - o.hw, o.y - o.hh, o.x + o.hw, o.y + o.hh);
+        if (t >= 0 && t < best) best = t;
+      }
+      return best * range;
+    }
+
+    // The on-ground aim guide: where the attack or skill will go, cut short by walls. White for attacks,
+    // yellow for skills, purple during Wok Overdrive, grey when a drag has been pulled back to cancel.
+    drawAimGuide(ctx, view, g) {
+      const me = view.me;
+      const mp = view.pl.find(p => p.i === view.you);
+      const x = mp ? mp.x : me.x;
+      const y = mp ? mp.y : me.y;
+      const a = g.a;
+      const R = PR;
+      const od = me.odT > 0;
+      const base = g.cancel ? '150,150,150' : g.mode === 'skill' ? (od ? '190,120,255' : '255,215,94') : '255,255,255';
+      const fill = 'rgba(' + base + ',' + (g.mode === 'skill' || g.strong ? 0.34 : 0.22) + ')';
+      const edge = 'rgba(' + base + ',' + (g.mode === 'skill' || g.strong ? 0.9 : 0.6) + ')';
+      const band = (len, half, from) => {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(a);
+        roundRect(ctx, from, -half, Math.max(0, len - from), half * 2, half);
+        ctx.fillStyle = fill;
+        ctx.fill();
+        ctx.strokeStyle = edge;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.restore();
+      };
+      const cone = (len, half) => {
+        ctx.beginPath();
+        ctx.moveTo(x + Math.cos(a) * R, y + Math.sin(a) * R);
+        ctx.arc(x, y, len, a - half, a + half);
+        ctx.closePath();
+        ctx.fillStyle = fill;
+        ctx.fill();
+        ctx.strokeStyle = edge;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      };
+      const ring = (cx, cy, r) => {
+        circle(ctx, cx, cy, r);
+        ctx.fillStyle = fill;
+        ctx.fill();
+        ctx.strokeStyle = edge;
+        ctx.lineWidth = 2.5;
+        ctx.setLineDash([12, 8]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      };
+      ctx.save();
+      if (g.mode === 'attack') {
+        const sl = me.sl[me.act];
+        const t = sl ? sl.t : 'fists';
+        const W = D.WEAPONS[t];
+        if (W.melee) {
+          cone(R + W.range + 10, W.arc);
+        } else {
+          const len = this.rayLength(x, y, a, W.range);
+          if (W.pellets > 1) cone(len, ((W.spread || 8) * Math.PI) / 180);
+          else band(len, t === 'sniper' ? 4 : 8, R);
+          circle(ctx, x + Math.cos(a) * len, y + Math.sin(a) * len, 5);
+          ctx.fillStyle = edge;
+          ctx.fill();
+        }
+      } else {
+        const sk = me.sk;
+        const pk = me.pk;
+        if (sk === 'flame') ring(x, y, 165 * (pk === 'fierce' ? 1.3 : 1) * (od ? 1.4 : 1));
+        else if (sk === 'freeze') ring(x, y, 190 * (od ? 1.4 : 1));
+        else if (sk === 'bubble') ring(x, y, 220 * (pk === 'wide' ? 1.5 : 1));
+        else if (sk === 'boba') ring(x, y, od ? 260 : R + 14);
+        else if (sk === 'rush') band(this.rayLength(x, y, a, 3.2 * D.SPEED * 0.38 * (od ? 1.4 : 1) + R), R, 0);
+        else if (sk === 'coins') cone(this.rayLength(x, y, a, D.WEAPONS.coin.range), (od ? 1.2 : 0.9) / 2);
+        else if (sk === 'turret') {
+          const n = od ? 3 : pk === 'twin' ? 2 : 1;
+          for (let k = 0; k < n; k++) {
+            const ta = a + (k - (n - 1) / 2) * 0.7;
+            ring(x + Math.cos(ta) * (R + 30), y + Math.sin(ta) * (R + 30), 18);
+          }
+        } else if (sk === 'parcel') {
+          const n = od ? 3 : 1;
+          const want = clamp(g.ad || 380, 80, 420);
+          for (let k = 0; k < n; k++) {
+            const pa = a + (k - (n - 1) / 2) * 0.32;
+            const px = x + Math.cos(pa) * want;
+            const py = y + Math.sin(pa) * want;
+            ctx.strokeStyle = edge;
+            ctx.lineWidth = 3;
+            ctx.setLineDash([6, 10]);
+            ctx.beginPath();
+            ctx.moveTo(x, y);
+            ctx.lineTo(px, py);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            ring(px, py, 140 * (pk === 'bigbox' ? 1.35 : 1));
+          }
+        }
+      }
+      ctx.restore();
+    }
+
     // ---------- semi-3D view ----------
 
     // The camera looks down at an angle: north-south ground distances shrink by TILT, and anything with
@@ -2790,6 +2911,7 @@
       this.drawRings(ctx);
       this.drawExplosions(ctx);
       this.drawParticles(ctx, vis, false);
+      if (ui.guide) this.drawAimGuide(ctx, view, ui.guide);
 
       upright();
       const list = [];
@@ -3288,27 +3410,6 @@
       }
 
       if (me.alive && !ui.bigMap && ui.mouseX != null && !ui.touch) this.drawCrosshair(ctx, ui, me);
-      // Where a ready parcel would land: a dashed circle on the ground, pulled in to the longest throw.
-      if (me.alive && !ui.bigMap && ui.mouseX != null && !ui.touch && me.sk === 'parcel' && me.sc <= 0) {
-        const z = this.zoom || 1;
-        const t3 = this.mode3d ? TILT : 1;
-        const fy = H / 2 + this.viewOffsetY();
-        let px = ui.mouseX;
-        let py = ui.mouseY;
-        const d = this.aimDist(px, py);
-        if (d > 420) {
-          px = W / 2 + (px - W / 2) * (420 / d);
-          py = fy + (py - fy) * (420 / d);
-        }
-        const rr = 140 * (me.pk === 'bigbox' ? 1.35 : 1) * z;
-        ctx.beginPath();
-        ctx.ellipse(px, py, rr, rr * t3, 0, 0, TAU);
-        ctx.strokeStyle = 'rgba(255,240,200,0.8)';
-        ctx.lineWidth = 2.5;
-        ctx.setLineDash([10, 8]);
-        ctx.stroke();
-        ctx.setLineDash([]);
-      }
     }
 
     drawMinimap(ctx, view, x, y, size, span) {

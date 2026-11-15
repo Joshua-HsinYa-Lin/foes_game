@@ -27,8 +27,9 @@ Touch controls:
 | Where | What it does |
 | --- | --- |
 | Left half of the screen | Drag to move; push all the way to run |
-| Right half of the screen | Drag toward where you want to aim; past a short distance you attack. Aim snaps to an enemy within about 20 degrees |
-| Quick tap on the right half | Attack once where you face |
+| Right half of the screen | Drag to aim (a guide on the ground shows where the attack goes), release to fire; hold the stick at its edge to keep firing; drag back to the middle to cancel |
+| Quick tap on the right half | Auto-aim: attack the nearest enemy in reach |
+| Skill circle | Tap to cast at the nearest enemy, or drag from it to aim the skill and release to cast |
 | Weapon slots | Tap to switch, hold to drop |
 | Skill circle, soup pouch, minimap | Tap to use the skill, drink soup, open the big map |
 | Yellow button | Pick up, swap, drive, read (shows what it will do) |
@@ -46,6 +47,7 @@ This branch (`joshua/brawl-style-experiment`) tries out ideas from hero shooters
 - **廚房道具 Kitchen gadgets** (level 4): two to choose from per character, three uses per match, key **G** or the green button.
 - **招牌絕活 Signature perks** (level 6): two always-on upgrades to choose from per character.
 - **大火快炒 Wok Overdrive** (level 8): dealing damage fills a purple meter around the skill button; when full, press **V** (or the purple button) for 6 seconds of extra speed, damage and toughness, with the skill ready at once in a stronger form.
+- **Aiming.** A guide on the ground shows where your attack goes and stops at the first wall: a band for guns, a cone for the shotgun, an arc for melee weapons. Holding right click (or dragging from the skill circle on a phone) shows the skill instead in yellow (purple during Wok Overdrive): its blast circle, charge path, coin fan or landing spot. On a phone, drag to aim and release to fire, or tap to auto-aim at the nearest enemy. Afeng's parcels now arc over walls and land where you aim.
 - Choose gadgets and perks on the character screen. **試玩：全部解鎖 Trial: unlock all** there sets every character to level 9 for trying things out (no experience is earned while it is on).
 
 ## Characters
@@ -110,7 +112,7 @@ Besides weapon sounds: wood knocks, cracks and a crash when a wooden building co
 | W A S D | Move; steer when driving |
 | Mouse | Aim; left click attacks |
 | H | Drink chicken soup from the medical pouch (press again to cancel) |
-| Right click / X | Character skill |
+| Right click / X | Character skill: hold right click to see where it lands, release to cast; X casts at once |
 | Space | Run (uses stamina); handbrake when driving |
 | Shift | Jump |
 | F / E | Pick up or swap items, get in or out of vehicles |

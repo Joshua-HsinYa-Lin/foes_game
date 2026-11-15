@@ -3736,6 +3736,13 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
       if (!p || !act || !VALID_ACTIONS[act.a] || p.actions.length > 12) return;
       const a = { a: act.a };
       if (act.i != null) a.i = clamp(Math.floor(Number(act.i) || 0), -1, 3);
+      // A skill can carry its own aim (dragged from the skill button, or right mouse released).
+      if (act.a === 'skill') {
+        const aim = Number(act.aim);
+        if (Number.isFinite(aim)) a.aim = aim;
+        const ad = Number(act.ad);
+        if (Number.isFinite(ad)) a.ad = clamp(ad, 80, 420);
+      }
       p.actions.push(a);
     }
 
@@ -4143,11 +4150,12 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
       this.bullets[this.bullets.length - 1].dmg = dmg;
     }
 
-    // A parcel flies in an arc to a point up to dist ahead (stopping short of walls) and blows up there.
+    // A parcel is lobbed in an arc over walls and trees and blows up where it lands, inside the map.
     throwParcel(p, a, dist, r, dmg) {
-      let d = dist;
-      while (d > 40 && this.losBlocked(p.x, p.y, p.x + Math.cos(a) * d, p.y + Math.sin(a) * d)) d -= 40;
-      this.bombs.push({ id: this.nextId++, owner: p.id, x0: p.x, y0: p.y, x1: p.x + Math.cos(a) * d, y1: p.y + Math.sin(a) * d, t: 0, T: 0.6, r, dmg });
+      const S = this.size;
+      const x1 = clamp(p.x + Math.cos(a) * dist, 20, S - 20);
+      const y1 = clamp(p.y + Math.sin(a) * dist, 20, S - 20);
+      this.bombs.push({ id: this.nextId++, owner: p.id, x0: p.x, y0: p.y, x1, y1, t: 0, T: 0.6, r, dmg });
     }
 
     // Kitchen gadgets: three uses a match, D.GADGET_CD seconds apart.
@@ -4291,6 +4299,11 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
           this.jump(p);
           break;
         case 'skill':
+          if (act.aim != null) {
+            p.a = act.aim;
+            p.input.aim = act.aim;
+          }
+          if (act.ad != null) p.input.ad = act.ad;
           this.useSkill(p);
           break;
         case 'heal':
@@ -7285,6 +7298,7 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
         if (vis(it.x, it.y, 40)) this.drawGroundItem(ctx, it);
       }
       for (const m of view.mi || []) this.drawMine(ctx, m, m.o === view.you || (this.myTeam && m.tm === this.myTeam));
+      if (ui.guide) this.drawAimGuide(ctx, view, ui.guide);
       const obs = [];
       for (const o of map.obstacles) {
         if (o.dead) continue;
@@ -9109,6 +9123,126 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
       ctx.globalAlpha = 1;
     }
 
+    // ---------- aiming ----------
+
+    // How far a shot from (x, y) at angle a travels before a bullet-stopping obstacle, up to range.
+    rayLength(x, y, a, range) {
+      const SIM = globalThis.PF_SIM;
+      const x1 = x + Math.cos(a) * range;
+      const y1 = y + Math.sin(a) * range;
+      const minx = Math.min(x, x1) - 80;
+      const maxx = Math.max(x, x1) + 80;
+      const miny = Math.min(y, y1) - 80;
+      const maxy = Math.max(y, y1) + 80;
+      let best = 1;
+      for (const o of this.map.obstacles) {
+        if (o.dead || o.x < minx || o.x > maxx || o.y < miny || o.y > maxy) continue;
+        const def = D.OBST[o.k];
+        if (!def || !def.blk) continue;
+        const t = o.s === 'c' ? SIM.segCircle(x, y, x1, y1, o.x, o.y, o.r) : SIM.segRect(x, y, x1, y1, o.x - o.hw, o.y - o.hh, o.x + o.hw, o.y + o.hh);
+        if (t >= 0 && t < best) best = t;
+      }
+      return best * range;
+    }
+
+    // The on-ground aim guide: where the attack or skill will go, cut short by walls. White for attacks,
+    // yellow for skills, purple during Wok Overdrive, grey when a drag has been pulled back to cancel.
+    drawAimGuide(ctx, view, g) {
+      const me = view.me;
+      const mp = view.pl.find(p => p.i === view.you);
+      const x = mp ? mp.x : me.x;
+      const y = mp ? mp.y : me.y;
+      const a = g.a;
+      const R = PR;
+      const od = me.odT > 0;
+      const base = g.cancel ? '150,150,150' : g.mode === 'skill' ? (od ? '190,120,255' : '255,215,94') : '255,255,255';
+      const fill = 'rgba(' + base + ',' + (g.mode === 'skill' || g.strong ? 0.34 : 0.22) + ')';
+      const edge = 'rgba(' + base + ',' + (g.mode === 'skill' || g.strong ? 0.9 : 0.6) + ')';
+      const band = (len, half, from) => {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(a);
+        roundRect(ctx, from, -half, Math.max(0, len - from), half * 2, half);
+        ctx.fillStyle = fill;
+        ctx.fill();
+        ctx.strokeStyle = edge;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.restore();
+      };
+      const cone = (len, half) => {
+        ctx.beginPath();
+        ctx.moveTo(x + Math.cos(a) * R, y + Math.sin(a) * R);
+        ctx.arc(x, y, len, a - half, a + half);
+        ctx.closePath();
+        ctx.fillStyle = fill;
+        ctx.fill();
+        ctx.strokeStyle = edge;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      };
+      const ring = (cx, cy, r) => {
+        circle(ctx, cx, cy, r);
+        ctx.fillStyle = fill;
+        ctx.fill();
+        ctx.strokeStyle = edge;
+        ctx.lineWidth = 2.5;
+        ctx.setLineDash([12, 8]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      };
+      ctx.save();
+      if (g.mode === 'attack') {
+        const sl = me.sl[me.act];
+        const t = sl ? sl.t : 'fists';
+        const W = D.WEAPONS[t];
+        if (W.melee) {
+          cone(R + W.range + 10, W.arc);
+        } else {
+          const len = this.rayLength(x, y, a, W.range);
+          if (W.pellets > 1) cone(len, ((W.spread || 8) * Math.PI) / 180);
+          else band(len, t === 'sniper' ? 4 : 8, R);
+          circle(ctx, x + Math.cos(a) * len, y + Math.sin(a) * len, 5);
+          ctx.fillStyle = edge;
+          ctx.fill();
+        }
+      } else {
+        const sk = me.sk;
+        const pk = me.pk;
+        if (sk === 'flame') ring(x, y, 165 * (pk === 'fierce' ? 1.3 : 1) * (od ? 1.4 : 1));
+        else if (sk === 'freeze') ring(x, y, 190 * (od ? 1.4 : 1));
+        else if (sk === 'bubble') ring(x, y, 220 * (pk === 'wide' ? 1.5 : 1));
+        else if (sk === 'boba') ring(x, y, od ? 260 : R + 14);
+        else if (sk === 'rush') band(this.rayLength(x, y, a, 3.2 * D.SPEED * 0.38 * (od ? 1.4 : 1) + R), R, 0);
+        else if (sk === 'coins') cone(this.rayLength(x, y, a, D.WEAPONS.coin.range), (od ? 1.2 : 0.9) / 2);
+        else if (sk === 'turret') {
+          const n = od ? 3 : pk === 'twin' ? 2 : 1;
+          for (let k = 0; k < n; k++) {
+            const ta = a + (k - (n - 1) / 2) * 0.7;
+            ring(x + Math.cos(ta) * (R + 30), y + Math.sin(ta) * (R + 30), 18);
+          }
+        } else if (sk === 'parcel') {
+          const n = od ? 3 : 1;
+          const want = clamp(g.ad || 380, 80, 420);
+          for (let k = 0; k < n; k++) {
+            const pa = a + (k - (n - 1) / 2) * 0.32;
+            const px = x + Math.cos(pa) * want;
+            const py = y + Math.sin(pa) * want;
+            ctx.strokeStyle = edge;
+            ctx.lineWidth = 3;
+            ctx.setLineDash([6, 10]);
+            ctx.beginPath();
+            ctx.moveTo(x, y);
+            ctx.lineTo(px, py);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            ring(px, py, 140 * (pk === 'bigbox' ? 1.35 : 1));
+          }
+        }
+      }
+      ctx.restore();
+    }
+
     // ---------- semi-3D view ----------
 
     // The camera looks down at an angle: north-south ground distances shrink by TILT, and anything with
@@ -9557,6 +9691,7 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
       this.drawRings(ctx);
       this.drawExplosions(ctx);
       this.drawParticles(ctx, vis, false);
+      if (ui.guide) this.drawAimGuide(ctx, view, ui.guide);
 
       upright();
       const list = [];
@@ -10055,27 +10190,6 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
       }
 
       if (me.alive && !ui.bigMap && ui.mouseX != null && !ui.touch) this.drawCrosshair(ctx, ui, me);
-      // Where a ready parcel would land: a dashed circle on the ground, pulled in to the longest throw.
-      if (me.alive && !ui.bigMap && ui.mouseX != null && !ui.touch && me.sk === 'parcel' && me.sc <= 0) {
-        const z = this.zoom || 1;
-        const t3 = this.mode3d ? TILT : 1;
-        const fy = H / 2 + this.viewOffsetY();
-        let px = ui.mouseX;
-        let py = ui.mouseY;
-        const d = this.aimDist(px, py);
-        if (d > 420) {
-          px = W / 2 + (px - W / 2) * (420 / d);
-          py = fy + (py - fy) * (420 / d);
-        }
-        const rr = 140 * (me.pk === 'bigbox' ? 1.35 : 1) * z;
-        ctx.beginPath();
-        ctx.ellipse(px, py, rr, rr * t3, 0, 0, TAU);
-        ctx.strokeStyle = 'rgba(255,240,200,0.8)';
-        ctx.lineWidth = 2.5;
-        ctx.setLineDash([10, 8]);
-        ctx.stroke();
-        ctx.setLineDash([]);
-      }
     }
 
     drawMinimap(ctx, view, x, y, size, span) {
@@ -11775,6 +11889,7 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
       lastAim = aim;
     }
     const ad = ui.mouseX != null ? renderer.aimDist(ui.mouseX, ui.mouseY) : 380;
+    ui.lastAd = ad;
     return { mx, my, aim, ad, shoot: mouseDown && !ui.bigMap, sprint: keys.has('Space'), brake: keys.has('Space') };
   }
 
@@ -11838,7 +11953,7 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
         act({ a: 'drop' });
         break;
       case 'KeyX':
-        act({ a: 'skill' });
+        castSkill(lastAim, ui.lastAd || 380);
         break;
       case 'KeyG':
         act({ a: 'gadget' });
@@ -11876,12 +11991,16 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
     if (touch.on && performance.now() - touch.last < 1000) return;
     Sound.init();
     if (e.button === 0) mouseDown = true;
-    if (e.button === 2 && inGame()) act({ a: 'skill' });
+    if (e.button === 2 && inGame()) ui.skillAim = true;
     if (gameOver.spectating && session && e.button === 0) session.spectateNext();
   });
 
   window.addEventListener('mouseup', e => {
     if (e.button === 0) mouseDown = false;
+    if (e.button === 2 && ui.skillAim) {
+      ui.skillAim = false;
+      if (inGame() && ui.mouseX != null) castSkill(renderer.aimAt(ui.mouseX, ui.mouseY), renderer.aimDist(ui.mouseX, ui.mouseY));
+    }
   });
 
   canvas.addEventListener('contextmenu', e => e.preventDefault());
@@ -11908,7 +12027,7 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
   // Right half: an aim stick that attacks once dragged past a small dead zone, with aim pulled toward a
   // nearby enemy; a quick tap attacks once. Weapon slots (hold to drop), the skill circle, the soup pouch
   // and the minimap are tappable. Buttons on the right: use, reload, jump; pause at the top.
-  const touch = { on: false, move: null, aim: null, tapUntil: 0, last: 0, press: null, portraitOk: false, rotatePaused: false };
+  const touch = { on: false, move: null, aim: null, skill: null, fireUntil: 0, fireAim: 0, fireAd: 380, last: 0, press: null, portraitOk: false, rotatePaused: false };
   const STICK_R = 56;
   const IOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
@@ -11926,6 +12045,7 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
     if (!on) {
       touch.move = null;
       touch.aim = null;
+      touch.skill = null;
       $('touchUI').hidden = true;
     }
   }
@@ -11984,28 +12104,85 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
 
   // Thumbs are less exact than a mouse: an attack within about 22 degrees of a visible enemy goes at that
   // enemy. A quick tap, which has no direction of its own, looks wider (about 60 degrees of where you face).
-  function assistAim(a, cone) {
+  // ---------- aiming ----------
+
+  // A quick tap auto-aims: the nearest enemy you can see within reach and not behind a wall.
+  function autoAim(range) {
     const v = lastView;
-    if (!v || !v.me.alive) return a;
+    if (!v || !v.me.alive) return null;
+    const me = v.pl.find(p => p.i === v.you) || v.me;
     let best = null;
-    let bd = cone || 0.38;
+    let bd = range;
     for (const p of v.pl) {
       if (p.i === v.you || p.d || p.veh) continue;
       if (v.me.tm && p.tm === v.me.tm) continue;
-      const dx = p.x - v.me.x;
-      const dy = p.y - v.me.y;
-      const d = Math.hypot(dx, dy);
-      if (d < 1 || d > 900 || (p.bu && d > 160)) continue;
-      const pa = Math.atan2(dy, dx);
-      const diff = Math.abs(SIM.angleDiff(a, pa));
-      if (diff < bd) {
-        bd = diff;
-        best = pa;
-      }
+      const d = Math.hypot(p.x - me.x, p.y - me.y);
+      if (d < 1 || d > bd + (p.r || 24) || (p.bu && d > 160)) continue;
+      const a = Math.atan2(p.y - me.y, p.x - me.x);
+      if (renderer.rayLength(me.x, me.y, a, d) < d - 30) continue;
+      bd = d;
+      best = { a, d };
     }
-    return best == null ? a : best;
+    return best;
   }
 
+  function weaponNow() {
+    const v = lastView;
+    const s = v && v.me.sl[v.me.act];
+    return D.WEAPONS[s ? s.t : 'fists'];
+  }
+
+  function weaponReach(W) {
+    return W.melee ? D.PLAYER_R + W.range + 30 : W.range;
+  }
+
+  // How long a released touch attack keeps firing: one shot for slow weapons, a short burst for fast ones.
+  function burstFor(W) {
+    return W.melee || W.delay >= 0.2 ? 130 : 450;
+  }
+
+  function skillReach() {
+    const v = lastView;
+    const sk = v ? v.me.sk : '';
+    return { parcel: 420, coins: 520, rush: 330, turret: 600, flame: 170, freeze: 200, bubble: 240 }[sk] || 0;
+  }
+
+  // Casts the skill toward an aim; a tap with no aim goes at the nearest enemy in the skill's reach.
+  function castSkill(aim, ad) {
+    if (aim == null) {
+      const t = autoAim(skillReach());
+      aim = t ? t.a : lastAim;
+      ad = t ? t.d : ad;
+    }
+    lastAim = aim;
+    act({ a: 'skill', aim, ad: ad || 380 });
+  }
+
+  // What the on-ground aim guide shows this frame, or null.
+  function aimGuide(view) {
+    const me = view.me;
+    if (!session || !me.alive || me.veh || view.cam !== view.you || view.st !== 'playing' || ui.bigMap || !inGame()) return null;
+    if (touch.on) {
+      if (touch.skill) {
+        const v = stickVec(touch.skill);
+        const out = v.len >= 18;
+        return { mode: 'skill', a: out ? renderer.screenDir(v.dx, v.dy) : lastAim, ad: 80 + Math.min(1, v.len / (STICK_R * 1.3)) * 340, cancel: !out && touch.skill.maxLen >= 18 };
+      }
+      if (touch.aim) {
+        const v = stickVec(touch.aim);
+        if (v.len > 10) return { mode: 'attack', a: renderer.screenDir(v.dx, v.dy), strong: true };
+        return touch.aim.maxLen > 18 ? { mode: 'attack', a: lastAim, cancel: true } : null;
+      }
+      return null;
+    }
+    if (ui.mouseX == null) return null;
+    const a = renderer.aimAt(ui.mouseX, ui.mouseY);
+    if (ui.skillAim) return { mode: 'skill', a, ad: renderer.aimDist(ui.mouseX, ui.mouseY) };
+    return { mode: 'attack', a, strong: mouseDown };
+  }
+
+  // Touch attack stick, as in mobile hero shooters: drag to aim (the guide shows where it goes), release
+  // to fire; holding at the rim keeps firing; a quick tap auto-aims; dragging back to the middle cancels.
   function touchInput(kx, ky) {
     const now = performance.now();
     let mx = kx;
@@ -12022,16 +12199,23 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
     const av = stickVec(touch.aim);
     if (av && av.len > 10) {
       aim = renderer.screenDir(av.dx, av.dy);
-      shoot = av.len > 22;
-    } else if (!av && (mx || my) && now > touch.tapUntil) {
+      if (av.k >= 0.85) {
+        if (!touch.aim.rimAt) touch.aim.rimAt = now;
+        if (now - touch.aim.rimAt > 350) shoot = true;
+      } else {
+        touch.aim.rimAt = 0;
+      }
+    } else if (!av && (mx || my) && now > touch.fireUntil) {
       aim = Math.atan2(my, mx);
     }
-    const tapping = now < touch.tapUntil;
-    if (tapping) shoot = true;
-    if (shoot) aim = assistAim(aim, tapping && !(av && av.len > 10) ? 1.05 : 0.38);
+    if (now < touch.fireUntil) {
+      shoot = true;
+      if (!(av && av.len > 10)) aim = touch.fireAim;
+    }
     lastAim = aim;
     // A full drag of the aim stick throws as far as possible.
-    const ad = av ? 80 + Math.min(1, av.len / (STICK_R * 1.3)) * 340 : 380;
+    const ad = av ? 80 + Math.min(1, av.len / (STICK_R * 1.3)) * 340 : touch.fireAd || 380;
+    ui.lastAd = ad;
     return { mx, my, aim, ad, shoot: shoot && !ui.bigMap, sprint, brake: false };
   }
 
@@ -12049,7 +12233,15 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
     const hit = hudTarget(x, y);
     if (hit) {
       if (hit.k === 'map') ui.bigMap = !ui.bigMap;
-      else if (hit.k === 'skill') act({ a: 'skill' });
+      else if (hit.k === 'skill') {
+        const r = renderer.hit.skill;
+        touch.skill = { id: e.pointerId, ox: r.x + r.w / 2, oy: r.y + r.h / 2, x, y, t: performance.now(), maxLen: 0 };
+        try {
+          canvas.setPointerCapture(e.pointerId);
+        } catch (err) {
+          return;
+        }
+      }
       else if (hit.k === 'gadget') act({ a: 'gadget' });
       else if (hit.k === 'overdrive') act({ a: 'overdrive' });
       else if (hit.k === 'heal') act({ a: 'heal' });
@@ -12066,7 +12258,7 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
       }
       return;
     }
-    const st = { id: e.pointerId, ox: x, oy: y, x, y, t: performance.now() };
+    const st = { id: e.pointerId, ox: x, oy: y, x, y, t: performance.now(), maxLen: 0 };
     if (x < renderer.W / 2) {
       if (!touch.move) touch.move = st;
     } else if (!touch.aim) {
@@ -12084,11 +12276,12 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
       if (touch.on && performance.now() - touch.last > 1500) setTouchMode(false);
       return;
     }
-    for (const st of [touch.move, touch.aim]) {
+    for (const st of [touch.move, touch.aim, touch.skill]) {
       if (st && st.id === e.pointerId) {
         st.x = e.clientX;
         st.y = e.clientY;
-        follow(st);
+        st.maxLen = Math.max(st.maxLen || 0, Math.hypot(st.x - st.ox, st.y - st.oy));
+        if (st !== touch.skill) follow(st);
       }
     }
   });
@@ -12101,10 +12294,33 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
       touch.press = null;
     }
     if (touch.move && touch.move.id === e.pointerId) touch.move = null;
+    const now = performance.now();
     if (touch.aim && touch.aim.id === e.pointerId) {
       const a = touch.aim;
-      if (e.type === 'pointerup' && performance.now() - a.t < 260 && Math.hypot(a.x - a.ox, a.y - a.oy) < 14) touch.tapUntil = performance.now() + 150;
+      const v = stickVec(a);
+      const W = weaponNow();
+      if (e.type === 'pointerup' && inGame()) {
+        if (now - a.t < 260 && a.maxLen < 18) {
+          const t = autoAim(weaponReach(W));
+          touch.fireAim = t ? t.a : lastAim;
+          touch.fireAd = t ? t.d : 380;
+          touch.fireUntil = now + burstFor(W);
+        } else if (v.len >= 14 && !(a.rimAt && now - a.rimAt > 350)) {
+          touch.fireAim = renderer.screenDir(v.dx, v.dy);
+          touch.fireAd = 80 + Math.min(1, v.len / (STICK_R * 1.3)) * 340;
+          touch.fireUntil = now + burstFor(W);
+        }
+      }
       touch.aim = null;
+    }
+    if (touch.skill && touch.skill.id === e.pointerId) {
+      const sk = touch.skill;
+      const v = stickVec(sk);
+      if (e.type === 'pointerup' && inGame()) {
+        if (v.len >= 18) castSkill(renderer.screenDir(v.dx, v.dy), 80 + Math.min(1, v.len / (STICK_R * 1.3)) * 340);
+        else if (sk.maxLen < 18) castSkill(null, 380);
+      }
+      touch.skill = null;
     }
   };
   canvas.addEventListener('pointerup', endTouch);
@@ -12166,6 +12382,7 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
     if (!show) {
       touch.move = null;
       touch.aim = null;
+      touch.skill = null;
       return;
     }
     const me = view.me;
@@ -12499,6 +12716,7 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
         ui.noHud = isDemo;
         ui.aim = !isDemo && view.me.alive && !view.me.veh ? input.aim : null;
         ui.tip = isDemo ? '' : tipFor(view);
+        ui.guide = isDemo ? null : aimGuide(view);
         renderer.draw(view, ui, cur.paused ? 0 : dt);
         if (!isDemo) updateTouchUI(view);
         else $('touchUI').hidden = true;

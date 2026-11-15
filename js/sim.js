@@ -1203,6 +1203,13 @@
       if (!p || !act || !VALID_ACTIONS[act.a] || p.actions.length > 12) return;
       const a = { a: act.a };
       if (act.i != null) a.i = clamp(Math.floor(Number(act.i) || 0), -1, 3);
+      // A skill can carry its own aim (dragged from the skill button, or right mouse released).
+      if (act.a === 'skill') {
+        const aim = Number(act.aim);
+        if (Number.isFinite(aim)) a.aim = aim;
+        const ad = Number(act.ad);
+        if (Number.isFinite(ad)) a.ad = clamp(ad, 80, 420);
+      }
       p.actions.push(a);
     }
 
@@ -1610,11 +1617,12 @@
       this.bullets[this.bullets.length - 1].dmg = dmg;
     }
 
-    // A parcel flies in an arc to a point up to dist ahead (stopping short of walls) and blows up there.
+    // A parcel is lobbed in an arc over walls and trees and blows up where it lands, inside the map.
     throwParcel(p, a, dist, r, dmg) {
-      let d = dist;
-      while (d > 40 && this.losBlocked(p.x, p.y, p.x + Math.cos(a) * d, p.y + Math.sin(a) * d)) d -= 40;
-      this.bombs.push({ id: this.nextId++, owner: p.id, x0: p.x, y0: p.y, x1: p.x + Math.cos(a) * d, y1: p.y + Math.sin(a) * d, t: 0, T: 0.6, r, dmg });
+      const S = this.size;
+      const x1 = clamp(p.x + Math.cos(a) * dist, 20, S - 20);
+      const y1 = clamp(p.y + Math.sin(a) * dist, 20, S - 20);
+      this.bombs.push({ id: this.nextId++, owner: p.id, x0: p.x, y0: p.y, x1, y1, t: 0, T: 0.6, r, dmg });
     }
 
     // Kitchen gadgets: three uses a match, D.GADGET_CD seconds apart.
@@ -1758,6 +1766,11 @@
           this.jump(p);
           break;
         case 'skill':
+          if (act.aim != null) {
+            p.a = act.aim;
+            p.input.aim = act.aim;
+          }
+          if (act.ad != null) p.input.ad = act.ad;
           this.useSkill(p);
           break;
         case 'heal':

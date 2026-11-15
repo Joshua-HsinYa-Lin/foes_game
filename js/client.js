@@ -1224,6 +1224,7 @@
       lastAim = aim;
     }
     const ad = ui.mouseX != null ? renderer.aimDist(ui.mouseX, ui.mouseY) : 380;
+    ui.lastAd = ad;
     return { mx, my, aim, ad, shoot: mouseDown && !ui.bigMap, sprint: keys.has('Space'), brake: keys.has('Space') };
   }
 
@@ -1287,7 +1288,7 @@
         act({ a: 'drop' });
         break;
       case 'KeyX':
-        act({ a: 'skill' });
+        castSkill(lastAim, ui.lastAd || 380);
         break;
       case 'KeyG':
         act({ a: 'gadget' });
@@ -1325,12 +1326,16 @@
     if (touch.on && performance.now() - touch.last < 1000) return;
     Sound.init();
     if (e.button === 0) mouseDown = true;
-    if (e.button === 2 && inGame()) act({ a: 'skill' });
+    if (e.button === 2 && inGame()) ui.skillAim = true;
     if (gameOver.spectating && session && e.button === 0) session.spectateNext();
   });
 
   window.addEventListener('mouseup', e => {
     if (e.button === 0) mouseDown = false;
+    if (e.button === 2 && ui.skillAim) {
+      ui.skillAim = false;
+      if (inGame() && ui.mouseX != null) castSkill(renderer.aimAt(ui.mouseX, ui.mouseY), renderer.aimDist(ui.mouseX, ui.mouseY));
+    }
   });
 
   canvas.addEventListener('contextmenu', e => e.preventDefault());
@@ -1357,7 +1362,7 @@
   // Right half: an aim stick that attacks once dragged past a small dead zone, with aim pulled toward a
   // nearby enemy; a quick tap attacks once. Weapon slots (hold to drop), the skill circle, the soup pouch
   // and the minimap are tappable. Buttons on the right: use, reload, jump; pause at the top.
-  const touch = { on: false, move: null, aim: null, tapUntil: 0, last: 0, press: null, portraitOk: false, rotatePaused: false };
+  const touch = { on: false, move: null, aim: null, skill: null, fireUntil: 0, fireAim: 0, fireAd: 380, last: 0, press: null, portraitOk: false, rotatePaused: false };
   const STICK_R = 56;
   const IOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
@@ -1375,6 +1380,7 @@
     if (!on) {
       touch.move = null;
       touch.aim = null;
+      touch.skill = null;
       $('touchUI').hidden = true;
     }
   }
@@ -1433,28 +1439,85 @@
 
   // Thumbs are less exact than a mouse: an attack within about 22 degrees of a visible enemy goes at that
   // enemy. A quick tap, which has no direction of its own, looks wider (about 60 degrees of where you face).
-  function assistAim(a, cone) {
+  // ---------- aiming ----------
+
+  // A quick tap auto-aims: the nearest enemy you can see within reach and not behind a wall.
+  function autoAim(range) {
     const v = lastView;
-    if (!v || !v.me.alive) return a;
+    if (!v || !v.me.alive) return null;
+    const me = v.pl.find(p => p.i === v.you) || v.me;
     let best = null;
-    let bd = cone || 0.38;
+    let bd = range;
     for (const p of v.pl) {
       if (p.i === v.you || p.d || p.veh) continue;
       if (v.me.tm && p.tm === v.me.tm) continue;
-      const dx = p.x - v.me.x;
-      const dy = p.y - v.me.y;
-      const d = Math.hypot(dx, dy);
-      if (d < 1 || d > 900 || (p.bu && d > 160)) continue;
-      const pa = Math.atan2(dy, dx);
-      const diff = Math.abs(SIM.angleDiff(a, pa));
-      if (diff < bd) {
-        bd = diff;
-        best = pa;
-      }
+      const d = Math.hypot(p.x - me.x, p.y - me.y);
+      if (d < 1 || d > bd + (p.r || 24) || (p.bu && d > 160)) continue;
+      const a = Math.atan2(p.y - me.y, p.x - me.x);
+      if (renderer.rayLength(me.x, me.y, a, d) < d - 30) continue;
+      bd = d;
+      best = { a, d };
     }
-    return best == null ? a : best;
+    return best;
   }
 
+  function weaponNow() {
+    const v = lastView;
+    const s = v && v.me.sl[v.me.act];
+    return D.WEAPONS[s ? s.t : 'fists'];
+  }
+
+  function weaponReach(W) {
+    return W.melee ? D.PLAYER_R + W.range + 30 : W.range;
+  }
+
+  // How long a released touch attack keeps firing: one shot for slow weapons, a short burst for fast ones.
+  function burstFor(W) {
+    return W.melee || W.delay >= 0.2 ? 130 : 450;
+  }
+
+  function skillReach() {
+    const v = lastView;
+    const sk = v ? v.me.sk : '';
+    return { parcel: 420, coins: 520, rush: 330, turret: 600, flame: 170, freeze: 200, bubble: 240 }[sk] || 0;
+  }
+
+  // Casts the skill toward an aim; a tap with no aim goes at the nearest enemy in the skill's reach.
+  function castSkill(aim, ad) {
+    if (aim == null) {
+      const t = autoAim(skillReach());
+      aim = t ? t.a : lastAim;
+      ad = t ? t.d : ad;
+    }
+    lastAim = aim;
+    act({ a: 'skill', aim, ad: ad || 380 });
+  }
+
+  // What the on-ground aim guide shows this frame, or null.
+  function aimGuide(view) {
+    const me = view.me;
+    if (!session || !me.alive || me.veh || view.cam !== view.you || view.st !== 'playing' || ui.bigMap || !inGame()) return null;
+    if (touch.on) {
+      if (touch.skill) {
+        const v = stickVec(touch.skill);
+        const out = v.len >= 18;
+        return { mode: 'skill', a: out ? renderer.screenDir(v.dx, v.dy) : lastAim, ad: 80 + Math.min(1, v.len / (STICK_R * 1.3)) * 340, cancel: !out && touch.skill.maxLen >= 18 };
+      }
+      if (touch.aim) {
+        const v = stickVec(touch.aim);
+        if (v.len > 10) return { mode: 'attack', a: renderer.screenDir(v.dx, v.dy), strong: true };
+        return touch.aim.maxLen > 18 ? { mode: 'attack', a: lastAim, cancel: true } : null;
+      }
+      return null;
+    }
+    if (ui.mouseX == null) return null;
+    const a = renderer.aimAt(ui.mouseX, ui.mouseY);
+    if (ui.skillAim) return { mode: 'skill', a, ad: renderer.aimDist(ui.mouseX, ui.mouseY) };
+    return { mode: 'attack', a, strong: mouseDown };
+  }
+
+  // Touch attack stick, as in mobile hero shooters: drag to aim (the guide shows where it goes), release
+  // to fire; holding at the rim keeps firing; a quick tap auto-aims; dragging back to the middle cancels.
   function touchInput(kx, ky) {
     const now = performance.now();
     let mx = kx;
@@ -1471,16 +1534,23 @@
     const av = stickVec(touch.aim);
     if (av && av.len > 10) {
       aim = renderer.screenDir(av.dx, av.dy);
-      shoot = av.len > 22;
-    } else if (!av && (mx || my) && now > touch.tapUntil) {
+      if (av.k >= 0.85) {
+        if (!touch.aim.rimAt) touch.aim.rimAt = now;
+        if (now - touch.aim.rimAt > 350) shoot = true;
+      } else {
+        touch.aim.rimAt = 0;
+      }
+    } else if (!av && (mx || my) && now > touch.fireUntil) {
       aim = Math.atan2(my, mx);
     }
-    const tapping = now < touch.tapUntil;
-    if (tapping) shoot = true;
-    if (shoot) aim = assistAim(aim, tapping && !(av && av.len > 10) ? 1.05 : 0.38);
+    if (now < touch.fireUntil) {
+      shoot = true;
+      if (!(av && av.len > 10)) aim = touch.fireAim;
+    }
     lastAim = aim;
     // A full drag of the aim stick throws as far as possible.
-    const ad = av ? 80 + Math.min(1, av.len / (STICK_R * 1.3)) * 340 : 380;
+    const ad = av ? 80 + Math.min(1, av.len / (STICK_R * 1.3)) * 340 : touch.fireAd || 380;
+    ui.lastAd = ad;
     return { mx, my, aim, ad, shoot: shoot && !ui.bigMap, sprint, brake: false };
   }
 
@@ -1498,7 +1568,15 @@
     const hit = hudTarget(x, y);
     if (hit) {
       if (hit.k === 'map') ui.bigMap = !ui.bigMap;
-      else if (hit.k === 'skill') act({ a: 'skill' });
+      else if (hit.k === 'skill') {
+        const r = renderer.hit.skill;
+        touch.skill = { id: e.pointerId, ox: r.x + r.w / 2, oy: r.y + r.h / 2, x, y, t: performance.now(), maxLen: 0 };
+        try {
+          canvas.setPointerCapture(e.pointerId);
+        } catch (err) {
+          return;
+        }
+      }
       else if (hit.k === 'gadget') act({ a: 'gadget' });
       else if (hit.k === 'overdrive') act({ a: 'overdrive' });
       else if (hit.k === 'heal') act({ a: 'heal' });
@@ -1515,7 +1593,7 @@
       }
       return;
     }
-    const st = { id: e.pointerId, ox: x, oy: y, x, y, t: performance.now() };
+    const st = { id: e.pointerId, ox: x, oy: y, x, y, t: performance.now(), maxLen: 0 };
     if (x < renderer.W / 2) {
       if (!touch.move) touch.move = st;
     } else if (!touch.aim) {
@@ -1533,11 +1611,12 @@
       if (touch.on && performance.now() - touch.last > 1500) setTouchMode(false);
       return;
     }
-    for (const st of [touch.move, touch.aim]) {
+    for (const st of [touch.move, touch.aim, touch.skill]) {
       if (st && st.id === e.pointerId) {
         st.x = e.clientX;
         st.y = e.clientY;
-        follow(st);
+        st.maxLen = Math.max(st.maxLen || 0, Math.hypot(st.x - st.ox, st.y - st.oy));
+        if (st !== touch.skill) follow(st);
       }
     }
   });
@@ -1550,10 +1629,33 @@
       touch.press = null;
     }
     if (touch.move && touch.move.id === e.pointerId) touch.move = null;
+    const now = performance.now();
     if (touch.aim && touch.aim.id === e.pointerId) {
       const a = touch.aim;
-      if (e.type === 'pointerup' && performance.now() - a.t < 260 && Math.hypot(a.x - a.ox, a.y - a.oy) < 14) touch.tapUntil = performance.now() + 150;
+      const v = stickVec(a);
+      const W = weaponNow();
+      if (e.type === 'pointerup' && inGame()) {
+        if (now - a.t < 260 && a.maxLen < 18) {
+          const t = autoAim(weaponReach(W));
+          touch.fireAim = t ? t.a : lastAim;
+          touch.fireAd = t ? t.d : 380;
+          touch.fireUntil = now + burstFor(W);
+        } else if (v.len >= 14 && !(a.rimAt && now - a.rimAt > 350)) {
+          touch.fireAim = renderer.screenDir(v.dx, v.dy);
+          touch.fireAd = 80 + Math.min(1, v.len / (STICK_R * 1.3)) * 340;
+          touch.fireUntil = now + burstFor(W);
+        }
+      }
       touch.aim = null;
+    }
+    if (touch.skill && touch.skill.id === e.pointerId) {
+      const sk = touch.skill;
+      const v = stickVec(sk);
+      if (e.type === 'pointerup' && inGame()) {
+        if (v.len >= 18) castSkill(renderer.screenDir(v.dx, v.dy), 80 + Math.min(1, v.len / (STICK_R * 1.3)) * 340);
+        else if (sk.maxLen < 18) castSkill(null, 380);
+      }
+      touch.skill = null;
     }
   };
   canvas.addEventListener('pointerup', endTouch);
@@ -1615,6 +1717,7 @@
     if (!show) {
       touch.move = null;
       touch.aim = null;
+      touch.skill = null;
       return;
     }
     const me = view.me;
@@ -1948,6 +2051,7 @@
         ui.noHud = isDemo;
         ui.aim = !isDemo && view.me.alive && !view.me.veh ? input.aim : null;
         ui.tip = isDemo ? '' : tipFor(view);
+        ui.guide = isDemo ? null : aimGuide(view);
         renderer.draw(view, ui, cur.paused ? 0 : dt);
         if (!isDemo) updateTouchUI(view);
         else $('touchUI').hidden = true;
