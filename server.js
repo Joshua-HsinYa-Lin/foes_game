@@ -234,7 +234,7 @@ function roomInfo(c) {
     you: c.cid,
     host: hostCid,
     state,
-    players: joined().map(h => ({ cid: h.cid, name: h.name, char: h.char, team: h.team || 0, spec: state === 'playing' && h.spectator ? 1 : 0 })),
+    players: joined().map(h => ({ cid: h.cid, name: h.name, char: h.char, lv: h.lo ? h.lo.level : 1, team: h.team || 0, spec: state === 'playing' && h.spectator ? 1 : 0 })),
     bots: room.bots,
     effBots: matchBots(),
     diff: room.diff,
@@ -253,9 +253,11 @@ function startMatch() {
   const humans = joined();
   if (!humans.length) return;
   matchNo++;
-  sim = new Sim({ difficulty: room.diff, teamMode: room.mode });
+  // Bots play at the people's average character level.
+  const avgLevel = humans.reduce((a, c) => a + (c.lo ? c.lo.level : 1), 0) / humans.length;
+  sim = new Sim({ difficulty: room.diff, teamMode: room.mode, botLevel: avgLevel });
   for (const c of humans) {
-    c.pid = sim.addPlayer(c.name, false, { char: c.char, team: room.mode === 'teams' ? c.team || 0 : 0 });
+    c.pid = sim.addPlayer(c.name, false, Object.assign({ char: c.char, team: room.mode === 'teams' ? c.team || 0 : 0 }, c.lo));
     sim.setAspect(c.pid, c.aspect);
     c.spec = 0;
     c.spectator = false;
@@ -272,7 +274,7 @@ function startMatch() {
 
 function lateJoin(c) {
   if (sim.time < 40) {
-    c.pid = sim.addPlayer(c.name, false, { char: c.char, team: room.mode === 'teams' ? c.team || 0 : 0 });
+    c.pid = sim.addPlayer(c.name, false, Object.assign({ char: c.char, team: room.mode === 'teams' ? c.team || 0 : 0 }, c.lo));
     sim.joinTeam(sim.playerMap.get(c.pid));
     sim.setAspect(c.pid, c.aspect);
     c.spectator = false;
@@ -321,6 +323,7 @@ function onMessage(c, raw) {
     c.cid = nextCid++;
     c.name = String(m.name || 'Player').slice(0, 16);
     c.char = D.CHARS[m.char] ? m.char : 'yunwang';
+    c.lo = D.validLoadout(c.char, m.level, m.gadget, m.perk);
     c.aspect = Number(m.aspect) || 1.7;
     ensureHost();
     console.log('Player joined: ' + c.name + ' (' + c.addr + ')' + (c.cid === hostCid ? ' [host]' : ''));
@@ -353,6 +356,7 @@ function onMessage(c, raw) {
   if (m.t === 'char') {
     if (state !== 'lobby' || !D.CHARS[m.char]) return;
     c.char = m.char;
+    c.lo = D.validLoadout(c.char, m.level, m.gadget, m.perk);
     broadcastRoom();
     return;
   }

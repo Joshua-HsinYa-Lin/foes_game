@@ -7,6 +7,8 @@
   const FONT = "'Trebuchet MS', 'Microsoft JhengHei', 'PingFang TC', 'Noto Sans TC', 'WenQuanYi Zen Hei', 'Heiti TC', sans-serif";
   const OUT = '#2b2a28';
   const CANOPY = 1.8;
+  // Semi-3D view: how much north-south ground distances shrink when seen at the camera's angle.
+  const TILT = 0.68;
 
   function hash(n) {
     n = (n ^ 61) ^ (n >>> 16);
@@ -103,7 +105,10 @@
     return t;
   }
 
-  const PACK_COL = { yunwang: '#8a5a30', luap: '#3a3a3a', auhsoj: '#4a6b8a', meibao: '#e56f9f' };
+  const PACK_COL = { yunwang: '#8a5a30', luap: '#3a3a3a', auhsoj: '#4a6b8a', meibao: '#e56f9f', bubbles: '#4fa3c7', jinjin: '#c99a1a', bing: '#5d7f9a' };
+  // Trouser colour for the standing figures in the 3D view.
+  const PANTS = { yunwang: '#3a3a3a', luap: '#222222', auhsoj: '#3c4a5c', meibao: '#5b3a6e', afeng: '#2b4a3a', bubbles: '#3b5f7a', jinjin: '#4a3a2a', bing: '#55606b', thug: '#3a3a50', elite: '#1f1f1f', boss: '#1f2f4f' };
+  const SHIRT = { yunwang: '#ffffff', luap: '#d63a32', auhsoj: '#5c6b7a', meibao: '#ff9cc6', afeng: '#2fa36b', bubbles: '#7fd0e8', jinjin: '#f4c430', bing: '#d9ecf7', thug: '#ffffff', elite: '#2a2f3a', boss: '#1f2f4f' };
   const CAR_COL = ['#e0574a', '#4a8fe0', '#f0c043', '#5cc08a'];
   const BIKE_COL = ['#e07a2e', '#c43d7a', '#4f6fd0', '#2f2f2f'];
   const CONTAINER_COL = ['#c2563f', '#3f78b5', '#3f9a6b', '#d1932f', '#7c5aa6'];
@@ -231,6 +236,7 @@
       this.flash.clear();
       this.roofAlpha.clear();
       this.rockCache.clear();
+      this.walk = new Map();
       this.zoom = 0;
       this.mini = this.renderMiniMap(map, 512);
     }
@@ -357,6 +363,13 @@
             this.addParticles(e.x, e.y, 8, '#4a3020', 100, 0.6, 4);
           } else if (e.s === 'turret') {
             this.addParticles(e.x, e.y, 8, '#7fd3ff', 120, 0.5, 4);
+          } else if (e.s === 'freeze') {
+            this.rings.push({ x: e.x, y: e.y, r: e.od ? 266 : 190, t: this.time, col: '#bfe8ff', life: 0.7 });
+            this.addParticles(e.x, e.y, 26, '#e8f7ff', 260, 0.9, 6);
+          } else if (e.s === 'bubble') {
+            this.rings.push({ x: e.x, y: e.y, r: 200, t: this.time, col: '#7fd0e8', life: 0.6 });
+          } else if (e.s === 'coins') {
+            this.addParticles(e.x, e.y, 8, '#f4c430', 160, 0.4, 4);
           } else if (e.s === 'salt') {
             this.addParticles(e.x, e.y, 18, '#ffffff', 300, 0.5, 4);
           }
@@ -365,6 +378,18 @@
           for (let i = 0; i < 4; i++) {
             this.particles.push({ x: e.x + (Math.random() - 0.5) * 24, y: e.y - 16, vx: (Math.random() - 0.5) * 40, vy: -60 - Math.random() * 40, life: 1.4, max: 1.4, size: 8 + Math.random() * 4, color: '#ff6f9f', kind: 5, rot: 0, vr: 0 });
           }
+          break;
+        case 'gadget':
+          this.rings.push({ x: e.x, y: e.y, r: 120, t: this.time, col: '#5fd36b', life: 0.45 });
+          this.addParticles(e.x, e.y, 10, '#b9f5a0', 160, 0.5, 5);
+          break;
+        case 'overdrive':
+          this.rings.push({ x: e.x, y: e.y, r: 170, t: this.time, col: '#b46bff', life: 0.7 });
+          this.addParticles(e.x, e.y, 22, '#d9b0ff', 260, 0.8, 6);
+          if (e.i === myId) this.banner(I.t('odLabel').replace(/[（(].*/, '') + '！', '#d9b0ff');
+          break;
+        case 'pop':
+          this.addParticles(e.x, e.y, 12, '#c9f0ff', 200, 0.5, 5);
           break;
         case 'respawn':
           this.rings.push({ x: e.x, y: e.y, r: 90, t: this.time, col: '#8fe07a', life: 0.6 });
@@ -432,6 +457,10 @@
     }
 
     draw(view, ui, dt) {
+      if (this.mode3d) {
+        this.draw3D(view, ui, dt);
+        return;
+      }
       this.time += dt;
       const ctx = this.ctx;
       const map = this.map;
@@ -488,6 +517,7 @@
       for (const it of view.it) {
         if (vis(it.x, it.y, 40)) this.drawGroundItem(ctx, it);
       }
+      for (const m of view.mi || []) this.drawMine(ctx, m, m.o === view.you || (this.myTeam && m.tm === this.myTeam));
       const obs = [];
       for (const o of map.obstacles) {
         if (o.dead) continue;
@@ -537,7 +567,17 @@
         const aim = p.i === view.you && ui.aim != null ? ui.aim : p.a;
         this.drawPlayer(ctx, p, aim);
       }
+      for (const p of view.pl) {
+        if (!p.d && !p.veh && (p.od || p.bb || p.gd)) this.drawAuras(ctx, p, p.x, p.y, p.r || PR);
+      }
       this.drawBullets(ctx, view.bu);
+      for (const b of view.bo || []) {
+        ctx.fillStyle = 'rgba(0,0,0,0.2)';
+        ctx.beginPath();
+        ctx.ellipse(b.x, b.y, 14, 9, 0, 0, TAU);
+        ctx.fill();
+        this.drawParcel(ctx, b.x, b.y - b.z, 1 + b.z / 260);
+      }
       this.drawRings(ctx);
       this.drawParticles(ctx, vis, false);
       for (const o of obs) {
@@ -1704,6 +1744,44 @@
 
     // Draws a character's head gear in local coords where +x is the facing direction.
     drawHeadgear(ctx, ch, R) {
+      if (ch === 'afeng') {
+        circle(ctx, 0, 0, R * 0.92);
+        fillStroke(ctx, '#f2a33a', 3.5);
+        ctx.beginPath();
+        ctx.arc(0, 0, R * 0.78, -0.7, 0.7);
+        ctx.strokeStyle = '#2b4a6a';
+        ctx.lineWidth = 7;
+        ctx.stroke();
+        return;
+      }
+      if (ch === 'bubbles') {
+        for (const [bx, by, br] of [[-6, -6, 0.32], [-2, 7, 0.26], [-11, 3, 0.22]]) {
+          circle(ctx, bx, by, R * br);
+          ctx.fillStyle = 'rgba(190,235,255,0.8)';
+          ctx.fill();
+          ctx.strokeStyle = '#4fa3c7';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        }
+        return;
+      }
+      if (ch === 'jinjin') {
+        ctx.beginPath();
+        ctx.arc(0, 0, R - 3, -1.2, 1.2);
+        ctx.strokeStyle = '#3aa067';
+        ctx.lineWidth = 7;
+        ctx.stroke();
+        return;
+      }
+      if (ch === 'bing') {
+        circle(ctx, -2, 0, R * 0.8);
+        fillStroke(ctx, '#8a6a4a', 3);
+        circle(ctx, -2, 0, R * 0.8);
+        ctx.strokeStyle = '#f4f4f4';
+        ctx.lineWidth = 5;
+        ctx.stroke();
+        return;
+      }
       if (ch === 'yunwang') {
         ctx.beginPath();
         ctx.arc(-R * 0.1, 0, R * 0.98, Math.PI * 0.62, Math.PI * 1.38);
@@ -1793,6 +1871,7 @@
       if (ch === 'yunwang') col = '#ffffff';
       else if (ch === 'meibao') col = '#ff9cc6';
       else if (ch === 'auhsoj') col = '#5c6b7a';
+      else if (D.CHARS[ch] && SHIRT[ch]) col = SHIRT[ch];
       else if (ch === 'elite') col = '#2a2f3a';
       if (ch === 'thug') {
         for (let i = 0; i < 10; i++) {
@@ -1864,6 +1943,11 @@
         fillStroke(ctx, '#f0c043', 4);
         ctx.fillStyle = '#c9533f';
         ctx.fillRect(-PR - 9, -3, 18, 6);
+      } else if (ch === 'afeng') {
+        roundRect(ctx, -PR - 14, -20, 28, 40, 5);
+        fillStroke(ctx, '#f2a33a', 4);
+        ctx.fillStyle = '#c97f1f';
+        ctx.fillRect(-PR - 14, -3, 28, 6);
       } else if (PACK_COL[ch]) {
         roundRect(ctx, -PR - 7, -14, 17, 28, 6);
         fillStroke(ctx, PACK_COL[ch], 4);
@@ -2087,6 +2171,12 @@
           this.drawBowl(ctx, b.x, b.y, 1.2, this.time * 20);
           continue;
         }
+        if (b.w === 'coin') {
+          ctx.beginPath();
+          ctx.ellipse(b.x, b.y, 7, 7 * Math.abs(Math.sin(this.time * 18 + b.i)) + 1.5, 0, 0, TAU);
+          fillStroke(ctx, '#f4c430', 2);
+          continue;
+        }
         if (b.w === 'harpoon') {
           ctx.save();
           ctx.translate(b.x, b.y);
@@ -2239,7 +2329,7 @@
         const foe = view.mode === 'story' ? p.tm === 2 : this.myTeam !== 0 && p.tm !== 0 && p.tm !== this.myTeam;
         if (p.hp >= 0 && (foe || ally) && (p.hp < 1 || p.ch === 'boss' || ally)) this.bar(ctx, p.x, p.y + R + 10, R * 2.2, p.hp, foe ? '#e8453b' : '#7ad35e');
         const enemyCol = this.tmode === 'teams' ? (p.tm === 1 ? '#ffa294' : '#a8cfff') : '#ffffff';
-        if (p.hu || ally) this.outlinedText(ctx, nameOf(p), p.x, p.y - R - 14, Math.max(16, 11 / (this.zoom || 1)), ally ? '#b8f5a0' : enemyCol);
+        if (p.hu || ally) this.outlinedText(ctx, (p.lv ? 'Lv' + p.lv + ' ' : '') + nameOf(p), p.x, p.y - R - 14, Math.max(16, 11 / (this.zoom || 1)), ally ? '#b8f5a0' : enemyCol);
       }
     }
 
@@ -2252,6 +2342,522 @@
       ctx.globalAlpha = 1;
     }
 
+    // ---------- semi-3D view ----------
+
+    // The camera looks down at an angle: north-south ground distances shrink by TILT, and anything with
+    // height rises straight up the screen from the spot it stands on. Raised things are drawn back to front.
+    // In "upright" space a ground point (x, y) sits at (x, y * TILT) and height goes up the screen.
+
+    viewOffsetY() {
+      return this.mode3d ? this.H * 0.05 : 0;
+    }
+
+    // World aim angle for a screen point, from the player's feet at the centre of the view.
+    aimAt(sx, sy) {
+      if (!this.mode3d) return Math.atan2(sy - this.H / 2, sx - this.W / 2);
+      return Math.atan2((sy - (this.H / 2 + this.viewOffsetY())) / TILT, sx - this.W / 2);
+    }
+
+    // World distance from the player's feet to a screen point.
+    aimDist(sx, sy) {
+      const z = this.zoom || 1;
+      const dx = (sx - this.W / 2) / z;
+      const dy = this.mode3d ? (sy - (this.H / 2 + this.viewOffsetY())) / (z * TILT) : (sy - this.H / 2) / z;
+      return Math.hypot(dx, dy);
+    }
+
+    // World direction for a drag on screen (touch aim stick).
+    screenDir(dx, dy) {
+      return Math.atan2(this.mode3d ? dy / TILT : dy, dx);
+    }
+
+    roofHeight(b) {
+      if (b.type === 'restaurant') return 84;
+      if (b.type === 'stall') return 50;
+      return b.weak ? 62 : 70;
+    }
+
+    // Draws fn's top-down art on a flat plane lifted h above the ground (current transform: upright).
+    plane3D(ctx, h, fn) {
+      ctx.save();
+      ctx.translate(0, -h);
+      ctx.scale(1, TILT);
+      fn();
+      ctx.restore();
+    }
+
+    // Draws fn's art (made for flat world coordinates) standing at its ground spot, unsquashed.
+    stand3D(ctx, y, lift, fn) {
+      ctx.save();
+      ctx.translate(0, y * TILT - y - lift);
+      fn();
+      ctx.restore();
+    }
+
+    // A box on a rectangular footprint: darker front face, lit top.
+    prism3D(ctx, o, h, top, front, alpha, planks) {
+      const fy = (o.y + o.hh) * TILT;
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.beginPath();
+      ctx.rect(o.x - o.hw, fy - h, o.hw * 2, h);
+      fillStroke(ctx, front, 3);
+      ctx.strokeStyle = 'rgba(0,0,0,0.18)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      if (planks) {
+        for (let xx = o.x - o.hw + 16; xx < o.x + o.hw - 4; xx += 16) {
+          ctx.moveTo(xx, fy - h + 2);
+          ctx.lineTo(xx, fy - 2);
+        }
+      } else {
+        ctx.moveTo(o.x - o.hw + 3, fy - h * 0.5);
+        ctx.lineTo(o.x + o.hw - 3, fy - h * 0.5);
+      }
+      ctx.stroke();
+      if (planks && o.mhp && o.hp < o.mhp * 0.7) {
+        ctx.strokeStyle = '#2b1a0e';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        const cracks = o.hp < o.mhp * 0.35 ? 4 : 2;
+        for (let i = 0; i < cracks; i++) {
+          const cx = o.x - o.hw + 10 + rnd(o.id * 7 + 1, i) * (o.hw * 2 - 20);
+          ctx.moveTo(cx - 6, fy - h + 6);
+          ctx.lineTo(cx + 4, fy - h * 0.5);
+          ctx.lineTo(cx - 3, fy - 6);
+        }
+        ctx.stroke();
+      }
+      this.plane3D(ctx, h, () => {
+        ctx.beginPath();
+        ctx.rect(o.x - o.hw, o.y - o.hh, o.hw * 2, o.hh * 2);
+        fillStroke(ctx, top, 3);
+      });
+      ctx.restore();
+    }
+
+    // Stacks a flat silhouette from the ground up to h for solid-looking irregular shapes.
+    extrude3D(ctx, h, path, col) {
+      const steps = Math.max(2, Math.round(h / 5));
+      for (let i = 0; i < steps; i++) {
+        this.plane3D(ctx, (h * i) / steps, () => {
+          path();
+          ctx.fillStyle = col;
+          ctx.fill();
+          if (i === 0) {
+            ctx.strokeStyle = OUT;
+            ctx.lineWidth = 3;
+            ctx.stroke();
+          }
+        });
+      }
+    }
+
+    // True when the watched player stands just behind (north of) something tall, so it should fade.
+    hides3D(x, y, halfW, frontY, h, cx, cy) {
+      return cy < frontY && cy > frontY - h / TILT - 60 && Math.abs(cx - x) < halfW + 30;
+    }
+
+    draw3DObstacle(ctx, o, cx, cy) {
+      const T = TILT;
+      if (o.k === 'wall' || o.k === 'plank') {
+        const b = o.b >= 0 ? this.map.buildings[o.b] : null;
+        const h = b ? this.roofHeight(b) : 60;
+        const rest = b && b.type === 'restaurant';
+        const top = o.k === 'plank' ? '#c0915e' : rest ? '#b04437' : '#a8917a';
+        const front = o.k === 'plank' ? '#a87a4a' : rest ? '#7a231d' : '#6e5a48';
+        const fade = this.hides3D(o.x, o.y, o.hw, o.y + o.hh, h, cx, cy) ? 0.45 : 1;
+        this.prism3D(ctx, o, h, top, front, fade, o.k === 'plank');
+      } else if (o.k === 'crate') {
+        const k = o.mhp ? 0.72 + 0.28 * clamp(o.hp / o.mhp, 0, 1) : 1;
+        const q = { x: o.x, y: o.y, hw: o.hw * k, hh: o.hh * k, id: o.id };
+        const h = q.hw * 1.5;
+        this.prism3D(ctx, q, h, '#d49a4a', '#a8732f', 1, true);
+        this.plane3D(ctx, h, () => {
+          ctx.strokeStyle = '#a8732f';
+          ctx.lineWidth = 4;
+          ctx.strokeRect(q.x - q.hw + 7, q.y - q.hh + 7, q.hw * 2 - 14, q.hh * 2 - 14);
+        });
+        this.outlinedText(ctx, '?', q.x, (q.y + q.hh) * T - h * 0.25, Math.round(q.hw * 0.9), '#fff1c9');
+      } else if (o.k === 'container') {
+        const col = CONTAINER_COL[o.v % CONTAINER_COL.length];
+        const h = 74;
+        const fade = this.hides3D(o.x, o.y, o.hw, o.y + o.hh, h, cx, cy) ? 0.45 : 1;
+        this.prism3D(ctx, o, h, shade(col, 0.12), shade(col, -0.22), fade, true);
+      } else if (o.k === 'stove') {
+        this.prism3D(ctx, o, 34, '#55595c', '#3a3d40', 1, false);
+        this.plane3D(ctx, 34, () => this.drawStove(ctx, o));
+      } else if (o.k === 'table') {
+        ctx.fillStyle = '#5a3d22';
+        ctx.fillRect(o.x - 5, o.y * T - 24, 10, 24);
+        this.plane3D(ctx, 24, () => this.drawTable(ctx, o));
+      } else if (o.k === 'rock') {
+        const h = o.r * 0.8;
+        const pts = this.rockShape(o);
+        this.extrude3D(ctx, h, () => this.poly(ctx, pts, o.x, o.y, o.r), '#7f868b');
+        this.plane3D(ctx, h, () => this.drawRock(ctx, o));
+      } else if (o.k === 'tree') {
+        const trunk = 44;
+        const cr = o.r * 1.3;
+        const fade = Math.hypot(cx - o.x, cy - o.y) < cr * 1.5 && cy < o.y + o.r ? 0.45 : 1;
+        ctx.beginPath();
+        ctx.rect(o.x - 8, o.y * T - trunk, 16, trunk);
+        fillStroke(ctx, '#6b4a2b', 3);
+        this.drawCanopy(ctx, { x: o.x, y: o.y * T - trunk - cr * 0.55, r: cr / CANOPY, v: o.v }, fade);
+      } else if (o.k === 'bamboo') {
+        const fade = Math.hypot(cx - o.x, cy - o.y) < 70 && cy < o.y + 20 ? 0.45 : 1;
+        ctx.save();
+        ctx.globalAlpha = fade;
+        for (let i = 0; i < 3; i++) {
+          const bx = o.x + (i - 1) * 7;
+          const bh = 84 + rnd(o.v, i) * 18;
+          ctx.beginPath();
+          ctx.rect(bx - 3, o.y * T - bh, 6, bh);
+          fillStroke(ctx, '#7fb24a', 2);
+          ctx.fillStyle = '#5d8f33';
+          for (let yy = 20; yy < bh; yy += 22) ctx.fillRect(bx - 3, o.y * T - yy, 6, 2);
+        }
+        ctx.restore();
+        this.drawBambooLeaves(ctx, { x: o.x, y: o.y * T - 92, v: o.v }, fade);
+      } else if (o.k === 'bush') {
+        const inside = Math.hypot(cx - o.x, cy - o.y) < o.r + PR * 0.5;
+        this.plane3D(ctx, 6, () => this.drawBush(ctx, { x: o.x, y: o.y + 4, r: o.r, v: o.v + 1 }, inside ? 0.5 : 0.95));
+        this.plane3D(ctx, 26, () => this.drawBush(ctx, o, inside ? 0.5 : 1));
+      } else if (o.k === 'lantern') {
+        ctx.beginPath();
+        ctx.rect(o.x - 3, o.y * T - 58, 6, 58);
+        fillStroke(ctx, '#5a3a22', 2);
+        this.stand3D(ctx, o.y, 46, () => this.drawLanternTop(ctx, o));
+      } else if (o.k === 'board') {
+        for (const sx of [-1, 1]) {
+          ctx.beginPath();
+          ctx.rect(o.x + sx * (o.hw - 8) - 3, o.y * T - 36, 6, 36);
+          fillStroke(ctx, '#5a3a22', 2);
+        }
+        this.stand3D(ctx, o.y, -6, () => this.drawBoardTop(ctx, o));
+      }
+    }
+
+    // A standing character: shadow, legs, the portrait bust, weapon held at the aimed angle, effects.
+    drawFigure3D(ctx, p, aim, view) {
+      const T = TILT;
+      const R = p.r || PR;
+      const ch = p.ch;
+      const u = R / PR;
+      const lift = (p.jz || 0) * 34;
+      const gx = p.x;
+      const gy = p.y * T;
+      if (!this.walk) this.walk = new Map();
+      let w = this.walk.get(p.i);
+      if (!w) {
+        w = { x: p.x, y: p.y, ph: 0, sp: 0 };
+        this.walk.set(p.i, w);
+      }
+      const moved = Math.hypot(p.x - w.x, p.y - w.y);
+      if (moved < 60) {
+        w.ph += moved * 0.11;
+        w.sp = w.sp * 0.8 + moved * 0.2;
+      }
+      w.x = p.x;
+      w.y = p.y;
+      const walking = w.sp > 0.6;
+      const face = Math.cos(aim) < 0 ? -1 : 1;
+      const legH = 22 * u;
+      const hip = gy - lift - legH;
+      const k = 0.56 * u;
+      const sa = Math.atan2(Math.sin(aim) * T, Math.cos(aim));
+      if ((this.tmode === 'teams' && p.tm) || (this.tmode === 'coop' && p.tm === 1)) {
+        ctx.beginPath();
+        ctx.ellipse(gx, gy, R + 6, (R + 6) * T, 0, 0, TAU);
+        ctx.strokeStyle = this.tmode === 'coop' ? 'rgba(120,220,110,0.9)' : p.tm === 1 ? 'rgba(230,70,60,0.95)' : 'rgba(70,140,240,0.95)';
+        ctx.lineWidth = 4;
+        ctx.stroke();
+      }
+      if (p.fx & 2) {
+        ctx.beginPath();
+        ctx.ellipse(gx, gy, R + 2, (R + 2) * T, 0, 0, TAU);
+        ctx.strokeStyle = 'rgba(127,211,255,0.9)';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+      }
+      const legCol = PANTS[ch] || '#333333';
+      for (const side of [-1, 1]) {
+        const swing = walking ? Math.sin(w.ph + (side > 0 ? 0 : Math.PI)) * 5 * u : 0;
+        roundRect(ctx, gx + side * 8 * u - 6 * u + swing * face * 0.4, hip - 2, 12 * u, legH + 2 - Math.max(0, -swing) * 0.4, 4.5 * u);
+        fillStroke(ctx, legCol, 2.5);
+      }
+      const weaponFirst = Math.sin(aim) < -0.3;
+      const drawWeapon = () => this.figureWeapon(ctx, p, face, gx + face * 17 * u, hip - 31 * u, sa, u * 1.3);
+      if (weaponFirst) drawWeapon();
+      if (p.bp) {
+        roundRect(ctx, gx - face * 23 * u - 12 * u, hip - 52 * u, 24 * u, 31 * u, 6);
+        fillStroke(ctx, '#f0c043', 3);
+      }
+      ctx.save();
+      ctx.translate(gx, hip - 52 * k + 6 * u);
+      ctx.scale(k * face, k);
+      this.drawBust(ctx, ch);
+      ctx.restore();
+      if (p.hit) {
+        circle(ctx, gx, hip - 48 * k, 36 * k);
+        ctx.fillStyle = 'rgba(255,70,50,0.35)';
+        ctx.fill();
+      }
+      if (!weaponFirst) drawWeapon();
+      this.drawAuras(ctx, p, gx, hip - 34 * u, R * 1.3);
+      if (p.sh) {
+        circle(ctx, gx, hip - 34 * u, R * 1.3 + 16);
+        ctx.fillStyle = 'rgba(160,230,255,0.18)';
+        ctx.fill();
+      }
+      if (p.inj) this.drawItemIcon(ctx, 'soup', gx, hip - 106 * u, 0.9);
+      if ((p.fx & 1) && Math.random() < 0.5) this.addParticles(p.x + (Math.random() - 0.5) * R, p.y, 1, Math.random() < 0.5 ? '#ff8a2a' : '#ffd36b', 40, 0.5, 6, 3);
+      if (p.rs) {
+        ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+        ctx.lineWidth = 4;
+        for (const off of [-12, 0, 12]) {
+          ctx.beginPath();
+          ctx.moveTo(gx - Math.cos(sa) * (R + 6), hip - 34 * u + off - Math.sin(sa) * (R + 6));
+          ctx.lineTo(gx - Math.cos(sa) * (R + 50), hip - 34 * u + off - Math.sin(sa) * (R + 50));
+          ctx.stroke();
+        }
+      }
+    }
+
+    figureHeight(p) {
+      return 98 * ((p.r || PR) / PR) + (p.jz || 0) * 34;
+    }
+
+    // The held weapon, drawn with the existing side-on art, rotated to the on-screen aim angle.
+    figureWeapon(ctx, p, face, hx, hy, sa, u) {
+      const t = p.w;
+      const W = D.WEAPONS[t];
+      const skin = this.skinOf(p.ch);
+      const sw = p.sw || 0;
+      const prog = sw ? Math.sin((1 - Math.abs(sw)) * Math.PI) : 0;
+      ctx.save();
+      ctx.translate(hx, hy);
+      ctx.rotate(sa + (W && W.melee ? -prog * 1.2 * face : 0));
+      if (Math.cos(sa) < 0) ctx.scale(1, -1);
+      const sc = 0.75 * u;
+      if (W && !W.melee && !W.thrown && t !== 'turret') {
+        const recoil = this.flash.has(p.i) && this.time - this.flash.get(p.i) < 0.06 ? 3 : 0;
+        this.drawGun(ctx, t, -4 - recoil, 0, sc);
+      } else if (t === 'chopsticks') {
+        this.drawChopsticks(ctx, 4, 0, sc);
+      } else if (t === 'bowl') {
+        this.drawBowl(ctx, 6, 0, sc, 0);
+      } else if (W && W.melee && t !== 'fists') {
+        this.drawMelee(ctx, t, 2, 0, sc);
+      } else {
+        const punch = prog * 10;
+        circle(ctx, 6 + punch, 0, 6.5 * u);
+        fillStroke(ctx, p.ch === 'luap' ? '#d63a32' : skin, 2.5);
+      }
+      circle(ctx, 0, 0, 5 * u);
+      fillStroke(ctx, skin, 2.5);
+      ctx.restore();
+    }
+
+    drawVehicle3D(ctx, v, plMap) {
+      const V = D.VEHICLES[v.t];
+      const h = v.t === 'car' ? 30 : 20;
+      const L = V.len;
+      const Wd = V.wid;
+      this.extrude3D(ctx, h, () => {
+        ctx.save();
+        ctx.translate(v.x, v.y);
+        ctx.rotate(v.a);
+        roundRect(ctx, -L / 2, -Wd / 2, L, Wd, 12);
+        ctx.restore();
+      }, '#2f2f33');
+      this.plane3D(ctx, h, () => this.drawVehicle(ctx, v, plMap));
+    }
+
+    drawTags3D(ctx, view, hidden) {
+      const T = TILT;
+      for (const p of view.pl) {
+        if (p.d || p.veh || p.i === view.you || hidden.has(p.i)) continue;
+        const R = p.r || PR;
+        const ally = this.myTeam !== 0 && p.tm === this.myTeam;
+        const foe = view.mode === 'story' ? p.tm === 2 : this.myTeam !== 0 && p.tm !== 0 && p.tm !== this.myTeam;
+        const top = p.y * T - this.figureHeight(p);
+        if (p.hp >= 0 && (foe || ally) && (p.hp < 1 || p.ch === 'boss' || ally)) this.bar(ctx, p.x, top - 8, R * 2.2, p.hp, foe ? '#e8453b' : '#7ad35e');
+        const enemyCol = this.tmode === 'teams' ? (p.tm === 1 ? '#ffa294' : '#a8cfff') : '#ffffff';
+        if (p.hu || ally) this.outlinedText(ctx, (p.lv ? 'Lv' + p.lv + ' ' : '') + nameOf(p), p.x, top - 16, Math.max(15, 11 / (this.zoom || 1)), ally ? '#b8f5a0' : enemyCol);
+      }
+    }
+
+    draw3D(view, ui, dt) {
+      this.time += dt;
+      const ctx = this.ctx;
+      const map = this.map;
+      if (!map || !view) return;
+      this.updateParticles(dt);
+      const T = TILT;
+      // Zoomed in a little against the flat view, so the tilted view never shows past what the game sends.
+      const target = this.computeZoom(view.cveh) * 1.25;
+      this.zoom = this.zoom ? lerp(this.zoom, target, Math.min(1, dt * 4)) : target;
+      const z = this.zoom;
+      this.camX = view.cx;
+      this.camY = view.cy;
+      this.myTeam = view.me.tm || 0;
+      this.tmode = view.tmode || 'ffa';
+      this.shake = Math.max(0, this.shake - dt * 40);
+      const shx = (Math.random() - 0.5) * this.shake;
+      const shy = (Math.random() - 0.5) * this.shake;
+      const dpr = this.dpr;
+      const W = this.W;
+      const H = this.H;
+      const offY = this.viewOffsetY();
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.fillStyle = '#2f4a24';
+      ctx.fillRect(0, 0, W, H);
+      const ox = dpr * (W / 2 - this.camX * z + shx);
+      const oy = dpr * (H / 2 + offY - this.camY * T * z + shy);
+      const ground = () => ctx.setTransform(dpr * z, 0, 0, dpr * z * T, ox, oy);
+      const upright = () => ctx.setTransform(dpr * z, 0, 0, dpr * z, ox, oy);
+      const x0 = this.camX - W / z / 2 - 100;
+      const x1 = this.camX + W / z / 2 + 100;
+      const y0 = this.camY - (H / 2 + offY) / (z * T) - 60;
+      const y1 = this.camY + (H / 2 - offY) / (z * T) + 200;
+      const vis = (x, y, r) => x + r > x0 && x - r < x1 && y + r > y0 && y - r < y1;
+      this.vis = vis;
+
+      ground();
+      ctx.fillStyle = this.groundPattern;
+      ctx.fillRect(Math.max(0, x0), Math.max(0, y0), Math.min(map.size, x1) - Math.max(0, x0), Math.min(map.size, y1) - Math.max(0, y0));
+      ctx.strokeStyle = 'rgba(40,60,25,0.6)';
+      ctx.lineWidth = 8;
+      ctx.strokeRect(0, 0, map.size, map.size);
+      this.drawYard(ctx, map.yard, vis);
+      this.drawRoads(ctx);
+      this.drawPlaza(ctx, map.plaza, vis);
+      const camP = view.pl.find(p => p.i === view.cam);
+      const cx = camP ? camP.x : this.camX;
+      const cy = camP ? camP.y : this.camY;
+      const camInside = this.buildingAt(cx, cy);
+      for (const b of map.buildings) {
+        if (vis(b.x, b.y, Math.max(b.w, b.h))) this.drawFloor(ctx, b);
+      }
+      for (const sc of map.secrets || []) {
+        if (vis(sc.x, sc.y, 40)) this.drawSecretSpot(ctx, sc);
+      }
+      const extras = view.sx || [];
+      for (const q of extras) {
+        if (q.k === 'gold' && vis(q.x, q.y, 40)) this.drawGold(ctx, q);
+        else if (q.k === 'plane') this.drawPlane(ctx, q, true);
+      }
+      for (const it of view.it) {
+        if (vis(it.x, it.y, 40)) this.drawGroundItem(ctx, it);
+      }
+      for (const m of view.mi || []) this.drawMine(ctx, m, m.o === view.you || (this.myTeam && m.tm === this.myTeam));
+      for (const p of view.pl) {
+        if (p.d) this.drawBody(ctx, p);
+      }
+      // Soft shadows, lit from the upper left.
+      ctx.fillStyle = 'rgba(0,0,0,0.2)';
+      for (const o of map.obstacles) {
+        if (o.dead || (o.k !== 'tree' && o.k !== 'bamboo') || !vis(o.x, o.y, 80)) continue;
+        circle(ctx, o.x + 14, o.y + 10, o.k === 'tree' ? o.r * 1.15 : 30);
+        ctx.fill();
+      }
+      for (const p of view.pl) {
+        if (p.d || p.veh) continue;
+        const sh = Math.max(0.4, 1 - (p.jz || 0) * 0.5);
+        ctx.beginPath();
+        ctx.ellipse(p.x + 3, p.y + 3, (p.r || PR) * 1.15 * sh, (p.r || PR) * 1.15 * sh, 0, 0, TAU);
+        ctx.fillStyle = 'rgba(0,0,0,0.28)';
+        ctx.fill();
+      }
+      for (const v of view.ve) {
+        if (!vis(v.x, v.y, 90)) continue;
+        ctx.save();
+        ctx.translate(v.x + 10, v.y + 12);
+        ctx.rotate(v.a);
+        roundRect(ctx, -D.VEHICLES[v.t].len / 2, -D.VEHICLES[v.t].wid / 2, D.VEHICLES[v.t].len, D.VEHICLES[v.t].wid, 12);
+        ctx.fillStyle = 'rgba(0,0,0,0.25)';
+        ctx.fill();
+        ctx.restore();
+      }
+      for (const b of view.bo || []) {
+        ctx.beginPath();
+        ctx.ellipse(b.x, b.y, 14, 14, 0, 0, TAU);
+        ctx.fillStyle = 'rgba(0,0,0,0.22)';
+        ctx.fill();
+      }
+      if (view.zo.on) this.drawZone(ctx, view.zo, x0, y0, x1, y1);
+      this.drawRings(ctx);
+      this.drawExplosions(ctx);
+      this.drawParticles(ctx, vis, false);
+
+      upright();
+      const list = [];
+      const add = (k, f) => list.push({ k, f });
+      for (const o of map.obstacles) {
+        if (o.dead) continue;
+        const ext = o.k === 'tree' ? o.r * 1.6 : o.s === 'c' ? o.r : Math.max(o.hw, o.hh);
+        if (!vis(o.x, o.y, ext + 40)) continue;
+        add(o.s === 'c' ? o.y + o.r * 0.4 : o.y + o.hh, () => this.draw3DObstacle(ctx, o, cx, cy));
+      }
+      for (const b of map.buildings) {
+        if (!vis(b.x, b.y, Math.max(b.w, b.h))) continue;
+        const tgt = camInside === b || b.broken ? 0 : 1;
+        let a = this.roofAlpha.get(b.id);
+        a = a == null ? tgt : lerp(a, tgt, Math.min(1, dt * 8));
+        this.roofAlpha.set(b.id, a);
+        if (a > 0.02) add(b.y + b.h / 2 + 1, () => this.plane3D(ctx, this.roofHeight(b), () => this.drawRoof(ctx, b, a)));
+      }
+      const plMap = new Map();
+      for (const p of view.pl) plMap.set(p.i, p);
+      // People hidden in a bush stay hidden, as in the flat view, unless they are you, a teammate, or close.
+      const hidden = new Set();
+      for (const p of view.pl) {
+        if (p.d || p.veh) continue;
+        if (p.bu && p.i !== view.you && !(this.myTeam && p.tm === this.myTeam) && Math.hypot(p.x - cx, p.y - cy) > 140) {
+          hidden.add(p.i);
+          continue;
+        }
+        const aim = p.i === view.you && ui.aim != null ? ui.aim : p.a;
+        add(p.y + 0.5, () => this.drawFigure3D(ctx, p, aim, view));
+      }
+      for (const v of view.ve) {
+        if (vis(v.x, v.y, 90)) add(v.y + 8, () => this.drawVehicle3D(ctx, v, plMap));
+      }
+      for (const t of view.tu || []) {
+        if (vis(t.x, t.y, 40)) add(t.y, () => {
+          ctx.beginPath();
+          ctx.rect(t.x - 10, t.y * T - 14, 20, 14);
+          fillStroke(ctx, '#55606b', 2);
+          this.plane3D(ctx, 14, () => this.drawTurret(ctx, t));
+        });
+      }
+      for (const q of extras) {
+        if (q.k === 'cat' && vis(q.x, q.y, 40)) add(q.y, () => this.plane3D(ctx, 4, () => this.drawCat(ctx, q)));
+      }
+      for (const b of view.bo || []) add(b.y, () => this.drawParcel(ctx, b.x, b.y * T - b.z - 12, 1.1));
+      for (const it of view.it) {
+        if (it.t === 'drop' && it.f > 0 && vis(it.x, it.y, 260)) add(it.y, () => this.stand3D(ctx, it.y, 0, () => this.drawFallingDrop(ctx, it)));
+      }
+      list.sort((a, b) => a.k - b.k);
+      for (const d of list) d.f();
+      this.plane3D(ctx, 26, () => this.drawBullets(ctx, view.bu));
+      this.plane3D(ctx, 36, () => this.drawParticles(ctx, vis, true));
+      for (const q of extras) {
+        if (q.k === 'plane' && vis(q.x, q.y, 320)) this.plane3D(ctx, 300, () => this.drawPlane(ctx, q, false));
+      }
+      this.drawTags3D(ctx, view, hidden);
+      for (const d of this.dmgNums) {
+        const t = (this.time - d.t) / 0.9;
+        ctx.globalAlpha = Math.max(0, 1 - t);
+        this.outlinedText(ctx, String(d.n), d.x, (d.y + 34) * T - 92 - t * 40, 22, '#ffe14d');
+      }
+      ctx.globalAlpha = 1;
+
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      if (!ui.noHud) this.drawHUD(ctx, view, ui);
+    }
+
     // ---------- portraits (menu and dialogue) ----------
 
     // Front-facing cartoon portrait of a speaker drawn into a square of size s at (x, y).
@@ -2260,6 +2866,15 @@
       ctx.translate(x + s / 2, y + s * 0.56);
       const k = s / 150;
       ctx.scale(k, k);
+      this.drawBust(ctx, who);
+      ctx.restore();
+    }
+
+    // Front view of a character from the shoulders up, in 150-unit portrait space with the face at the origin.
+    // Used for menu and dialogue portraits and for the standing figures in the 3D view.
+    drawBust(ctx, who) {
+      if (who === 'boss') who = 'captain';
+      ctx.save();
       ctx.lineJoin = 'round';
       if (who === 'narrator') {
         roundRect(ctx, -44, -44, 88, 88, 12);
@@ -2277,6 +2892,7 @@
         return;
       }
       const skin = who === 'captain' ? '#c79a7a' : this.skinOf(who);
+      this.bustBack(ctx, who);
       if (who === 'luap') {
         for (const sx of [-1, 1]) {
           circle(ctx, sx * 46, 28, 18);
@@ -2286,8 +2902,9 @@
       ctx.beginPath();
       ctx.ellipse(0, 52, 46, 26, 0, Math.PI, 0);
       ctx.closePath();
-      const shirt = { yunwang: '#ffffff', luap: '#d63a32', auhsoj: '#5c6b7a', meibao: '#ff9cc6', captain: '#1f2f4f' }[who] || '#777';
+      const shirt = { yunwang: '#ffffff', luap: '#d63a32', auhsoj: '#5c6b7a', meibao: '#ff9cc6', captain: '#1f2f4f', afeng: '#2fa36b', bubbles: '#7fd0e8', jinjin: '#f4c430', bing: '#d9ecf7', thug: '#ffffff', elite: '#2a2f3a' }[who] || '#777';
       fillStroke(ctx, shirt, 4);
+      this.bustShirt(ctx, who);
       if (PACK_COL[who]) {
         for (const sx of [-1, 1]) {
           roundRect(ctx, sx * 24 - 6, 30, 12, 34, 4);
@@ -2393,7 +3010,126 @@
         ctx.arc(0, -32, 7, 0.4, Math.PI - 0.4);
         ctx.stroke();
       }
+      this.bustHat(ctx, who);
       ctx.restore();
+    }
+
+    // Pieces of the new characters' and the gang's busts: behind the body, on the shirt, on the head.
+    bustBack(ctx, who) {
+      if (who === 'afeng') {
+        roundRect(ctx, -46, -24, 92, 74, 8);
+        fillStroke(ctx, '#f2a33a', 4);
+        ctx.fillStyle = '#c97f1f';
+        ctx.fillRect(-46, -2, 92, 8);
+      } else if (who === 'jinjin') {
+        circle(ctx, 0, 0, 39);
+        fillStroke(ctx, '#2b2018', 4);
+      } else if (who === 'bubbles') {
+        circle(ctx, 0, -2, 37);
+        fillStroke(ctx, '#7a5434', 4);
+      }
+    }
+
+    bustShirt(ctx, who) {
+      if (who === 'thug') {
+        ctx.save();
+        ctx.beginPath();
+        ctx.ellipse(0, 52, 44, 24, 0, Math.PI, 0);
+        ctx.clip();
+        ctx.fillStyle = '#2f4f8a';
+        for (let yy = 30; yy < 56; yy += 10) ctx.fillRect(-50, yy, 100, 5);
+        ctx.restore();
+      } else if (who === 'bubbles') {
+        roundRect(ctx, -20, 32, 40, 26, 5);
+        fillStroke(ctx, '#ffffff', 3);
+      } else if (who === 'bing') {
+        roundRect(ctx, -32, 26, 64, 13, 6);
+        fillStroke(ctx, '#3f78b5', 3);
+      } else if (who === 'jinjin') {
+        ctx.beginPath();
+        ctx.moveTo(-12, 27);
+        ctx.lineTo(0, 44);
+        ctx.lineTo(12, 27);
+        ctx.closePath();
+        fillStroke(ctx, '#ffffff', 3);
+      }
+    }
+
+    bustHat(ctx, who) {
+      if (who === 'afeng') {
+        ctx.beginPath();
+        ctx.arc(0, -2, 38, Math.PI, 0);
+        ctx.closePath();
+        fillStroke(ctx, '#f2a33a', 4);
+        roundRect(ctx, -30, -12, 60, 11, 5);
+        fillStroke(ctx, '#2b4a6a', 3);
+      } else if (who === 'bubbles') {
+        ctx.fillStyle = '#7a5434';
+        ctx.beginPath();
+        ctx.arc(0, -2, 34, Math.PI * 1.05, Math.PI * 1.95);
+        ctx.quadraticCurveTo(10, -14, -30, -12);
+        ctx.fill();
+        for (const [bx, by, br] of [[-18, -44, 11], [6, -52, 14], [26, -40, 9]]) {
+          circle(ctx, bx, by, br);
+          ctx.fillStyle = 'rgba(190,235,255,0.75)';
+          ctx.fill();
+          ctx.strokeStyle = '#4fa3c7';
+          ctx.lineWidth = 2.5;
+          ctx.stroke();
+          circle(ctx, bx - br * 0.35, by - br * 0.35, br * 0.25);
+          ctx.fillStyle = '#ffffff';
+          ctx.fill();
+        }
+      } else if (who === 'jinjin') {
+        ctx.fillStyle = '#2b2018';
+        ctx.beginPath();
+        ctx.arc(0, -2, 34, Math.PI * 1.02, Math.PI * 1.98);
+        ctx.lineTo(30, -10);
+        ctx.lineTo(-30, -10);
+        ctx.fill();
+        roundRect(ctx, -34, -24, 68, 9, 4);
+        fillStroke(ctx, '#3aa067', 3);
+        ctx.beginPath();
+        ctx.ellipse(0, -16, 30, 9, 0, 0, Math.PI);
+        fillStroke(ctx, 'rgba(58,160,103,0.85)', 3);
+        for (const sx of [-1, 1]) {
+          circle(ctx, sx * 35, 18, 5);
+          fillStroke(ctx, '#f4c430', 2);
+        }
+      } else if (who === 'bing') {
+        for (const sx of [-1, 1]) {
+          roundRect(ctx, sx * 36 - 9, -14, 18, 34, 8);
+          fillStroke(ctx, '#f4f4f4', 3);
+        }
+        roundRect(ctx, -34, -52, 68, 34, 10);
+        fillStroke(ctx, '#8a6a4a', 4);
+        roundRect(ctx, -40, -26, 80, 15, 7);
+        fillStroke(ctx, '#f4f4f4', 3);
+        ctx.strokeStyle = '#f4f4f4';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(-12, 20);
+        ctx.quadraticCurveTo(-4, 26, 0, 20);
+        ctx.quadraticCurveTo(4, 26, 12, 20);
+        ctx.stroke();
+        ctx.fillStyle = 'rgba(255,110,120,0.4)';
+        for (const sx of [-1, 1]) {
+          circle(ctx, sx * 22, 14, 6);
+          ctx.fill();
+        }
+      } else if (who === 'thug') {
+        roundRect(ctx, -35, -22, 70, 13, 5);
+        fillStroke(ctx, '#d63a32', 3);
+        ctx.beginPath();
+        ctx.moveTo(33, -16);
+        ctx.lineTo(48, -24);
+        ctx.lineTo(48, -6);
+        ctx.closePath();
+        fillStroke(ctx, '#d63a32', 3);
+      } else if (who === 'elite') {
+        roundRect(ctx, -26, -4, 52, 14, 5);
+        fillStroke(ctx, '#151515', 3);
+      }
     }
 
     // ---------- HUD ----------
@@ -2552,6 +3288,27 @@
       }
 
       if (me.alive && !ui.bigMap && ui.mouseX != null && !ui.touch) this.drawCrosshair(ctx, ui, me);
+      // Where a ready parcel would land: a dashed circle on the ground, pulled in to the longest throw.
+      if (me.alive && !ui.bigMap && ui.mouseX != null && !ui.touch && me.sk === 'parcel' && me.sc <= 0) {
+        const z = this.zoom || 1;
+        const t3 = this.mode3d ? TILT : 1;
+        const fy = H / 2 + this.viewOffsetY();
+        let px = ui.mouseX;
+        let py = ui.mouseY;
+        const d = this.aimDist(px, py);
+        if (d > 420) {
+          px = W / 2 + (px - W / 2) * (420 / d);
+          py = fy + (py - fy) * (420 / d);
+        }
+        const rr = 140 * (me.pk === 'bigbox' ? 1.35 : 1) * z;
+        ctx.beginPath();
+        ctx.ellipse(px, py, rr, rr * t3, 0, 0, TAU);
+        ctx.strokeStyle = 'rgba(255,240,200,0.8)';
+        ctx.lineWidth = 2.5;
+        ctx.setLineDash([10, 8]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
     }
 
     drawMinimap(ctx, view, x, y, size, span) {
@@ -2711,6 +3468,7 @@
           this.outlinedText(ctx, String(hud.scs), cx, cy + 8 * s, 22 * s, '#ffffff');
         }
         this.outlinedText(ctx, ui.touch ? I.t('skill') : I.lang === 'zh' ? '右鍵 / X' : 'RMB / X', cx, cy + r + 16 * s, 11 * s, '#ffffff');
+        this.drawPowerButtons(ctx, hud, own, cx, cy, r, s, ui);
       }
 
       const hbw = Math.max(total, 330 * s);
@@ -2766,9 +3524,170 @@
       }
     }
 
+    newSkillIcon(ctx, sk, r) {
+      ctx.lineJoin = 'round';
+      if (sk === 'parcel') {
+        roundRect(ctx, -r * 0.7, -r * 0.55, r * 1.4, r * 1.1, 3);
+        fillStroke(ctx, '#d49a4a', 3);
+        ctx.strokeStyle = '#8a5a30';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(0, -r * 0.55);
+        ctx.lineTo(0, r * 0.55);
+        ctx.moveTo(-r * 0.7, 0);
+        ctx.lineTo(r * 0.7, 0);
+        ctx.stroke();
+      } else if (sk === 'bubble') {
+        circle(ctx, 0, 0, r * 0.85);
+        ctx.fillStyle = 'rgba(190,235,255,0.85)';
+        ctx.fill();
+        ctx.strokeStyle = '#4fa3c7';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+        circle(ctx, -r * 0.3, -r * 0.3, r * 0.2);
+        ctx.fillStyle = '#ffffff';
+        ctx.fill();
+      } else if (sk === 'coins') {
+        for (const [dx, dy] of [[-r * 0.3, r * 0.15], [r * 0.25, -r * 0.2]]) {
+          circle(ctx, dx, dy, r * 0.5);
+          fillStroke(ctx, '#f4c430', 3);
+          ctx.fillStyle = '#b8860b';
+          ctx.font = 'bold ' + Math.round(r * 0.6) + 'px ' + FONT;
+          ctx.textAlign = 'center';
+          ctx.fillText('$', dx, dy + r * 0.2);
+        }
+      } else if (sk === 'freeze') {
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 3.5;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        for (let i = 0; i < 3; i++) {
+          const a = (i / 3) * Math.PI;
+          ctx.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+          ctx.lineTo(-Math.cos(a) * r, -Math.sin(a) * r);
+        }
+        ctx.stroke();
+        ctx.strokeStyle = '#7fd3ff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+    }
+
+    // The gadget button (green, uses left as dots) to the left of the skill circle, and the Wok Overdrive
+    // meter as a purple ring around the skill circle with a button above it once full.
+    drawPowerButtons(ctx, hud, own, cx, cy, r, s, ui) {
+      if (hud.gd) {
+        const gr = 24 * s;
+        const gx = cx - r - gr - 12 * s;
+        const gy = cy + 4 * s;
+        if (own) this.hit.gadget = { x: gx - gr, y: gy - gr, w: gr * 2, h: gr * 2 };
+        const ready = hud.gu > 0 && hud.gc <= 0;
+        circle(ctx, gx, gy, gr);
+        ctx.fillStyle = ready ? 'rgba(95,211,107,0.95)' : 'rgba(30,30,28,0.6)';
+        ctx.fill();
+        ctx.strokeStyle = ready ? '#ffffff' : 'rgba(255,255,255,0.4)';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+        const G = D.GADGETS[hud.gd];
+        this.outlinedText(ctx, I.pick(G.name).slice(0, I.lang === 'zh' ? 1 : 2), gx, gy + 7 * s, 19 * s, '#ffffff');
+        if (hud.gc > 0) {
+          ctx.beginPath();
+          ctx.moveTo(gx, gy);
+          ctx.arc(gx, gy, gr, -Math.PI / 2, -Math.PI / 2 + TAU * hud.gc);
+          ctx.closePath();
+          ctx.fillStyle = 'rgba(0,0,0,0.5)';
+          ctx.fill();
+        }
+        for (let i = 0; i < D.GADGET_USES; i++) {
+          circle(ctx, gx - 10 * s + i * 10 * s, gy + gr + 8 * s, 3.5 * s);
+          ctx.fillStyle = i < hud.gu ? '#5fd36b' : 'rgba(255,255,255,0.25)';
+          ctx.fill();
+        }
+        this.outlinedText(ctx, ui.touch ? '' : 'G', gx, gy - gr - 6 * s, 11 * s, '#ffffff');
+      }
+      if (hud.odOk) {
+        const active = hud.odT > 0;
+        const frac = active ? hud.odT / D.OVERDRIVE.time : hud.od;
+        ctx.beginPath();
+        ctx.arc(cx, cy, r + 6 * s, -Math.PI / 2, -Math.PI / 2 + TAU * frac);
+        ctx.strokeStyle = active ? '#e0b8ff' : '#b46bff';
+        ctx.lineWidth = 6 * s;
+        ctx.stroke();
+        if (hud.od >= 1 && !active) {
+          const oy = cy - r - 34 * s;
+          const orr = 20 * s;
+          if (own) this.hit.od = { x: cx - orr - 6, y: oy - orr - 6, w: orr * 2 + 12, h: orr * 2 + 12 };
+          const pulse = 0.85 + Math.sin(this.time * 8) * 0.15;
+          circle(ctx, cx, oy, orr * pulse);
+          ctx.fillStyle = '#9b4dff';
+          ctx.fill();
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 3;
+          ctx.stroke();
+          this.outlinedText(ctx, ui.touch ? '火' : 'V', cx, oy + 7 * s, 18 * s, '#ffffff');
+        }
+      }
+    }
+
+    // Effects on a character that show in both views: bubble shield, Overdrive aura, mouthguard.
+    drawAuras(ctx, p, x, y, R) {
+      if (p.od) {
+        for (let i = 0; i < 6; i++) {
+          const a = this.time * 4 + (i / 6) * TAU;
+          const fl = 0.6 + Math.sin(this.time * 13 + i) * 0.4;
+          circle(ctx, x + Math.cos(a) * R * 1.05, y + Math.sin(a) * R * 1.05, R * 0.28 * fl + 2);
+          ctx.fillStyle = 'rgba(180,107,255,0.55)';
+          ctx.fill();
+        }
+      }
+      if (p.bb) {
+        circle(ctx, x, y, R + 12);
+        ctx.fillStyle = 'rgba(190,235,255,0.28)';
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(127,208,232,0.9)';
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+        circle(ctx, x - R * 0.5, y - R * 0.6, 4);
+        ctx.fillStyle = 'rgba(255,255,255,0.9)';
+        ctx.fill();
+      }
+      if (p.gd) {
+        circle(ctx, x, y, R + 5);
+        ctx.strokeStyle = 'rgba(255,255,255,0.75)';
+        ctx.lineWidth = 3;
+        ctx.setLineDash([6, 5]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+    }
+
+    drawParcel(ctx, x, y, s) {
+      roundRect(ctx, x - 12 * s, y - 10 * s, 24 * s, 20 * s, 3);
+      fillStroke(ctx, '#d49a4a', 2.5);
+      ctx.strokeStyle = '#8a5a30';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(x, y - 10 * s);
+      ctx.lineTo(x, y + 10 * s);
+      ctx.stroke();
+    }
+
+    drawMine(ctx, m, mine) {
+      circle(ctx, m.x, m.y, 14);
+      fillStroke(ctx, '#4a4f55', 3);
+      circle(ctx, m.x, m.y, 5);
+      ctx.fillStyle = m.arm && Math.sin(this.time * 9) > 0 ? (mine ? '#5fd36b' : '#ff4a3a') : '#7a7f85';
+      ctx.fill();
+    }
+
     drawSkillIcon(ctx, sk, x, y, r) {
       ctx.save();
       ctx.translate(x, y);
+      if (sk === 'parcel' || sk === 'bubble' || sk === 'coins' || sk === 'freeze') {
+        this.newSkillIcon(ctx, sk, r);
+        ctx.restore();
+        return;
+      }
       if (sk === 'flame') {
         ctx.beginPath();
         ctx.moveTo(0, -r);

@@ -1193,6 +1193,141 @@ body.touch .controls table:not(.touch-help) {
     z-index: 1;
   }
 }
+
+/* ---------- character levels and loadouts ---------- */
+
+.hero-card {
+  position: relative;
+}
+
+.hero-card .lv,
+.hi-head .lv {
+  font-size: 12px;
+  font-weight: bold;
+  color: #fff3dc;
+  background: #6b3fa0;
+  border-radius: 6px;
+  padding: 1px 7px;
+}
+
+.hero-cards {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+.hero-card canvas {
+  width: 84px;
+  height: 84px;
+}
+
+.hero-info {
+  margin-top: 12px;
+  background: var(--paper-dark);
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--ink);
+}
+
+.hi-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.hi-head b {
+  font-size: 18px;
+}
+
+.hi-head .role {
+  color: var(--red);
+  font-weight: bold;
+}
+
+.xpbar {
+  position: relative;
+  height: 18px;
+  border-radius: 9px;
+  background: rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+  margin: 4px 0 8px;
+}
+
+.xpbar i {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background: linear-gradient(90deg, #8a5bd0, #c08aff);
+}
+
+.xpbar span {
+  position: relative;
+  display: block;
+  text-align: center;
+  font-size: 11px;
+  line-height: 18px;
+  font-weight: bold;
+  color: #2b1d40;
+}
+
+.hi-row {
+  margin: 4px 0;
+  line-height: 1.4;
+}
+
+.hi-row em {
+  font-style: normal;
+  font-weight: bold;
+}
+
+.hi-row.od em {
+  color: #6b3fa0;
+}
+
+.hi-row.locked {
+  opacity: 0.55;
+}
+
+.hi-pick {
+  margin: 6px 0;
+}
+
+.hi-pick .hp-label {
+  display: block;
+  font-weight: bold;
+  margin-bottom: 3px;
+}
+
+.hi-pick .seg button:disabled {
+  opacity: 0.5;
+}
+
+.hi-pick .hp-text {
+  color: var(--muted);
+  margin-top: 3px;
+}
+
+.xp-note {
+  color: #6b3fa0;
+  font-weight: bold;
+  font-size: 13px;
+}
+
+.chip.trial {
+  margin-left: 0;
+}
+
+@media (max-height: 560px) {
+  .hero-card canvas {
+    width: 48px;
+    height: 48px;
+  }
+  .hero-info {
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+}
 </style>
 </head>
 <body>
@@ -1217,6 +1352,7 @@ body.touch .controls table:not(.touch-help) {
       <button id="tLang" class="chip">中文 / EN</button>
       <button id="tMusic" class="chip"></button>
       <button id="tSfx" class="chip"></button>
+      <button id="t3d" class="chip"></button>
       <button id="tFull" class="chip" hidden data-i18n="fullscreen"></button>
     </div>
     <details id="secrets" class="controls secrets"><summary id="secretsSum"></summary><ul id="secretsList"></ul></details>
@@ -1229,6 +1365,8 @@ body.touch .controls table:not(.touch-help) {
         <tr><td>Mouse</td><td data-i18n="ctl_mouse"></td></tr>
         <tr><td>H</td><td data-i18n="ctl_heal"></td></tr>
         <tr><td>Right click / X</td><td data-i18n="ctl_skill"></td></tr>
+        <tr><td>G</td><td data-i18n="ctl_gadget"></td></tr>
+        <tr><td>V</td><td data-i18n="ctl_od"></td></tr>
         <tr><td>Space</td><td data-i18n="ctl_run"></td></tr>
         <tr><td>Shift</td><td data-i18n="ctl_jump"></td></tr>
         <tr><td>F / E</td><td data-i18n="ctl_f"></td></tr>
@@ -1245,6 +1383,7 @@ body.touch .controls table:not(.touch-help) {
         <tr><td data-i18n="th_tap"></td><td data-i18n="th_tap_do"></td></tr>
         <tr><td data-i18n="th_slots"></td><td data-i18n="th_slots_do"></td></tr>
         <tr><td data-i18n="th_hud"></td><td data-i18n="th_hud_do"></td></tr>
+        <tr><td data-i18n="th_gadget"></td><td data-i18n="th_gadget_do"></td></tr>
         <tr><td data-i18n="th_buttons"></td><td data-i18n="th_buttons_do"></td></tr>
       </table>
     </details>
@@ -1255,11 +1394,13 @@ body.touch .controls table:not(.touch-help) {
   <div class="card wide">
     <h2 data-i18n="chooseHero"></h2>
     <div id="heroCards" class="hero-cards"></div>
+    <div id="heroInfo" class="hero-info"></div>
     <div class="form">
       <label class="field"><span data-i18n="name"></span><input id="name" maxlength="16" placeholder="Player" autocomplete="off" spellcheck="false"></label>
       <div class="field"><span data-i18n="diff"></span><div class="seg diff-seg" id="diff"></div></div>
       <p id="diffHint" class="note diff-hint"></p>
       <div class="field" id="botsRow"><span data-i18n="bots"></span><div class="range"><input type="range" id="bots" min="1" max="29" value="13"><b id="botsv">13</b></div></div>
+      <div class="field"><span></span><button id="tTrial" class="chip trial"></button></div>
       <label class="field" id="serverRow" hidden><span data-i18n="serverAddr"></span><input id="server" maxlength="80" autocomplete="off" spellcheck="false"></label>
     </div>
     <div class="btns">
@@ -1300,6 +1441,7 @@ body.touch .controls table:not(.touch-help) {
     <h2 id="ovTitle"></h2>
     <p id="ovSub"></p>
     <div id="ovStats" class="stats"></div>
+    <p id="ovXp" class="note xp-note"></p>
     <div class="btns">
       <button id="ovSpectate" class="btn" data-i18n="spectate"></button>
       <button id="ovAgain" class="btn primary"></button>
@@ -1315,6 +1457,7 @@ body.touch .controls table:not(.touch-help) {
     <div class="field pause-diff" id="pauseDiffRow"><span data-i18n="diff"></span><div class="seg diff-seg" id="pauseDiff"></div></div>
     <button id="pauseMusic" class="btn"></button>
     <button id="pauseSfx" class="btn"></button>
+    <button id="pause3d" class="btn"></button>
     <button id="pauseQuit" class="btn"></button>
   </div>
 </div>
@@ -1450,9 +1593,126 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
       skill: { id: 'boba', cd: 14 },
       passive: { zh: '輕盈步伐：移動速度 +12%，體力回復 +50%', en: 'Light Steps: +12% move speed, +50% stamina regeneration' },
       skillText: { zh: '珍奶補給：喝一杯珍珠奶茶，回復 30 生命、補滿體力並加速 5 秒', en: 'Boba Boost: drink a bubble tea to heal 30, refill stamina and run faster for 5 seconds' }
+    },
+    afeng: {
+      name: { zh: '阿風', en: 'Afeng' },
+      role: { zh: '外送員', en: 'The Delivery Rider' },
+      skin: '#e9be92',
+      hp: 95,
+      speed: 1.08,
+      skill: { id: 'parcel', cd: 10 },
+      passive: { zh: '外送達人：開車時快 20%，奔跑耗體力少 30%', en: 'Express Rider: vehicles 20% faster while you drive, running costs 30% less stamina' },
+      skillText: { zh: '包裹炸彈：丟出一個包裹，落地爆炸造成 55 傷害', en: 'Parcel Bomb: throw a parcel that explodes where it lands for 55 damage' }
+    },
+    bubbles: {
+      name: { zh: '小泡', en: 'Bubbles' },
+      role: { zh: '洗碗工', en: 'The Dishwasher' },
+      skin: '#f1c9a5',
+      hp: 110,
+      speed: 1,
+      skill: { id: 'bubble', cd: 14 },
+      passive: { zh: '滑溜溜：被擊退的距離減半', en: 'Slippery: knockback on you is halved' },
+      skillText: { zh: '泡泡護盾：你和附近隊友獲得能吸收 50 傷害的泡泡，持續 5 秒', en: 'Bubble Guard: you and nearby teammates get a bubble that absorbs 50 damage for 5 seconds' }
+    },
+    jinjin: {
+      name: { zh: '金金', en: 'Jinjin' },
+      role: { zh: '收銀員', en: 'The Cashier' },
+      skin: '#f5cfa8',
+      hp: 90,
+      speed: 1.04,
+      skill: { id: 'coins', cd: 9 },
+      passive: { zh: '找零：擊倒的敵人會多掉一個小籠包', en: 'Keep the Change: foes you knock out drop an extra soup dumpling' },
+      skillText: { zh: '零錢雨：扇形丟出 7 枚硬幣，每枚 15 傷害', en: 'Coin Shower: fling 7 coins in a fan, 15 damage each' }
+    },
+    bing: {
+      name: { zh: '冰師傅', en: 'Master Bing' },
+      role: { zh: '冷藏庫師傅', en: 'The Cold-Room Master' },
+      skin: '#f0d0b4',
+      hp: 115,
+      speed: 0.96,
+      skill: { id: 'freeze', cd: 13 },
+      passive: { zh: '耐寒：不會被減速，退冰區傷害 -30%', en: 'Cold Blooded: never slowed, 30% less damage from the thaw zone' },
+      skillText: { zh: '急凍霧：放出冷霧，附近敵人受到 20 傷害並減速一半 3 秒', en: 'Flash Freeze: a cold fog deals 20 damage and halves nearby foes\' speed for 3 seconds' }
     }
   };
-  D.CHAR_IDS = ['yunwang', 'luap', 'auhsoj', 'meibao'];
+  D.CHAR_IDS = ['yunwang', 'luap', 'auhsoj', 'meibao', 'afeng', 'bubbles', 'jinjin', 'bing'];
+  // The original restaurant crew, who appear as allies in the story.
+  D.CORE_IDS = ['yunwang', 'luap', 'auhsoj', 'meibao'];
+
+  // Character levels 1 to 9 come from experience earned in matches. Each level above 1 adds 4% health and
+  // damage. Kitchen gadgets unlock at level 4, signature perks at 6, Wok Overdrive at 8.
+  D.LEVELS = { max: 9, step: 0.04, gadget: 4, perk: 6, overdrive: 8 };
+  // Experience needed to reach a level: 30 * L * (L - 1), so level 9 takes 2160.
+  D.levelForXp = function (xp) {
+    let L = 1;
+    while (L < D.LEVELS.max && 30 * (L + 1) * L <= xp) L++;
+    return L;
+  };
+  D.xpForLevel = function (L) {
+    return 30 * L * (L - 1);
+  };
+  // Keeps only what the character may use at that level (also used by the LAN server on what clients send).
+  D.validLoadout = function (char, level, gadget, perk) {
+    const lv = Math.max(1, Math.min(D.LEVELS.max, Math.round(Number(level) || 1)));
+    const ok = (tbl, id, need) => (tbl[id] && tbl[id].char === char && lv >= need ? id : '');
+    return { level: lv, gadget: ok(D.GADGETS, gadget, D.LEVELS.gadget), perk: ok(D.PERKS, perk, D.LEVELS.perk) };
+  };
+
+  // Kitchen gadgets: three uses a match, a few seconds apart. Two to choose from per character.
+  D.GADGET_USES = 3;
+  D.GADGET_CD = 6;
+  D.GADGETS = {
+    chili: { char: 'yunwang', name: { zh: '辣油潑灑', en: 'Chili Splash' }, text: { zh: '潑出辣油，燒灼身邊的敵人 3 秒', en: 'Splash chili oil that burns nearby foes for 3 seconds' } },
+    taste: { char: 'yunwang', name: { zh: '試吃一口', en: 'Taste Test' }, text: { zh: '立刻回復 40 生命', en: 'Heal 40 at once' } },
+    guard: { char: 'luap', name: { zh: '護齒', en: 'Mouthguard' }, text: { zh: '3 秒內受到的傷害減少 60%', en: 'Take 60% less damage for 3 seconds' } },
+    second: { char: 'luap', name: { zh: '第二回合', en: 'Second Wind' }, text: { zh: '技能冷卻時間立刻減半', en: 'Halve your skill cooldown at once' } },
+    mine: { char: 'auhsoj', name: { zh: '遙控地雷', en: 'Remote Mine' }, text: { zh: '放下一顆地雷，敵人靠近就爆炸，造成 70 傷害', en: 'Drop a mine that blows up for 70 when a foe comes near' } },
+    overclock: { char: 'auhsoj', name: { zh: '超頻', en: 'Overclock' }, text: { zh: '你的砲台射速加倍', en: 'Your turrets fire twice as fast' } },
+    pearls: { char: 'meibao', name: { zh: '珍珠滿地', en: 'Pearl Spill' }, text: { zh: '撒出珍珠，附近敵人減速 3 秒', en: 'Spill tapioca pearls that slow nearby foes for 3 seconds' } },
+    sugar: { char: 'meibao', name: { zh: '糖霜衝刺', en: 'Sugar Rush' }, text: { zh: '補滿體力並加速 2.5 秒', en: 'Refill stamina and run faster for 2.5 seconds' } },
+    swerve: { char: 'afeng', name: { zh: '急轉彎', en: 'Swerve' }, text: { zh: '朝移動方向快速滑行一段距離', en: 'Slide a long way in the direction you are moving' } },
+    extra: { char: 'afeng', name: { zh: '加點小菜', en: 'Extra Order' }, text: { zh: '腳邊掉出一碗雞湯和一籠小籠包', en: 'Drop a chicken soup and soup dumplings at your feet' } },
+    soap: { char: 'bubbles', name: { zh: '肥皂滑倒', en: 'Soap Slick' }, text: { zh: '把附近的敵人滑開推遠', en: 'Send nearby foes sliding away' } },
+    rinse: { char: 'bubbles', name: { zh: '沖洗乾淨', en: 'Rinse' }, text: { zh: '清除燃燒與減速，回復 25 生命', en: 'Wash off burning and slowing, heal 25' } },
+    refund: { char: 'jinjin', name: { zh: '退款', en: 'Refund' }, text: { zh: '所有槍枝立刻裝滿子彈', en: 'Refill every gun you carry at once' } },
+    rain: { char: 'jinjin', name: { zh: '撒錢', en: 'Make It Rain' }, text: { zh: '朝四面八方撒出 12 枚硬幣', en: 'Throw 12 coins in every direction' } },
+    nova: { char: 'bing', name: { zh: '冰爆', en: 'Frost Nova' }, text: { zh: '身邊的敵人被凍住 1 秒', en: 'Freeze nearby foes in place for 1 second' } },
+    icepack: { char: 'bing', name: { zh: '冰敷', en: 'Ice Pack' }, text: { zh: '回復 30 生命並清除燃燒', en: 'Heal 30 and put out burning' } }
+  };
+
+  // Signature perks: always-on upgrades. Two to choose from per character.
+  D.PERKS = {
+    fierce: { char: 'yunwang', name: { zh: '猛火快炒', en: 'Fierce Fire' }, text: { zh: '爆炒烈焰範圍 +30%', en: 'Wok Flame Burst reaches 30% further' } },
+    slurp: { char: 'yunwang', name: { zh: '喝湯神速', en: 'Quick Slurp' }, text: { zh: '喝雞湯的時間減半', en: 'Drink chicken soup twice as fast' } },
+    chin: { char: 'luap', name: { zh: '鐵下巴', en: 'Iron Chin' }, text: { zh: '生命上限 +20%', en: '+20% max health' } },
+    haymaker: { char: 'luap', name: { zh: '重拳', en: 'Haymaker' }, text: { zh: '旋風連打傷害 +50% 並讓敵人減速', en: 'Whirlwind Rush deals 50% more and slows foes' } },
+    twin: { char: 'auhsoj', name: { zh: '雙砲台', en: 'Twin Sentries' }, text: { zh: '砲台一次架兩座', en: 'Deploy two turrets at once' } },
+    ap: { char: 'auhsoj', name: { zh: '穿甲彈', en: 'AP Rounds' }, text: { zh: '砲台傷害 +40%', en: 'Turrets deal 40% more damage' } },
+    double: { char: 'meibao', name: { zh: '雙倍珍珠', en: 'Double Pearls' }, text: { zh: '珍奶補給回復 30 → 60', en: 'Boba Boost heals 60 instead of 30' } },
+    feather: { char: 'meibao', name: { zh: '凌波微步', en: 'Featherfoot' }, text: { zh: '移動速度再 +8%', en: 'Another 8% move speed' } },
+    bigbox: { char: 'afeng', name: { zh: '大包裹', en: 'Big Box' }, text: { zh: '包裹爆炸範圍 +35%', en: 'Parcel blasts are 35% wider' } },
+    tip: { char: 'afeng', name: { zh: '小費', en: 'Tip Jar' }, text: { zh: '每擊倒一個敵人回復 25 生命', en: 'Heal 25 for each foe you knock out' } },
+    thick: { char: 'bubbles', name: { zh: '厚泡泡', en: 'Thick Suds' }, text: { zh: '泡泡吸收量 50 → 90', en: 'Bubbles absorb 90 instead of 50' } },
+    wide: { char: 'bubbles', name: { zh: '泡泡漫延', en: 'Wide Foam' }, text: { zh: '泡泡護盾範圍擴大 50%', en: 'Bubble Guard reaches 50% further' } },
+    bills: { char: 'jinjin', name: { zh: '大鈔', en: 'Big Bills' }, text: { zh: '零錢雨 7 → 11 枚', en: 'Coin Shower throws 11 coins instead of 7' } },
+    jackpot: { char: 'jinjin', name: { zh: '發財', en: 'Jackpot' }, text: { zh: '零錢雨每枚 +5 傷害', en: 'Coin Shower coins deal 5 more each' } },
+    deep: { char: 'bing', name: { zh: '深度冷凍', en: 'Deep Freeze' }, text: { zh: '急凍霧的減速 3 → 5 秒', en: 'Flash Freeze slows for 5 seconds instead of 3' } },
+    brittle: { char: 'bing', name: { zh: '冰脆', en: 'Brittle' }, text: { zh: '對被減速的敵人傷害 +25%', en: '25% more damage to slowed foes' } }
+  };
+
+  // Wok Overdrive: dealing damage fills the meter; once full, 6 seconds of more speed and damage, less
+  // damage taken, a ready skill, and a stronger version of that skill.
+  D.OVERDRIVE = { need: 260, time: 6, speed: 1.2, dmg: 1.15, taken: 0.85 };
+  D.OVERDRIVE_SKILL = {
+    yunwang: { name: { zh: '滿鍋烈焰', en: 'Wok Inferno' }, text: { zh: '烈焰範圍 +40%，傷害 55', en: 'Flame Burst 40% wider, 55 damage' } },
+    luap: { name: { zh: '颶風連打', en: 'Hurricane Rush' }, text: { zh: '衝刺距離與傷害 +40%', en: 'Rush 40% longer and stronger' } },
+    auhsoj: { name: { zh: '砲台風暴', en: 'Turret Storm' }, text: { zh: '一次架三座砲台，持續 14 秒', en: 'Three turrets at once, lasting 14 seconds' } },
+    meibao: { name: { zh: '全糖派對', en: 'Sugar Party' }, text: { zh: '珍奶也回復附近隊友，加速 7 秒', en: 'Boba Boost also heals nearby teammates, 7 seconds of speed' } },
+    afeng: { name: { zh: '連環包裹', en: 'Parcel Barrage' }, text: { zh: '一次丟出三個包裹', en: 'Throw three parcels at once' } },
+    bubbles: { name: { zh: '泡泡風暴', en: 'Foam Storm' }, text: { zh: '泡泡吸收 120，並推開附近敵人', en: 'Bubbles absorb 120 and push nearby foes away' } },
+    jinjin: { name: { zh: '金庫大開', en: 'Vault Open' }, text: { zh: '一次丟出 14 枚 20 傷害的硬幣', en: '14 coins at 20 damage each' } },
+    bing: { name: { zh: '冷鏈全開', en: 'Full Cold Chain' }, text: { zh: '冷霧範圍 +40%，減速 70%', en: 'Fog 40% wider, slows by 70%' } }
+  };
 
   // Enemy types used in story chapters.
   D.FOES = {
@@ -1480,7 +1740,8 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
     chopsticks: { name: { zh: '飛筷', en: 'Chopsticks' }, rare: true, thrown: true, mag: 24, dmg: 17, delay: 0.09, spread: 3, speed: 1800, range: 720, reload: 1.3, move: 1.0, pellets: 1, proj: 'chop', pierce: 1, len: 30, wid: 6 },
     bowl: { name: { zh: '飛碗', en: 'Flying Bowl' }, rare: true, thrown: true, mag: 6, dmg: 38, delay: 0.42, spread: 1, speed: 1150, range: 950, reload: 1.8, move: 1.0, pellets: 1, proj: 'bowl', bounce: 2, len: 26, wid: 26 },
     harpoon: { name: { zh: '魚叉槍', en: 'Harpoon Gun' }, rare: true, mag: 3, dmg: 34, delay: 0.9, spread: 1, speed: 950, range: 1000, reload: 2.2, move: 0.95, pellets: 1, proj: 'harpoon', kb: 380, len: 64, wid: 12, color: '#5b6b78' },
-    turret: { name: { zh: '砲台', en: 'Turret' }, dmg: 12, speed: 1900, range: 650, proj: 'turret' }
+    turret: { name: { zh: '砲台', en: 'Turret' }, dmg: 12, speed: 1900, range: 650, proj: 'turret' },
+    coin: { name: { zh: '零錢雨', en: 'Coin Shower' }, dmg: 15, speed: 1500, range: 560, proj: 'coin' }
   };
 
   D.ITEMS = {
@@ -1818,6 +2079,28 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
       rotateTitle: '請把手機轉成橫向',
       rotateText: '橫向畫面比較大，兩隻拇指也比較好操作。',
       rotateAnyway: '直向繼續玩',
+      xpGain: '{0} +{1} 經驗',
+      levelUp: '升級！Lv {0}',
+      unlockGadget: '解鎖廚房道具！',
+      unlockPerk: '解鎖招牌絕活！',
+      unlockOd: '解鎖大火快炒！',
+      xpToNext: '再 {0} 經驗升到 Lv {1}',
+      trialOn: '試玩：全部滿級（不累積經驗）',
+      maxLevel: '已滿級',
+      xpBar: '{0} / {1} 經驗，升到 Lv {2}',
+      gadgetLabel: '廚房道具（G）',
+      perkLabel: '招牌絕活',
+      odLabel: '大火快炒（V）',
+      odGeneral: '造成傷害會累積火力，滿了按 V：6 秒內更快、更痛、更耐打，技能立刻可用而且變強。',
+      trialToggle: '試玩：全部解鎖',
+      gadgetWait: '道具還不能用',
+      odWait: '火力還沒滿',
+      odReady: '大火快炒！按 V',
+      ctl_gadget: '使用廚房道具（每場 3 次）',
+      ctl_od: '啟動大火快炒',
+      th_gadget: '綠色道具鈕／紫色火力鈕',
+      th_gadget_do: '在技能圓鈕旁邊，點一下使用',
+      view3d: '3D 視角',
       medPouch: '雞湯',
       msg_zone: '冷鏈正在失溫！冷鏈圈開始縮小！',
       msg_wave: '鹹水幫第 {0} 波來襲！',
@@ -2057,6 +2340,28 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
       rotateTitle: 'Turn your phone sideways',
       rotateText: 'Landscape gives a bigger view and room for both thumbs.',
       rotateAnyway: 'Keep playing upright',
+      xpGain: '{0} +{1} XP',
+      levelUp: 'Level up! Lv {0}',
+      unlockGadget: 'Kitchen gadget unlocked!',
+      unlockPerk: 'Signature perk unlocked!',
+      unlockOd: 'Wok Overdrive unlocked!',
+      xpToNext: '{0} XP to Lv {1}',
+      trialOn: 'Trial: everything unlocked (no XP earned)',
+      maxLevel: 'Max level',
+      xpBar: '{0} / {1} XP to Lv {2}',
+      gadgetLabel: 'Kitchen gadget (G)',
+      perkLabel: 'Signature perk',
+      odLabel: 'Wok Overdrive (V)',
+      odGeneral: 'Dealing damage fills the meter; when it is full, press V for 6 seconds of extra speed, damage and toughness, with your skill ready and stronger.',
+      trialToggle: 'Trial: unlock all',
+      gadgetWait: 'Gadget not ready',
+      odWait: 'Overdrive meter not full',
+      odReady: 'Overdrive ready! Press V',
+      ctl_gadget: 'Use kitchen gadget (3 per match)',
+      ctl_od: 'Start Wok Overdrive',
+      th_gadget: 'Green gadget / purple overdrive',
+      th_gadget_do: 'Next to the skill circle; tap to use',
+      view3d: '3D view',
       medPouch: 'Soup',
       msg_zone: 'The cold chain is failing! The zone is shrinking!',
       msg_wave: 'Brine Gang wave {0} incoming!',
@@ -2481,8 +2786,8 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
   }
 
   const RANK = { fists: 0, knife: 1, pistol: 3, uzi: 4, shotgun: 4, pan: 5, cleaver: 5, rollingpin: 5, sniper: 5, rifle: 6, minigun: 6, wok: 6, chopsticks: 6, bowl: 6, harpoon: 7, swordfish: 8 };
-  const VALID_ACTIONS = { slot: 1, cycle: 1, reload: 1, interact: 1, drop: 1, jump: 1, skill: 1, heal: 1 };
-  const ALLY_WEAPONS = { yunwang: 'shotgun', luap: 'uzi', auhsoj: 'rifle', meibao: 'chopsticks' };
+  const VALID_ACTIONS = { slot: 1, cycle: 1, reload: 1, interact: 1, drop: 1, jump: 1, skill: 1, heal: 1, gadget: 1, overdrive: 1 };
+  const ALLY_WEAPONS = { yunwang: 'shotgun', luap: 'uzi', auhsoj: 'rifle', meibao: 'chopsticks', afeng: 'uzi', bubbles: 'shotgun', jinjin: 'pistol', bing: 'rifle' };
 
   class Sim {
     constructor(opts) {
@@ -2503,6 +2808,10 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
       this.playerMap = new Map();
       this.bullets = [];
       this.turrets = [];
+      this.bombs = [];
+      this.mines = [];
+      // Bots in a brawl play at this character level (the people's average level, set by the host).
+      this.botLevel = clamp(Math.round(Number(opts.botLevel) || 1), 1, D.LEVELS.max);
       this.vehicles = [];
       this.obstacles = [];
       this.buildings = [];
@@ -3069,7 +3378,9 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
       } else {
         nm = String(name || '').replace(/[^\w \-.!?㐀-鿿]/g, '').trim().slice(0, 16) || 'Player';
       }
-      const maxHp = foe ? Math.round(foe.hp * (o.hpMul || 1)) : D.CHARS[char].hp;
+      const lo = foe ? { level: 1, gadget: '', perk: '' } : isBot && o.level == null ? this.randomLoadout(char, this.botLevel) : this.loadout(char, o.level, o.gadget, o.perk);
+      const lvMul = 1 + D.LEVELS.step * (lo.level - 1);
+      const maxHp = foe ? Math.round(foe.hp * (o.hpMul || 1)) : Math.round(D.CHARS[char].hp * lvMul * (lo.perk === 'chin' ? 1.2 : 1));
       const p = {
         id,
         name: nm,
@@ -3102,6 +3413,19 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
         skillUses: 0,
         boostT: 0,
         shieldT: 0,
+        lvl: lo.level,
+        dmgMul: lvMul,
+        gadget: lo.gadget,
+        perk: lo.perk,
+        gUses: D.GADGET_USES,
+        gCool: 0,
+        odOk: kind === 'player' && lo.level >= D.LEVELS.overdrive,
+        od: 0,
+        odT: 0,
+        bubHp: 0,
+        bubT: 0,
+        guardT: 0,
+        clockUntil: 0,
         burnT: 0,
         burnDps: 0,
         burnSrc: 0,
@@ -3135,7 +3459,7 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
         specialT: 4,
         inBush: false,
         aspect: 16 / 9,
-        input: { mx: 0, my: 0, aim: 0, shoot: false, sprint: false, brake: false },
+        input: { mx: 0, my: 0, aim: 0, ad: 380, shoot: false, sprint: false, brake: false },
         actions: [],
         triggerHeld: false,
         ai: null
@@ -3368,6 +3692,9 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
       p.killerId = 0;
       p.placement = 0;
       p.shieldT = this.time + 2;
+      p.odT = 0;
+      p.bubT = 0;
+      p.bubHp = 0;
       this.ev({ e: 'respawn', i: p.id, x: p.x, y: p.y });
     }
 
@@ -3399,6 +3726,9 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
       i.shoot = !!inp.shoot;
       i.sprint = !!inp.sprint;
       i.brake = !!inp.brake;
+      // How far away the player is aiming (thrown skills land there).
+      const ad = Number(inp.ad);
+      if (Number.isFinite(ad)) i.ad = clamp(ad, 80, 420);
     }
 
     pushAction(id, act) {
@@ -3712,9 +4042,12 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
       p.skillCool = C.skill.cd;
       p.skillUses++;
       const id = C.skill.id;
-      this.ev({ e: 'skill', i: p.id, s: id, x: p.x, y: p.y, a: p.a });
+      // During Wok Overdrive every skill comes out in its stronger form.
+      const od = p.odT > 0;
+      this.ev({ e: 'skill', i: p.id, s: id, x: p.x, y: p.y, a: p.a, od: od ? 1 : 0 });
       if (id === 'flame') {
-        const R = 165;
+        const R = 165 * (p.perk === 'fierce' ? 1.3 : 1) * (od ? 1.4 : 1);
+        const dmg = od ? 55 : 40;
         for (const q of this.players) {
           if (!q.alive || q.veh || !this.enemies(p, q)) continue;
           const d = Math.hypot(q.x - p.x, q.y - p.y);
@@ -3722,33 +4055,213 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
           const n = Math.max(1, d);
           this.knock(q, ((q.x - p.x) / n) * 380, ((q.y - p.y) / n) * 380);
           this.burn(q, 7, 3, p.id);
-          this.damagePlayer(q, 40, p.id, 'flame');
+          this.damagePlayer(q, dmg, p.id, 'flame');
         }
         for (const o of this.grid.query(p.x - R, p.y - R, p.x + R, p.y + R, [])) {
           if (!o.dead && o.mhp && Math.hypot(o.x - p.x, o.y - p.y) < R) this.damageObstacle(o, 60, p.id);
         }
         this.heal(p, 15);
       } else if (id === 'rush') {
-        let dx = Math.cos(p.a);
-        let dy = Math.sin(p.a);
-        p.rx = dx;
-        p.ry = dy;
-        p.rushT = 0.38;
+        p.rx = Math.cos(p.a);
+        p.ry = Math.sin(p.a);
+        p.rushT = 0.38 * (od ? 1.4 : 1);
+        p.rushDmg = 45 * (p.perk === 'haymaker' ? 1.5 : 1) * (od ? 1.4 : 1);
         p.rushHit = new Set();
         p.jumpT = 0;
       } else if (id === 'turret') {
-        const tx = p.x + Math.cos(p.a) * (p.r + 30);
-        const ty = p.y + Math.sin(p.a) * (p.r + 30);
-        const free = !this.blockedAt(tx, ty, 18);
-        this.turrets.push({ id: this.nextId++, owner: p.id, team: p.team, x: free ? tx : p.x, y: free ? ty : p.y, a: p.a, life: 10, cool: 0.4 });
+        const n = od ? 3 : p.perk === 'twin' ? 2 : 1;
+        for (let k = 0; k < n; k++) {
+          const a = p.a + (k - (n - 1) / 2) * 0.7;
+          const tx = p.x + Math.cos(a) * (p.r + 30);
+          const ty = p.y + Math.sin(a) * (p.r + 30);
+          const free = !this.blockedAt(tx, ty, 18);
+          this.turrets.push({ id: this.nextId++, owner: p.id, team: p.team, x: free ? tx : p.x, y: free ? ty : p.y, a, life: od ? 14 : 10, cool: 0.4, ap: p.perk === 'ap', fast: this.time < p.clockUntil });
+        }
         const mine = this.turrets.filter(t => t.owner === p.id);
-        if (mine.length > 2) this.turrets.splice(this.turrets.indexOf(mine[0]), 1);
+        const keep = Math.max(2, n);
+        for (let k = 0; k < mine.length - keep; k++) this.turrets.splice(this.turrets.indexOf(mine[k]), 1);
       } else if (id === 'boba') {
-        p.hp = Math.min(p.maxHp, p.hp + 30);
+        const heal = p.perk === 'double' ? 60 : 30;
+        p.hp = Math.min(p.maxHp, p.hp + heal);
         p.stamina = 100;
-        p.boostT = 5;
+        p.boostT = od ? 7 : 5;
+        this.ev({ e: 'heal', i: p.id, x: p.x, y: p.y });
+        if (od) {
+          for (const q of this.players) {
+            if (q === p || !q.alive || this.enemies(p, q) || Math.hypot(q.x - p.x, q.y - p.y) > 260) continue;
+            q.hp = Math.min(q.maxHp, q.hp + heal);
+            q.boostT = Math.max(q.boostT, 4);
+            this.ev({ e: 'heal', i: q.id, x: q.x, y: q.y });
+          }
+        }
+      } else if (id === 'parcel') {
+        const n = od ? 3 : 1;
+        for (let k = 0; k < n; k++) {
+          const a = p.a + (k - (n - 1) / 2) * 0.32;
+          this.throwParcel(p, a, p.input.ad || 380, 140 * (p.perk === 'bigbox' ? 1.35 : 1), 55);
+        }
+      } else if (id === 'bubble') {
+        const amount = od ? 120 : p.perk === 'thick' ? 90 : 50;
+        const R = 220 * (p.perk === 'wide' ? 1.5 : 1);
+        for (const q of this.players) {
+          if (!q.alive) continue;
+          const d = Math.hypot(q.x - p.x, q.y - p.y);
+          if (q === p || (!this.enemies(p, q) && d < R)) {
+            q.bubHp = amount;
+            q.bubT = 5;
+          } else if (od && this.enemies(p, q) && !q.veh && d < R) {
+            const n2 = Math.max(1, d);
+            this.knock(q, ((q.x - p.x) / n2) * 520, ((q.y - p.y) / n2) * 520);
+          }
+        }
+      } else if (id === 'coins') {
+        const n = od ? 14 : p.perk === 'bills' ? 11 : 7;
+        const dmg = (od ? 20 : 15) + (p.perk === 'jackpot' ? 5 : 0);
+        const spread = od ? 1.2 : 0.9;
+        for (let k = 0; k < n; k++) this.coin(p, p.a + (k / (n - 1) - 0.5) * spread, dmg);
+      } else if (id === 'freeze') {
+        const R = 190 * (od ? 1.4 : 1);
+        const mul = od ? 0.3 : 0.5;
+        const t = p.perk === 'deep' ? 5 : 3;
+        for (const q of this.players) {
+          if (!q.alive || q.veh || !this.enemies(p, q) || Math.hypot(q.x - p.x, q.y - p.y) > R + q.r) continue;
+          this.chill(q, t, mul);
+          this.damagePlayer(q, 20, p.id, 'freeze');
+        }
+      }
+    }
+
+    // Master Bing's passive: cold does not slow him.
+    chill(q, t, mul) {
+      if (q.char === 'bing') return;
+      q.slowT = Math.max(q.slowT, t);
+      q.slowMul = Math.min(q.slowT > t ? q.slowMul : 1, mul);
+    }
+
+    coin(p, a, dmg) {
+      this.spawnBullet(p, 'coin', a, p.x + Math.cos(a) * p.r, p.y + Math.sin(a) * p.r);
+      this.bullets[this.bullets.length - 1].dmg = dmg;
+    }
+
+    // A parcel flies in an arc to a point up to dist ahead (stopping short of walls) and blows up there.
+    throwParcel(p, a, dist, r, dmg) {
+      let d = dist;
+      while (d > 40 && this.losBlocked(p.x, p.y, p.x + Math.cos(a) * d, p.y + Math.sin(a) * d)) d -= 40;
+      this.bombs.push({ id: this.nextId++, owner: p.id, x0: p.x, y0: p.y, x1: p.x + Math.cos(a) * d, y1: p.y + Math.sin(a) * d, t: 0, T: 0.6, r, dmg });
+    }
+
+    // Kitchen gadgets: three uses a match, D.GADGET_CD seconds apart.
+    useGadget(p) {
+      if (!p.alive || p.veh || !p.gadget) return;
+      if (p.gUses <= 0 || p.gCool > 0) {
+        this.toPlayer(p, 'gadgetWait');
+        return;
+      }
+      p.gUses--;
+      p.gCool = D.GADGET_CD;
+      const g = p.gadget;
+      this.ev({ e: 'gadget', i: p.id, g, x: p.x, y: p.y });
+      const near = R => this.players.filter(q => q.alive && !q.veh && this.enemies(p, q) && Math.hypot(q.x - p.x, q.y - p.y) < R + q.r);
+      const away = (q, f) => {
+        const d = Math.max(1, Math.hypot(q.x - p.x, q.y - p.y));
+        this.knock(q, ((q.x - p.x) / d) * f, ((q.y - p.y) / d) * f);
+      };
+      if (g === 'chili') {
+        for (const q of near(170)) this.burn(q, 10, 3, p.id);
+      } else if (g === 'taste') {
+        this.heal(p, 40);
+        this.ev({ e: 'heal', i: p.id, x: p.x, y: p.y });
+      } else if (g === 'guard') {
+        p.guardT = this.time + 3;
+      } else if (g === 'second') {
+        p.skillCool *= 0.5;
+      } else if (g === 'mine') {
+        this.mines.push({ id: this.nextId++, owner: p.id, team: p.team, x: p.x, y: p.y, arm: this.time + 0.8 });
+        const mine = this.mines.filter(m => m.owner === p.id);
+        if (mine.length > 3) this.mines.splice(this.mines.indexOf(mine[0]), 1);
+      } else if (g === 'overclock') {
+        p.clockUntil = this.time + 12;
+        for (const t of this.turrets) if (t.owner === p.id) t.fast = true;
+      } else if (g === 'pearls') {
+        for (const q of near(190)) this.chill(q, 3, 0.55);
+      } else if (g === 'sugar') {
+        p.stamina = 100;
+        p.boostT = Math.max(p.boostT, 2.5);
+      } else if (g === 'swerve') {
+        const ml = Math.hypot(p.input.mx, p.input.my);
+        p.jx = ml > 0.1 ? p.input.mx / ml : Math.cos(p.a);
+        p.jy = ml > 0.1 ? p.input.my / ml : Math.sin(p.a);
+        p.jumpT = 0.42;
+      } else if (g === 'extra') {
+        this.spawnItem(p.x + 34, p.y, 'soup');
+        this.spawnItem(p.x - 34, p.y, 'bao');
+      } else if (g === 'soap') {
+        for (const q of near(200)) away(q, 680);
+      } else if (g === 'rinse') {
+        p.burnT = 0;
+        p.slowT = 0;
+        this.heal(p, 25);
+        this.ev({ e: 'heal', i: p.id, x: p.x, y: p.y });
+      } else if (g === 'refund') {
+        for (const sl of p.slots) if (sl && isGun(sl.t)) sl.m = D.WEAPONS[sl.t].mag;
+        p.reload = null;
+      } else if (g === 'rain') {
+        for (let k = 0; k < 12; k++) this.coin(p, (k / 12) * TAU, 15);
+      } else if (g === 'nova') {
+        for (const q of near(170)) {
+          this.chill(q, 1, 0.05);
+          this.damagePlayer(q, 10, p.id, 'freeze');
+        }
+      } else if (g === 'icepack') {
+        p.burnT = 0;
+        this.heal(p, 30);
         this.ev({ e: 'heal', i: p.id, x: p.x, y: p.y });
       }
+    }
+
+    // Wok Overdrive: needs level 8 and a full meter.
+    startOverdrive(p) {
+      if (!p.alive || !p.odOk || p.od < 1 || p.odT > 0) {
+        if (!p.bot) this.toPlayer(p, 'odWait');
+        return;
+      }
+      p.odT = D.OVERDRIVE.time;
+      p.od = 0;
+      p.skillCool = 0;
+      this.ev({ e: 'overdrive', i: p.id, x: p.x, y: p.y, g: 1 });
+    }
+
+    updateGadgets(dt) {
+      for (let i = this.bombs.length - 1; i >= 0; i--) {
+        const b = this.bombs[i];
+        b.t += dt;
+        if (b.t < b.T) continue;
+        this.bombs.splice(i, 1);
+        this.explode(b.x1, b.y1, b.r, b.dmg, b.owner, b.owner);
+      }
+      for (let i = this.mines.length - 1; i >= 0; i--) {
+        const m = this.mines[i];
+        if (this.time < m.arm) continue;
+        const owner = this.playerMap.get(m.owner);
+        const hit = this.players.some(q => q.alive && !q.veh && (owner ? this.enemies(owner, q) : true) && q.id !== m.owner && Math.hypot(q.x - m.x, q.y - m.y) < 60 + q.r);
+        if (!hit) continue;
+        this.mines.splice(i, 1);
+        this.explode(m.x, m.y, 120, 70, m.owner, m.owner);
+      }
+    }
+
+    // Which gadgets and perks a character may use at a level; anything else is dropped.
+    loadout(char, level, gadget, perk) {
+      return D.validLoadout(char, level, gadget, perk);
+    }
+
+    // A random but legal loadout, for bots and story allies.
+    randomLoadout(char, level) {
+      const pick = tbl => {
+        const ids = Object.keys(tbl).filter(k => tbl[k].char === char);
+        return ids[Math.floor(this.rng() * ids.length)] || '';
+      };
+      return this.loadout(char, level, pick(D.GADGETS), pick(D.PERKS));
     }
 
     burn(q, dps, t, src) {
@@ -3782,6 +4295,12 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
           break;
         case 'heal':
           this.drinkSoup(p);
+          break;
+        case 'gadget':
+          this.useGadget(p);
+          break;
+        case 'overdrive':
+          this.startOverdrive(p);
           break;
       }
     }
@@ -3841,7 +4360,7 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
     }
 
     knock(p, ix, iy) {
-      const m = this.massOf(p);
+      const m = this.massOf(p) * (p.char === 'bubbles' ? 2 : 1);
       p.kx += ix / m;
       p.ky += iy / m;
     }
@@ -3928,6 +4447,10 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
       p.jumpCool = Math.max(0, p.jumpCool - dt);
       p.skillCool = Math.max(0, p.skillCool - dt);
       p.boostT = Math.max(0, p.boostT - dt);
+      p.gCool = Math.max(0, p.gCool - dt);
+      p.odT = Math.max(0, p.odT - dt);
+      p.bubT = Math.max(0, p.bubT - dt);
+      if (p.bubT <= 0) p.bubHp = 0;
       p.slowT = Math.max(0, p.slowT - dt);
 
       if (!p.veh) {
@@ -3943,11 +4466,13 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
         if (isGun(t)) speed *= D.WEAPONS[t].move;
         if (p.inject) speed *= 0.5;
         if (p.boostT > 0) speed *= 1.35;
-        if (p.slowT > 0) speed *= p.slowMul;
+        if (p.slowT > 0 && p.char !== 'bing') speed *= p.slowMul;
+        if (p.odT > 0) speed *= D.OVERDRIVE.speed;
+        if (p.perk === 'feather') speed *= 1.08;
         const sprinting = inp.sprint && ml > 0.1 && p.stamina > 0 && !p.inject;
         if (sprinting) {
           speed *= D.SPRINT_MUL;
-          p.stamina = Math.max(0, p.stamina - D.STAMINA_DRAIN * dt);
+          p.stamina = Math.max(0, p.stamina - D.STAMINA_DRAIN * (p.char === 'afeng' ? 0.7 : 1) * dt);
           p.sprintT = this.time;
         } else if (this.time - p.sprintT > 0.8) {
           p.stamina = Math.min(100, p.stamina + D.STAMINA_REGEN * (p.char === 'meibao' ? 1.5 : 1) * dt);
@@ -4032,7 +4557,8 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
         if (Math.hypot(q.x - p.x, q.y - p.y) > p.r + q.r + 10) continue;
         p.rushHit.add(q.id);
         this.knock(q, p.rx * 520, p.ry * 520);
-        this.damagePlayer(q, 45, p.id, 'rush');
+        this.damagePlayer(q, p.rushDmg || 45, p.id, 'rush');
+        if (p.perk === 'haymaker') this.chill(q, 1.5, 0.6);
         this.ev({ e: 'hit', x: q.x, y: q.y, ty: 'p', by: p.id, w: 'fists' });
       }
     }
@@ -4053,7 +4579,7 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
         return;
       }
       p.reload = null;
-      p.inject = { t: 0, total: D.ITEMS.soup.time };
+      p.inject = { t: 0, total: D.ITEMS.soup.time * (p.perk === 'slurp' ? 0.5 : 1) };
     }
 
     spawnBullet(p, wid, ang, x, y) {
@@ -4153,6 +4679,20 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
       if (att && att !== p && !this.enemies(att, p)) return;
       if (att && att.kind !== 'player' && p.team === 1) amt *= D.BOT_SKILL[this.difficulty].foeDmg;
       else if (att && att.bot && !p.bot && this.mode === 'royale') amt *= D.BOT_SKILL[this.difficulty].botDmg * (this.teamMode === 'coop' ? D.COOP_BOT_DMG : 1);
+      // Character level, Wok Overdrive and the Brittle perk raise damage dealt; Overdrive, the mouthguard and
+      // Master Bing's cold blood lower damage taken; a bubble soaks up what is left first.
+      if (att && att !== p && att.kind === 'player') amt *= att.dmgMul * (att.odT > 0 ? D.OVERDRIVE.dmg : 1) * (att.perk === 'brittle' && p.slowT > 0 ? 1.25 : 1);
+      if (p.odT > 0) amt *= D.OVERDRIVE.taken;
+      if (p.guardT > this.time) amt *= 0.4;
+      if (cause === 'zone' && p.char === 'bing') amt *= 0.7;
+      if (p.bubT > 0 && p.bubHp > 0) {
+        const soak = Math.min(p.bubHp, amt);
+        p.bubHp -= soak;
+        amt -= soak;
+        if (p.bubHp <= 0) this.ev({ e: 'pop', x: p.x, y: p.y });
+        if (amt <= 0) return;
+      }
+      if (att && att !== p && att.odOk && att.odT <= 0) att.od = Math.min(1, att.od + amt / D.OVERDRIVE.need);
       p.hp -= amt;
       p.hitT = this.time;
       if (p.inject && cause !== 'zone' && cause !== 'burn') p.inject = null;
@@ -4189,6 +4729,8 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
       const killer = src ? this.playerMap.get(src) : null;
       if (killer && killer !== p) {
         killer.kills++;
+        if (killer.perk === 'tip') this.heal(killer, 25);
+        if (killer.char === 'jinjin' && killer !== p) this.dropNear(p, 'bao');
         killer.streak = this.time - killer.streakT < 4 ? killer.streak + 1 : 1;
         killer.streakT = this.time;
         if (killer.streak >= 2) this.ev({ e: 'streak', to: killer.id, n: killer.streak });
@@ -4289,10 +4831,10 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
       this.explode(v.x, v.y, 220, 85, src);
     }
 
-    explode(x, y, radius, dmg, src) {
+    explode(x, y, radius, dmg, src, spare) {
       this.ev({ e: 'exp', x, y, r: radius });
       for (const p of this.players) {
-        if (!p.alive || p.veh) continue;
+        if (!p.alive || p.veh || (spare && p.id === spare)) continue;
         const d = Math.hypot(p.x - x, p.y - y);
         if (d > radius + p.r) continue;
         let f = 1 - Math.max(0, d - p.r) / radius;
@@ -4313,7 +4855,7 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
 
     // ---------- story ----------
 
-    startStory(name, char) {
+    startStory(name, char, lo) {
       const ch = this.chapter;
       const S = this.size;
       let hx = S / 2;
@@ -4329,7 +4871,8 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
         hx = sp[0];
         hy = sp[1];
       }
-      const heroId = this.addPlayer(name, false, { char, team: 1, x: hx, y: hy });
+      const heroLo = lo || {};
+      const heroId = this.addPlayer(name, false, { char, team: 1, x: hx, y: hy, level: heroLo.level, gadget: heroLo.gadget, perk: heroLo.perk });
       this.hero = this.playerMap.get(heroId);
       this.hero.skillCool = 0;
       this.story = { def: ch, goal: ch.goal, killed: 0, collected: 0, tl: ch.goal.time || 0, waveIdx: 0, waveT: ch.waves ? ch.waves.first || 6 : 0, boxes: [] };
@@ -4357,10 +4900,11 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
         for (const b of boxes) this.spawnItem(b[0], b[1], 'coldbox');
         this.story.boxes = boxes;
       }
-      const allyChars = D.CHAR_IDS.filter(c => c !== char);
+      const allyChars = D.CORE_IDS.filter(c => c !== char);
       for (let i = 0; i < (ch.allies || 0) && i < allyChars.length; i++) {
         const sp = this.findSpot(hx, hy, 60, 140, PR);
-        this.addPlayer('', true, { char: allyChars[i], team: 1, ally: true, weapon: ALLY_WEAPONS[allyChars[i]], x: sp[0], y: sp[1], follow: heroId, hunt: 0 });
+        const alo = this.randomLoadout(allyChars[i], this.hero.lvl);
+        this.addPlayer('', true, { char: allyChars[i], team: 1, ally: true, weapon: ALLY_WEAPONS[allyChars[i]], x: sp[0], y: sp[1], follow: heroId, hunt: 0, level: alo.level, gadget: alo.gadget, perk: alo.perk });
       }
       for (const grp of ch.enemies || []) {
         for (let i = 0; i < grp.n; i++) {
@@ -4461,6 +5005,7 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
       this.updateBullets(dt);
       this.updateSecrets(dt);
       this.updateRespawns();
+      this.updateGadgets(dt);
       this.updateStory(dt);
     }
 
@@ -4591,8 +5136,9 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
         const want = Math.atan2(best.y - t.y, best.x - t.x);
         t.a += clamp(angleDiff(t.a, want), -8 * dt, 8 * dt);
         if (t.cool <= 0 && Math.abs(angleDiff(t.a, want)) < 0.2) {
-          t.cool = 0.28 * (P ? 1 + P.react : 1);
+          t.cool = 0.28 * (P ? 1 + P.react : 1) * (t.fast ? 0.5 : 1);
           this.spawnBullet(owner, 'turret', t.a + (this.rng() - 0.5) * (0.06 + (P ? P.aimNoise * 2 : 0)), t.x + Math.cos(t.a) * 20, t.y + Math.sin(t.a) * 20);
+          if (t.ap) this.bullets[this.bullets.length - 1].dmg *= 1.4;
           this.ev({ e: 'shot', i: 0, x: t.x, y: t.y, a: t.a, w: 'turret' });
         }
       }
@@ -4617,9 +5163,11 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
         const fy = Math.sin(v.a);
         let vf = v.vx * fx + v.vy * fy;
         let vr = -v.vx * fy + v.vy * fx;
-        if (thr > 0.05) vf += (vf < -20 ? V.brake : V.accel * thr) * dt;
+        // Afeng drives 20% faster: more engine force against the same drag curve scaled to the higher top speed.
+        const rider = drv && drv.char === 'afeng' ? 1.2 : 1;
+        if (thr > 0.05) vf += (vf < -20 ? V.brake : V.accel * rider * thr) * dt;
         else if (thr < -0.05) vf += (vf > 20 ? -V.brake : V.accel * 0.6 * thr) * dt;
-        vf -= (V.accel / (V.max * V.max)) * vf * Math.abs(vf) * dt;
+        vf -= ((V.accel * rider) / (V.max * rider * V.max * rider)) * vf * Math.abs(vf) * dt;
         const roll = (Math.abs(thr) > 0.05 ? 30 : 170) * dt;
         vf -= Math.sign(vf) * Math.min(Math.abs(vf), roll);
         if (handbrake) vf -= Math.sign(vf) * Math.min(Math.abs(vf), V.brake * 0.8 * dt);
@@ -5000,7 +5548,19 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
           p.actions.push({ a: 'skill' });
         } else if (sk === 'turret' && tgt && ai.los && tdist < 600) p.actions.push({ a: 'skill' });
         else if (sk === 'boba' && (p.hp < p.maxHp * 0.6 || (tgt && tdist > 300 && tdist < 700))) p.actions.push({ a: 'skill' });
+        else if ((sk === 'parcel' || sk === 'coins') && tgt && ai.los && tdist > 120 && tdist < (sk === 'parcel' ? 420 : 380)) {
+          p.a = Math.atan2(tgt.y - p.y, tgt.x - p.x);
+          p.input.aim = p.a;
+          p.input.ad = tdist;
+          p.actions.push({ a: 'skill' });
+        } else if (sk === 'bubble' && (p.hp < p.maxHp * 0.7 || (tgt && tdist < 300))) p.actions.push({ a: 'skill' });
+        else if (sk === 'freeze' && tgt && tdist < 180) p.actions.push({ a: 'skill' });
       }
+      if (p.gadget && p.gUses > 0 && p.gCool <= 0 && tgt && tdist < 260 && this.rng() < 0.25 && !(this.mode === 'royale' && this.time < 20)) {
+        const healer = p.gadget === 'taste' || p.gadget === 'rinse' || p.gadget === 'icepack' || p.gadget === 'extra';
+        if (!healer || p.hp < p.maxHp * 0.55) p.actions.push({ a: 'gadget' });
+      }
+      if (p.odOk && p.od >= 1 && tgt && tdist < 500) p.actions.push({ a: 'overdrive' });
       if (p.kind === 'boss') {
         p.specialT -= P.react;
         if (p.specialT <= 0 && tgt && tdist < 500) {
@@ -5405,6 +5965,14 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
         tm: p.team,
         rsp: Math.round(this.respawnLeft(p) * 10) / 10,
         sh: p.shieldT > this.time ? 1 : 0,
+        lv: p.lvl,
+        gd: p.gadget,
+        gu: p.gUses,
+        gc: Math.round((p.gCool / D.GADGET_CD) * 100) / 100,
+        pk: p.perk,
+        odOk: p.odOk ? 1 : 0,
+        od: Math.round(p.od * 100) / 100,
+        odT: Math.round(p.odT * 10) / 10,
         pr: full ? this.promptFor(p) : null
       };
     }
@@ -5442,6 +6010,10 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
           sw: q.swingT > 0 ? Math.round((q.swingT / 0.22) * q.swingSide * 100) / 100 : 0,
           jz: q.jumpT > 0 ? Math.round(Math.sin((1 - q.jumpT / D.JUMP_TIME) * Math.PI) * 100) / 100 : 0,
           rs: q.rushT > 0 ? 1 : 0,
+          lv: q.kind === 'player' ? q.lvl : 0,
+          od: q.odT > 0 ? 1 : 0,
+          bb: q.bubT > 0 && q.bubHp > 0 ? 1 : 0,
+          gd: q.guardT > this.time ? 1 : 0,
           fx: (q.burnT > 0 ? 1 : 0) | (q.slowT > 0 ? 2 : 0) | (q.boostT > 0 ? 4 : 0),
           hp: q.kind !== 'player' || q.team !== 0 ? Math.round((q.hp / q.maxHp) * 100) / 100 : -1,
           hit: this.time - q.hitT < 0.12 ? 1 : 0,
@@ -5457,6 +6029,17 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
       const tu = [];
       for (const t of this.turrets) {
         if (inView(t.x, t.y, 60)) tu.push({ i: t.id, x: r1(t.x), y: r1(t.y), a: Math.round(t.a * 100) / 100, tm: t.team, lf: Math.round(t.life * 10) / 10 });
+      }
+      const bo = [];
+      for (const b of this.bombs) {
+        const f = b.t / b.T;
+        const x = b.x0 + (b.x1 - b.x0) * f;
+        const y = b.y0 + (b.y1 - b.y0) * f;
+        if (inView(x, y, 200)) bo.push({ i: b.id, x: r1(x), y: r1(y), z: Math.round(Math.sin(f * Math.PI) * 130), r: Math.round(b.r) });
+      }
+      const mi = [];
+      for (const m of this.mines) {
+        if (inView(m.x, m.y, 40)) mi.push({ i: m.id, x: r1(m.x), y: r1(m.y), tm: m.team, o: m.owner, arm: this.time >= m.arm ? 1 : 0 });
       }
       const it = [];
       for (const t of this.itemGrid.query(x0 - 30, y0 - 30, x1 + 30, y1 + 30, [])) {
@@ -5502,6 +6085,8 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
         pl,
         bu,
         tu,
+        bo,
+        mi,
         it,
         sx,
         ve,
@@ -6189,6 +6774,8 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
   const FONT = "'Trebuchet MS', 'Microsoft JhengHei', 'PingFang TC', 'Noto Sans TC', 'WenQuanYi Zen Hei', 'Heiti TC', sans-serif";
   const OUT = '#2b2a28';
   const CANOPY = 1.8;
+  // Semi-3D view: how much north-south ground distances shrink when seen at the camera's angle.
+  const TILT = 0.68;
 
   function hash(n) {
     n = (n ^ 61) ^ (n >>> 16);
@@ -6285,7 +6872,10 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
     return t;
   }
 
-  const PACK_COL = { yunwang: '#8a5a30', luap: '#3a3a3a', auhsoj: '#4a6b8a', meibao: '#e56f9f' };
+  const PACK_COL = { yunwang: '#8a5a30', luap: '#3a3a3a', auhsoj: '#4a6b8a', meibao: '#e56f9f', bubbles: '#4fa3c7', jinjin: '#c99a1a', bing: '#5d7f9a' };
+  // Trouser colour for the standing figures in the 3D view.
+  const PANTS = { yunwang: '#3a3a3a', luap: '#222222', auhsoj: '#3c4a5c', meibao: '#5b3a6e', afeng: '#2b4a3a', bubbles: '#3b5f7a', jinjin: '#4a3a2a', bing: '#55606b', thug: '#3a3a50', elite: '#1f1f1f', boss: '#1f2f4f' };
+  const SHIRT = { yunwang: '#ffffff', luap: '#d63a32', auhsoj: '#5c6b7a', meibao: '#ff9cc6', afeng: '#2fa36b', bubbles: '#7fd0e8', jinjin: '#f4c430', bing: '#d9ecf7', thug: '#ffffff', elite: '#2a2f3a', boss: '#1f2f4f' };
   const CAR_COL = ['#e0574a', '#4a8fe0', '#f0c043', '#5cc08a'];
   const BIKE_COL = ['#e07a2e', '#c43d7a', '#4f6fd0', '#2f2f2f'];
   const CONTAINER_COL = ['#c2563f', '#3f78b5', '#3f9a6b', '#d1932f', '#7c5aa6'];
@@ -6413,6 +7003,7 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
       this.flash.clear();
       this.roofAlpha.clear();
       this.rockCache.clear();
+      this.walk = new Map();
       this.zoom = 0;
       this.mini = this.renderMiniMap(map, 512);
     }
@@ -6539,6 +7130,13 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
             this.addParticles(e.x, e.y, 8, '#4a3020', 100, 0.6, 4);
           } else if (e.s === 'turret') {
             this.addParticles(e.x, e.y, 8, '#7fd3ff', 120, 0.5, 4);
+          } else if (e.s === 'freeze') {
+            this.rings.push({ x: e.x, y: e.y, r: e.od ? 266 : 190, t: this.time, col: '#bfe8ff', life: 0.7 });
+            this.addParticles(e.x, e.y, 26, '#e8f7ff', 260, 0.9, 6);
+          } else if (e.s === 'bubble') {
+            this.rings.push({ x: e.x, y: e.y, r: 200, t: this.time, col: '#7fd0e8', life: 0.6 });
+          } else if (e.s === 'coins') {
+            this.addParticles(e.x, e.y, 8, '#f4c430', 160, 0.4, 4);
           } else if (e.s === 'salt') {
             this.addParticles(e.x, e.y, 18, '#ffffff', 300, 0.5, 4);
           }
@@ -6547,6 +7145,18 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
           for (let i = 0; i < 4; i++) {
             this.particles.push({ x: e.x + (Math.random() - 0.5) * 24, y: e.y - 16, vx: (Math.random() - 0.5) * 40, vy: -60 - Math.random() * 40, life: 1.4, max: 1.4, size: 8 + Math.random() * 4, color: '#ff6f9f', kind: 5, rot: 0, vr: 0 });
           }
+          break;
+        case 'gadget':
+          this.rings.push({ x: e.x, y: e.y, r: 120, t: this.time, col: '#5fd36b', life: 0.45 });
+          this.addParticles(e.x, e.y, 10, '#b9f5a0', 160, 0.5, 5);
+          break;
+        case 'overdrive':
+          this.rings.push({ x: e.x, y: e.y, r: 170, t: this.time, col: '#b46bff', life: 0.7 });
+          this.addParticles(e.x, e.y, 22, '#d9b0ff', 260, 0.8, 6);
+          if (e.i === myId) this.banner(I.t('odLabel').replace(/[（(].*/, '') + '！', '#d9b0ff');
+          break;
+        case 'pop':
+          this.addParticles(e.x, e.y, 12, '#c9f0ff', 200, 0.5, 5);
           break;
         case 'respawn':
           this.rings.push({ x: e.x, y: e.y, r: 90, t: this.time, col: '#8fe07a', life: 0.6 });
@@ -6614,6 +7224,10 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
     }
 
     draw(view, ui, dt) {
+      if (this.mode3d) {
+        this.draw3D(view, ui, dt);
+        return;
+      }
       this.time += dt;
       const ctx = this.ctx;
       const map = this.map;
@@ -6670,6 +7284,7 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
       for (const it of view.it) {
         if (vis(it.x, it.y, 40)) this.drawGroundItem(ctx, it);
       }
+      for (const m of view.mi || []) this.drawMine(ctx, m, m.o === view.you || (this.myTeam && m.tm === this.myTeam));
       const obs = [];
       for (const o of map.obstacles) {
         if (o.dead) continue;
@@ -6719,7 +7334,17 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
         const aim = p.i === view.you && ui.aim != null ? ui.aim : p.a;
         this.drawPlayer(ctx, p, aim);
       }
+      for (const p of view.pl) {
+        if (!p.d && !p.veh && (p.od || p.bb || p.gd)) this.drawAuras(ctx, p, p.x, p.y, p.r || PR);
+      }
       this.drawBullets(ctx, view.bu);
+      for (const b of view.bo || []) {
+        ctx.fillStyle = 'rgba(0,0,0,0.2)';
+        ctx.beginPath();
+        ctx.ellipse(b.x, b.y, 14, 9, 0, 0, TAU);
+        ctx.fill();
+        this.drawParcel(ctx, b.x, b.y - b.z, 1 + b.z / 260);
+      }
       this.drawRings(ctx);
       this.drawParticles(ctx, vis, false);
       for (const o of obs) {
@@ -7886,6 +8511,44 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
 
     // Draws a character's head gear in local coords where +x is the facing direction.
     drawHeadgear(ctx, ch, R) {
+      if (ch === 'afeng') {
+        circle(ctx, 0, 0, R * 0.92);
+        fillStroke(ctx, '#f2a33a', 3.5);
+        ctx.beginPath();
+        ctx.arc(0, 0, R * 0.78, -0.7, 0.7);
+        ctx.strokeStyle = '#2b4a6a';
+        ctx.lineWidth = 7;
+        ctx.stroke();
+        return;
+      }
+      if (ch === 'bubbles') {
+        for (const [bx, by, br] of [[-6, -6, 0.32], [-2, 7, 0.26], [-11, 3, 0.22]]) {
+          circle(ctx, bx, by, R * br);
+          ctx.fillStyle = 'rgba(190,235,255,0.8)';
+          ctx.fill();
+          ctx.strokeStyle = '#4fa3c7';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        }
+        return;
+      }
+      if (ch === 'jinjin') {
+        ctx.beginPath();
+        ctx.arc(0, 0, R - 3, -1.2, 1.2);
+        ctx.strokeStyle = '#3aa067';
+        ctx.lineWidth = 7;
+        ctx.stroke();
+        return;
+      }
+      if (ch === 'bing') {
+        circle(ctx, -2, 0, R * 0.8);
+        fillStroke(ctx, '#8a6a4a', 3);
+        circle(ctx, -2, 0, R * 0.8);
+        ctx.strokeStyle = '#f4f4f4';
+        ctx.lineWidth = 5;
+        ctx.stroke();
+        return;
+      }
       if (ch === 'yunwang') {
         ctx.beginPath();
         ctx.arc(-R * 0.1, 0, R * 0.98, Math.PI * 0.62, Math.PI * 1.38);
@@ -7975,6 +8638,7 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
       if (ch === 'yunwang') col = '#ffffff';
       else if (ch === 'meibao') col = '#ff9cc6';
       else if (ch === 'auhsoj') col = '#5c6b7a';
+      else if (D.CHARS[ch] && SHIRT[ch]) col = SHIRT[ch];
       else if (ch === 'elite') col = '#2a2f3a';
       if (ch === 'thug') {
         for (let i = 0; i < 10; i++) {
@@ -8046,6 +8710,11 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
         fillStroke(ctx, '#f0c043', 4);
         ctx.fillStyle = '#c9533f';
         ctx.fillRect(-PR - 9, -3, 18, 6);
+      } else if (ch === 'afeng') {
+        roundRect(ctx, -PR - 14, -20, 28, 40, 5);
+        fillStroke(ctx, '#f2a33a', 4);
+        ctx.fillStyle = '#c97f1f';
+        ctx.fillRect(-PR - 14, -3, 28, 6);
       } else if (PACK_COL[ch]) {
         roundRect(ctx, -PR - 7, -14, 17, 28, 6);
         fillStroke(ctx, PACK_COL[ch], 4);
@@ -8269,6 +8938,12 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
           this.drawBowl(ctx, b.x, b.y, 1.2, this.time * 20);
           continue;
         }
+        if (b.w === 'coin') {
+          ctx.beginPath();
+          ctx.ellipse(b.x, b.y, 7, 7 * Math.abs(Math.sin(this.time * 18 + b.i)) + 1.5, 0, 0, TAU);
+          fillStroke(ctx, '#f4c430', 2);
+          continue;
+        }
         if (b.w === 'harpoon') {
           ctx.save();
           ctx.translate(b.x, b.y);
@@ -8421,7 +9096,7 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
         const foe = view.mode === 'story' ? p.tm === 2 : this.myTeam !== 0 && p.tm !== 0 && p.tm !== this.myTeam;
         if (p.hp >= 0 && (foe || ally) && (p.hp < 1 || p.ch === 'boss' || ally)) this.bar(ctx, p.x, p.y + R + 10, R * 2.2, p.hp, foe ? '#e8453b' : '#7ad35e');
         const enemyCol = this.tmode === 'teams' ? (p.tm === 1 ? '#ffa294' : '#a8cfff') : '#ffffff';
-        if (p.hu || ally) this.outlinedText(ctx, nameOf(p), p.x, p.y - R - 14, Math.max(16, 11 / (this.zoom || 1)), ally ? '#b8f5a0' : enemyCol);
+        if (p.hu || ally) this.outlinedText(ctx, (p.lv ? 'Lv' + p.lv + ' ' : '') + nameOf(p), p.x, p.y - R - 14, Math.max(16, 11 / (this.zoom || 1)), ally ? '#b8f5a0' : enemyCol);
       }
     }
 
@@ -8434,6 +9109,522 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
       ctx.globalAlpha = 1;
     }
 
+    // ---------- semi-3D view ----------
+
+    // The camera looks down at an angle: north-south ground distances shrink by TILT, and anything with
+    // height rises straight up the screen from the spot it stands on. Raised things are drawn back to front.
+    // In "upright" space a ground point (x, y) sits at (x, y * TILT) and height goes up the screen.
+
+    viewOffsetY() {
+      return this.mode3d ? this.H * 0.05 : 0;
+    }
+
+    // World aim angle for a screen point, from the player's feet at the centre of the view.
+    aimAt(sx, sy) {
+      if (!this.mode3d) return Math.atan2(sy - this.H / 2, sx - this.W / 2);
+      return Math.atan2((sy - (this.H / 2 + this.viewOffsetY())) / TILT, sx - this.W / 2);
+    }
+
+    // World distance from the player's feet to a screen point.
+    aimDist(sx, sy) {
+      const z = this.zoom || 1;
+      const dx = (sx - this.W / 2) / z;
+      const dy = this.mode3d ? (sy - (this.H / 2 + this.viewOffsetY())) / (z * TILT) : (sy - this.H / 2) / z;
+      return Math.hypot(dx, dy);
+    }
+
+    // World direction for a drag on screen (touch aim stick).
+    screenDir(dx, dy) {
+      return Math.atan2(this.mode3d ? dy / TILT : dy, dx);
+    }
+
+    roofHeight(b) {
+      if (b.type === 'restaurant') return 84;
+      if (b.type === 'stall') return 50;
+      return b.weak ? 62 : 70;
+    }
+
+    // Draws fn's top-down art on a flat plane lifted h above the ground (current transform: upright).
+    plane3D(ctx, h, fn) {
+      ctx.save();
+      ctx.translate(0, -h);
+      ctx.scale(1, TILT);
+      fn();
+      ctx.restore();
+    }
+
+    // Draws fn's art (made for flat world coordinates) standing at its ground spot, unsquashed.
+    stand3D(ctx, y, lift, fn) {
+      ctx.save();
+      ctx.translate(0, y * TILT - y - lift);
+      fn();
+      ctx.restore();
+    }
+
+    // A box on a rectangular footprint: darker front face, lit top.
+    prism3D(ctx, o, h, top, front, alpha, planks) {
+      const fy = (o.y + o.hh) * TILT;
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.beginPath();
+      ctx.rect(o.x - o.hw, fy - h, o.hw * 2, h);
+      fillStroke(ctx, front, 3);
+      ctx.strokeStyle = 'rgba(0,0,0,0.18)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      if (planks) {
+        for (let xx = o.x - o.hw + 16; xx < o.x + o.hw - 4; xx += 16) {
+          ctx.moveTo(xx, fy - h + 2);
+          ctx.lineTo(xx, fy - 2);
+        }
+      } else {
+        ctx.moveTo(o.x - o.hw + 3, fy - h * 0.5);
+        ctx.lineTo(o.x + o.hw - 3, fy - h * 0.5);
+      }
+      ctx.stroke();
+      if (planks && o.mhp && o.hp < o.mhp * 0.7) {
+        ctx.strokeStyle = '#2b1a0e';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        const cracks = o.hp < o.mhp * 0.35 ? 4 : 2;
+        for (let i = 0; i < cracks; i++) {
+          const cx = o.x - o.hw + 10 + rnd(o.id * 7 + 1, i) * (o.hw * 2 - 20);
+          ctx.moveTo(cx - 6, fy - h + 6);
+          ctx.lineTo(cx + 4, fy - h * 0.5);
+          ctx.lineTo(cx - 3, fy - 6);
+        }
+        ctx.stroke();
+      }
+      this.plane3D(ctx, h, () => {
+        ctx.beginPath();
+        ctx.rect(o.x - o.hw, o.y - o.hh, o.hw * 2, o.hh * 2);
+        fillStroke(ctx, top, 3);
+      });
+      ctx.restore();
+    }
+
+    // Stacks a flat silhouette from the ground up to h for solid-looking irregular shapes.
+    extrude3D(ctx, h, path, col) {
+      const steps = Math.max(2, Math.round(h / 5));
+      for (let i = 0; i < steps; i++) {
+        this.plane3D(ctx, (h * i) / steps, () => {
+          path();
+          ctx.fillStyle = col;
+          ctx.fill();
+          if (i === 0) {
+            ctx.strokeStyle = OUT;
+            ctx.lineWidth = 3;
+            ctx.stroke();
+          }
+        });
+      }
+    }
+
+    // True when the watched player stands just behind (north of) something tall, so it should fade.
+    hides3D(x, y, halfW, frontY, h, cx, cy) {
+      return cy < frontY && cy > frontY - h / TILT - 60 && Math.abs(cx - x) < halfW + 30;
+    }
+
+    draw3DObstacle(ctx, o, cx, cy) {
+      const T = TILT;
+      if (o.k === 'wall' || o.k === 'plank') {
+        const b = o.b >= 0 ? this.map.buildings[o.b] : null;
+        const h = b ? this.roofHeight(b) : 60;
+        const rest = b && b.type === 'restaurant';
+        const top = o.k === 'plank' ? '#c0915e' : rest ? '#b04437' : '#a8917a';
+        const front = o.k === 'plank' ? '#a87a4a' : rest ? '#7a231d' : '#6e5a48';
+        const fade = this.hides3D(o.x, o.y, o.hw, o.y + o.hh, h, cx, cy) ? 0.45 : 1;
+        this.prism3D(ctx, o, h, top, front, fade, o.k === 'plank');
+      } else if (o.k === 'crate') {
+        const k = o.mhp ? 0.72 + 0.28 * clamp(o.hp / o.mhp, 0, 1) : 1;
+        const q = { x: o.x, y: o.y, hw: o.hw * k, hh: o.hh * k, id: o.id };
+        const h = q.hw * 1.5;
+        this.prism3D(ctx, q, h, '#d49a4a', '#a8732f', 1, true);
+        this.plane3D(ctx, h, () => {
+          ctx.strokeStyle = '#a8732f';
+          ctx.lineWidth = 4;
+          ctx.strokeRect(q.x - q.hw + 7, q.y - q.hh + 7, q.hw * 2 - 14, q.hh * 2 - 14);
+        });
+        this.outlinedText(ctx, '?', q.x, (q.y + q.hh) * T - h * 0.25, Math.round(q.hw * 0.9), '#fff1c9');
+      } else if (o.k === 'container') {
+        const col = CONTAINER_COL[o.v % CONTAINER_COL.length];
+        const h = 74;
+        const fade = this.hides3D(o.x, o.y, o.hw, o.y + o.hh, h, cx, cy) ? 0.45 : 1;
+        this.prism3D(ctx, o, h, shade(col, 0.12), shade(col, -0.22), fade, true);
+      } else if (o.k === 'stove') {
+        this.prism3D(ctx, o, 34, '#55595c', '#3a3d40', 1, false);
+        this.plane3D(ctx, 34, () => this.drawStove(ctx, o));
+      } else if (o.k === 'table') {
+        ctx.fillStyle = '#5a3d22';
+        ctx.fillRect(o.x - 5, o.y * T - 24, 10, 24);
+        this.plane3D(ctx, 24, () => this.drawTable(ctx, o));
+      } else if (o.k === 'rock') {
+        const h = o.r * 0.8;
+        const pts = this.rockShape(o);
+        this.extrude3D(ctx, h, () => this.poly(ctx, pts, o.x, o.y, o.r), '#7f868b');
+        this.plane3D(ctx, h, () => this.drawRock(ctx, o));
+      } else if (o.k === 'tree') {
+        const trunk = 44;
+        const cr = o.r * 1.3;
+        const fade = Math.hypot(cx - o.x, cy - o.y) < cr * 1.5 && cy < o.y + o.r ? 0.45 : 1;
+        ctx.beginPath();
+        ctx.rect(o.x - 8, o.y * T - trunk, 16, trunk);
+        fillStroke(ctx, '#6b4a2b', 3);
+        this.drawCanopy(ctx, { x: o.x, y: o.y * T - trunk - cr * 0.55, r: cr / CANOPY, v: o.v }, fade);
+      } else if (o.k === 'bamboo') {
+        const fade = Math.hypot(cx - o.x, cy - o.y) < 70 && cy < o.y + 20 ? 0.45 : 1;
+        ctx.save();
+        ctx.globalAlpha = fade;
+        for (let i = 0; i < 3; i++) {
+          const bx = o.x + (i - 1) * 7;
+          const bh = 84 + rnd(o.v, i) * 18;
+          ctx.beginPath();
+          ctx.rect(bx - 3, o.y * T - bh, 6, bh);
+          fillStroke(ctx, '#7fb24a', 2);
+          ctx.fillStyle = '#5d8f33';
+          for (let yy = 20; yy < bh; yy += 22) ctx.fillRect(bx - 3, o.y * T - yy, 6, 2);
+        }
+        ctx.restore();
+        this.drawBambooLeaves(ctx, { x: o.x, y: o.y * T - 92, v: o.v }, fade);
+      } else if (o.k === 'bush') {
+        const inside = Math.hypot(cx - o.x, cy - o.y) < o.r + PR * 0.5;
+        this.plane3D(ctx, 6, () => this.drawBush(ctx, { x: o.x, y: o.y + 4, r: o.r, v: o.v + 1 }, inside ? 0.5 : 0.95));
+        this.plane3D(ctx, 26, () => this.drawBush(ctx, o, inside ? 0.5 : 1));
+      } else if (o.k === 'lantern') {
+        ctx.beginPath();
+        ctx.rect(o.x - 3, o.y * T - 58, 6, 58);
+        fillStroke(ctx, '#5a3a22', 2);
+        this.stand3D(ctx, o.y, 46, () => this.drawLanternTop(ctx, o));
+      } else if (o.k === 'board') {
+        for (const sx of [-1, 1]) {
+          ctx.beginPath();
+          ctx.rect(o.x + sx * (o.hw - 8) - 3, o.y * T - 36, 6, 36);
+          fillStroke(ctx, '#5a3a22', 2);
+        }
+        this.stand3D(ctx, o.y, -6, () => this.drawBoardTop(ctx, o));
+      }
+    }
+
+    // A standing character: shadow, legs, the portrait bust, weapon held at the aimed angle, effects.
+    drawFigure3D(ctx, p, aim, view) {
+      const T = TILT;
+      const R = p.r || PR;
+      const ch = p.ch;
+      const u = R / PR;
+      const lift = (p.jz || 0) * 34;
+      const gx = p.x;
+      const gy = p.y * T;
+      if (!this.walk) this.walk = new Map();
+      let w = this.walk.get(p.i);
+      if (!w) {
+        w = { x: p.x, y: p.y, ph: 0, sp: 0 };
+        this.walk.set(p.i, w);
+      }
+      const moved = Math.hypot(p.x - w.x, p.y - w.y);
+      if (moved < 60) {
+        w.ph += moved * 0.11;
+        w.sp = w.sp * 0.8 + moved * 0.2;
+      }
+      w.x = p.x;
+      w.y = p.y;
+      const walking = w.sp > 0.6;
+      const face = Math.cos(aim) < 0 ? -1 : 1;
+      const legH = 22 * u;
+      const hip = gy - lift - legH;
+      const k = 0.56 * u;
+      const sa = Math.atan2(Math.sin(aim) * T, Math.cos(aim));
+      if ((this.tmode === 'teams' && p.tm) || (this.tmode === 'coop' && p.tm === 1)) {
+        ctx.beginPath();
+        ctx.ellipse(gx, gy, R + 6, (R + 6) * T, 0, 0, TAU);
+        ctx.strokeStyle = this.tmode === 'coop' ? 'rgba(120,220,110,0.9)' : p.tm === 1 ? 'rgba(230,70,60,0.95)' : 'rgba(70,140,240,0.95)';
+        ctx.lineWidth = 4;
+        ctx.stroke();
+      }
+      if (p.fx & 2) {
+        ctx.beginPath();
+        ctx.ellipse(gx, gy, R + 2, (R + 2) * T, 0, 0, TAU);
+        ctx.strokeStyle = 'rgba(127,211,255,0.9)';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+      }
+      const legCol = PANTS[ch] || '#333333';
+      for (const side of [-1, 1]) {
+        const swing = walking ? Math.sin(w.ph + (side > 0 ? 0 : Math.PI)) * 5 * u : 0;
+        roundRect(ctx, gx + side * 8 * u - 6 * u + swing * face * 0.4, hip - 2, 12 * u, legH + 2 - Math.max(0, -swing) * 0.4, 4.5 * u);
+        fillStroke(ctx, legCol, 2.5);
+      }
+      const weaponFirst = Math.sin(aim) < -0.3;
+      const drawWeapon = () => this.figureWeapon(ctx, p, face, gx + face * 17 * u, hip - 31 * u, sa, u * 1.3);
+      if (weaponFirst) drawWeapon();
+      if (p.bp) {
+        roundRect(ctx, gx - face * 23 * u - 12 * u, hip - 52 * u, 24 * u, 31 * u, 6);
+        fillStroke(ctx, '#f0c043', 3);
+      }
+      ctx.save();
+      ctx.translate(gx, hip - 52 * k + 6 * u);
+      ctx.scale(k * face, k);
+      this.drawBust(ctx, ch);
+      ctx.restore();
+      if (p.hit) {
+        circle(ctx, gx, hip - 48 * k, 36 * k);
+        ctx.fillStyle = 'rgba(255,70,50,0.35)';
+        ctx.fill();
+      }
+      if (!weaponFirst) drawWeapon();
+      this.drawAuras(ctx, p, gx, hip - 34 * u, R * 1.3);
+      if (p.sh) {
+        circle(ctx, gx, hip - 34 * u, R * 1.3 + 16);
+        ctx.fillStyle = 'rgba(160,230,255,0.18)';
+        ctx.fill();
+      }
+      if (p.inj) this.drawItemIcon(ctx, 'soup', gx, hip - 106 * u, 0.9);
+      if ((p.fx & 1) && Math.random() < 0.5) this.addParticles(p.x + (Math.random() - 0.5) * R, p.y, 1, Math.random() < 0.5 ? '#ff8a2a' : '#ffd36b', 40, 0.5, 6, 3);
+      if (p.rs) {
+        ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+        ctx.lineWidth = 4;
+        for (const off of [-12, 0, 12]) {
+          ctx.beginPath();
+          ctx.moveTo(gx - Math.cos(sa) * (R + 6), hip - 34 * u + off - Math.sin(sa) * (R + 6));
+          ctx.lineTo(gx - Math.cos(sa) * (R + 50), hip - 34 * u + off - Math.sin(sa) * (R + 50));
+          ctx.stroke();
+        }
+      }
+    }
+
+    figureHeight(p) {
+      return 98 * ((p.r || PR) / PR) + (p.jz || 0) * 34;
+    }
+
+    // The held weapon, drawn with the existing side-on art, rotated to the on-screen aim angle.
+    figureWeapon(ctx, p, face, hx, hy, sa, u) {
+      const t = p.w;
+      const W = D.WEAPONS[t];
+      const skin = this.skinOf(p.ch);
+      const sw = p.sw || 0;
+      const prog = sw ? Math.sin((1 - Math.abs(sw)) * Math.PI) : 0;
+      ctx.save();
+      ctx.translate(hx, hy);
+      ctx.rotate(sa + (W && W.melee ? -prog * 1.2 * face : 0));
+      if (Math.cos(sa) < 0) ctx.scale(1, -1);
+      const sc = 0.75 * u;
+      if (W && !W.melee && !W.thrown && t !== 'turret') {
+        const recoil = this.flash.has(p.i) && this.time - this.flash.get(p.i) < 0.06 ? 3 : 0;
+        this.drawGun(ctx, t, -4 - recoil, 0, sc);
+      } else if (t === 'chopsticks') {
+        this.drawChopsticks(ctx, 4, 0, sc);
+      } else if (t === 'bowl') {
+        this.drawBowl(ctx, 6, 0, sc, 0);
+      } else if (W && W.melee && t !== 'fists') {
+        this.drawMelee(ctx, t, 2, 0, sc);
+      } else {
+        const punch = prog * 10;
+        circle(ctx, 6 + punch, 0, 6.5 * u);
+        fillStroke(ctx, p.ch === 'luap' ? '#d63a32' : skin, 2.5);
+      }
+      circle(ctx, 0, 0, 5 * u);
+      fillStroke(ctx, skin, 2.5);
+      ctx.restore();
+    }
+
+    drawVehicle3D(ctx, v, plMap) {
+      const V = D.VEHICLES[v.t];
+      const h = v.t === 'car' ? 30 : 20;
+      const L = V.len;
+      const Wd = V.wid;
+      this.extrude3D(ctx, h, () => {
+        ctx.save();
+        ctx.translate(v.x, v.y);
+        ctx.rotate(v.a);
+        roundRect(ctx, -L / 2, -Wd / 2, L, Wd, 12);
+        ctx.restore();
+      }, '#2f2f33');
+      this.plane3D(ctx, h, () => this.drawVehicle(ctx, v, plMap));
+    }
+
+    drawTags3D(ctx, view, hidden) {
+      const T = TILT;
+      for (const p of view.pl) {
+        if (p.d || p.veh || p.i === view.you || hidden.has(p.i)) continue;
+        const R = p.r || PR;
+        const ally = this.myTeam !== 0 && p.tm === this.myTeam;
+        const foe = view.mode === 'story' ? p.tm === 2 : this.myTeam !== 0 && p.tm !== 0 && p.tm !== this.myTeam;
+        const top = p.y * T - this.figureHeight(p);
+        if (p.hp >= 0 && (foe || ally) && (p.hp < 1 || p.ch === 'boss' || ally)) this.bar(ctx, p.x, top - 8, R * 2.2, p.hp, foe ? '#e8453b' : '#7ad35e');
+        const enemyCol = this.tmode === 'teams' ? (p.tm === 1 ? '#ffa294' : '#a8cfff') : '#ffffff';
+        if (p.hu || ally) this.outlinedText(ctx, (p.lv ? 'Lv' + p.lv + ' ' : '') + nameOf(p), p.x, top - 16, Math.max(15, 11 / (this.zoom || 1)), ally ? '#b8f5a0' : enemyCol);
+      }
+    }
+
+    draw3D(view, ui, dt) {
+      this.time += dt;
+      const ctx = this.ctx;
+      const map = this.map;
+      if (!map || !view) return;
+      this.updateParticles(dt);
+      const T = TILT;
+      // Zoomed in a little against the flat view, so the tilted view never shows past what the game sends.
+      const target = this.computeZoom(view.cveh) * 1.25;
+      this.zoom = this.zoom ? lerp(this.zoom, target, Math.min(1, dt * 4)) : target;
+      const z = this.zoom;
+      this.camX = view.cx;
+      this.camY = view.cy;
+      this.myTeam = view.me.tm || 0;
+      this.tmode = view.tmode || 'ffa';
+      this.shake = Math.max(0, this.shake - dt * 40);
+      const shx = (Math.random() - 0.5) * this.shake;
+      const shy = (Math.random() - 0.5) * this.shake;
+      const dpr = this.dpr;
+      const W = this.W;
+      const H = this.H;
+      const offY = this.viewOffsetY();
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.fillStyle = '#2f4a24';
+      ctx.fillRect(0, 0, W, H);
+      const ox = dpr * (W / 2 - this.camX * z + shx);
+      const oy = dpr * (H / 2 + offY - this.camY * T * z + shy);
+      const ground = () => ctx.setTransform(dpr * z, 0, 0, dpr * z * T, ox, oy);
+      const upright = () => ctx.setTransform(dpr * z, 0, 0, dpr * z, ox, oy);
+      const x0 = this.camX - W / z / 2 - 100;
+      const x1 = this.camX + W / z / 2 + 100;
+      const y0 = this.camY - (H / 2 + offY) / (z * T) - 60;
+      const y1 = this.camY + (H / 2 - offY) / (z * T) + 200;
+      const vis = (x, y, r) => x + r > x0 && x - r < x1 && y + r > y0 && y - r < y1;
+      this.vis = vis;
+
+      ground();
+      ctx.fillStyle = this.groundPattern;
+      ctx.fillRect(Math.max(0, x0), Math.max(0, y0), Math.min(map.size, x1) - Math.max(0, x0), Math.min(map.size, y1) - Math.max(0, y0));
+      ctx.strokeStyle = 'rgba(40,60,25,0.6)';
+      ctx.lineWidth = 8;
+      ctx.strokeRect(0, 0, map.size, map.size);
+      this.drawYard(ctx, map.yard, vis);
+      this.drawRoads(ctx);
+      this.drawPlaza(ctx, map.plaza, vis);
+      const camP = view.pl.find(p => p.i === view.cam);
+      const cx = camP ? camP.x : this.camX;
+      const cy = camP ? camP.y : this.camY;
+      const camInside = this.buildingAt(cx, cy);
+      for (const b of map.buildings) {
+        if (vis(b.x, b.y, Math.max(b.w, b.h))) this.drawFloor(ctx, b);
+      }
+      for (const sc of map.secrets || []) {
+        if (vis(sc.x, sc.y, 40)) this.drawSecretSpot(ctx, sc);
+      }
+      const extras = view.sx || [];
+      for (const q of extras) {
+        if (q.k === 'gold' && vis(q.x, q.y, 40)) this.drawGold(ctx, q);
+        else if (q.k === 'plane') this.drawPlane(ctx, q, true);
+      }
+      for (const it of view.it) {
+        if (vis(it.x, it.y, 40)) this.drawGroundItem(ctx, it);
+      }
+      for (const m of view.mi || []) this.drawMine(ctx, m, m.o === view.you || (this.myTeam && m.tm === this.myTeam));
+      for (const p of view.pl) {
+        if (p.d) this.drawBody(ctx, p);
+      }
+      // Soft shadows, lit from the upper left.
+      ctx.fillStyle = 'rgba(0,0,0,0.2)';
+      for (const o of map.obstacles) {
+        if (o.dead || (o.k !== 'tree' && o.k !== 'bamboo') || !vis(o.x, o.y, 80)) continue;
+        circle(ctx, o.x + 14, o.y + 10, o.k === 'tree' ? o.r * 1.15 : 30);
+        ctx.fill();
+      }
+      for (const p of view.pl) {
+        if (p.d || p.veh) continue;
+        const sh = Math.max(0.4, 1 - (p.jz || 0) * 0.5);
+        ctx.beginPath();
+        ctx.ellipse(p.x + 3, p.y + 3, (p.r || PR) * 1.15 * sh, (p.r || PR) * 1.15 * sh, 0, 0, TAU);
+        ctx.fillStyle = 'rgba(0,0,0,0.28)';
+        ctx.fill();
+      }
+      for (const v of view.ve) {
+        if (!vis(v.x, v.y, 90)) continue;
+        ctx.save();
+        ctx.translate(v.x + 10, v.y + 12);
+        ctx.rotate(v.a);
+        roundRect(ctx, -D.VEHICLES[v.t].len / 2, -D.VEHICLES[v.t].wid / 2, D.VEHICLES[v.t].len, D.VEHICLES[v.t].wid, 12);
+        ctx.fillStyle = 'rgba(0,0,0,0.25)';
+        ctx.fill();
+        ctx.restore();
+      }
+      for (const b of view.bo || []) {
+        ctx.beginPath();
+        ctx.ellipse(b.x, b.y, 14, 14, 0, 0, TAU);
+        ctx.fillStyle = 'rgba(0,0,0,0.22)';
+        ctx.fill();
+      }
+      if (view.zo.on) this.drawZone(ctx, view.zo, x0, y0, x1, y1);
+      this.drawRings(ctx);
+      this.drawExplosions(ctx);
+      this.drawParticles(ctx, vis, false);
+
+      upright();
+      const list = [];
+      const add = (k, f) => list.push({ k, f });
+      for (const o of map.obstacles) {
+        if (o.dead) continue;
+        const ext = o.k === 'tree' ? o.r * 1.6 : o.s === 'c' ? o.r : Math.max(o.hw, o.hh);
+        if (!vis(o.x, o.y, ext + 40)) continue;
+        add(o.s === 'c' ? o.y + o.r * 0.4 : o.y + o.hh, () => this.draw3DObstacle(ctx, o, cx, cy));
+      }
+      for (const b of map.buildings) {
+        if (!vis(b.x, b.y, Math.max(b.w, b.h))) continue;
+        const tgt = camInside === b || b.broken ? 0 : 1;
+        let a = this.roofAlpha.get(b.id);
+        a = a == null ? tgt : lerp(a, tgt, Math.min(1, dt * 8));
+        this.roofAlpha.set(b.id, a);
+        if (a > 0.02) add(b.y + b.h / 2 + 1, () => this.plane3D(ctx, this.roofHeight(b), () => this.drawRoof(ctx, b, a)));
+      }
+      const plMap = new Map();
+      for (const p of view.pl) plMap.set(p.i, p);
+      // People hidden in a bush stay hidden, as in the flat view, unless they are you, a teammate, or close.
+      const hidden = new Set();
+      for (const p of view.pl) {
+        if (p.d || p.veh) continue;
+        if (p.bu && p.i !== view.you && !(this.myTeam && p.tm === this.myTeam) && Math.hypot(p.x - cx, p.y - cy) > 140) {
+          hidden.add(p.i);
+          continue;
+        }
+        const aim = p.i === view.you && ui.aim != null ? ui.aim : p.a;
+        add(p.y + 0.5, () => this.drawFigure3D(ctx, p, aim, view));
+      }
+      for (const v of view.ve) {
+        if (vis(v.x, v.y, 90)) add(v.y + 8, () => this.drawVehicle3D(ctx, v, plMap));
+      }
+      for (const t of view.tu || []) {
+        if (vis(t.x, t.y, 40)) add(t.y, () => {
+          ctx.beginPath();
+          ctx.rect(t.x - 10, t.y * T - 14, 20, 14);
+          fillStroke(ctx, '#55606b', 2);
+          this.plane3D(ctx, 14, () => this.drawTurret(ctx, t));
+        });
+      }
+      for (const q of extras) {
+        if (q.k === 'cat' && vis(q.x, q.y, 40)) add(q.y, () => this.plane3D(ctx, 4, () => this.drawCat(ctx, q)));
+      }
+      for (const b of view.bo || []) add(b.y, () => this.drawParcel(ctx, b.x, b.y * T - b.z - 12, 1.1));
+      for (const it of view.it) {
+        if (it.t === 'drop' && it.f > 0 && vis(it.x, it.y, 260)) add(it.y, () => this.stand3D(ctx, it.y, 0, () => this.drawFallingDrop(ctx, it)));
+      }
+      list.sort((a, b) => a.k - b.k);
+      for (const d of list) d.f();
+      this.plane3D(ctx, 26, () => this.drawBullets(ctx, view.bu));
+      this.plane3D(ctx, 36, () => this.drawParticles(ctx, vis, true));
+      for (const q of extras) {
+        if (q.k === 'plane' && vis(q.x, q.y, 320)) this.plane3D(ctx, 300, () => this.drawPlane(ctx, q, false));
+      }
+      this.drawTags3D(ctx, view, hidden);
+      for (const d of this.dmgNums) {
+        const t = (this.time - d.t) / 0.9;
+        ctx.globalAlpha = Math.max(0, 1 - t);
+        this.outlinedText(ctx, String(d.n), d.x, (d.y + 34) * T - 92 - t * 40, 22, '#ffe14d');
+      }
+      ctx.globalAlpha = 1;
+
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      if (!ui.noHud) this.drawHUD(ctx, view, ui);
+    }
+
     // ---------- portraits (menu and dialogue) ----------
 
     // Front-facing cartoon portrait of a speaker drawn into a square of size s at (x, y).
@@ -8442,6 +9633,15 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
       ctx.translate(x + s / 2, y + s * 0.56);
       const k = s / 150;
       ctx.scale(k, k);
+      this.drawBust(ctx, who);
+      ctx.restore();
+    }
+
+    // Front view of a character from the shoulders up, in 150-unit portrait space with the face at the origin.
+    // Used for menu and dialogue portraits and for the standing figures in the 3D view.
+    drawBust(ctx, who) {
+      if (who === 'boss') who = 'captain';
+      ctx.save();
       ctx.lineJoin = 'round';
       if (who === 'narrator') {
         roundRect(ctx, -44, -44, 88, 88, 12);
@@ -8459,6 +9659,7 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
         return;
       }
       const skin = who === 'captain' ? '#c79a7a' : this.skinOf(who);
+      this.bustBack(ctx, who);
       if (who === 'luap') {
         for (const sx of [-1, 1]) {
           circle(ctx, sx * 46, 28, 18);
@@ -8468,8 +9669,9 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
       ctx.beginPath();
       ctx.ellipse(0, 52, 46, 26, 0, Math.PI, 0);
       ctx.closePath();
-      const shirt = { yunwang: '#ffffff', luap: '#d63a32', auhsoj: '#5c6b7a', meibao: '#ff9cc6', captain: '#1f2f4f' }[who] || '#777';
+      const shirt = { yunwang: '#ffffff', luap: '#d63a32', auhsoj: '#5c6b7a', meibao: '#ff9cc6', captain: '#1f2f4f', afeng: '#2fa36b', bubbles: '#7fd0e8', jinjin: '#f4c430', bing: '#d9ecf7', thug: '#ffffff', elite: '#2a2f3a' }[who] || '#777';
       fillStroke(ctx, shirt, 4);
+      this.bustShirt(ctx, who);
       if (PACK_COL[who]) {
         for (const sx of [-1, 1]) {
           roundRect(ctx, sx * 24 - 6, 30, 12, 34, 4);
@@ -8575,7 +9777,126 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
         ctx.arc(0, -32, 7, 0.4, Math.PI - 0.4);
         ctx.stroke();
       }
+      this.bustHat(ctx, who);
       ctx.restore();
+    }
+
+    // Pieces of the new characters' and the gang's busts: behind the body, on the shirt, on the head.
+    bustBack(ctx, who) {
+      if (who === 'afeng') {
+        roundRect(ctx, -46, -24, 92, 74, 8);
+        fillStroke(ctx, '#f2a33a', 4);
+        ctx.fillStyle = '#c97f1f';
+        ctx.fillRect(-46, -2, 92, 8);
+      } else if (who === 'jinjin') {
+        circle(ctx, 0, 0, 39);
+        fillStroke(ctx, '#2b2018', 4);
+      } else if (who === 'bubbles') {
+        circle(ctx, 0, -2, 37);
+        fillStroke(ctx, '#7a5434', 4);
+      }
+    }
+
+    bustShirt(ctx, who) {
+      if (who === 'thug') {
+        ctx.save();
+        ctx.beginPath();
+        ctx.ellipse(0, 52, 44, 24, 0, Math.PI, 0);
+        ctx.clip();
+        ctx.fillStyle = '#2f4f8a';
+        for (let yy = 30; yy < 56; yy += 10) ctx.fillRect(-50, yy, 100, 5);
+        ctx.restore();
+      } else if (who === 'bubbles') {
+        roundRect(ctx, -20, 32, 40, 26, 5);
+        fillStroke(ctx, '#ffffff', 3);
+      } else if (who === 'bing') {
+        roundRect(ctx, -32, 26, 64, 13, 6);
+        fillStroke(ctx, '#3f78b5', 3);
+      } else if (who === 'jinjin') {
+        ctx.beginPath();
+        ctx.moveTo(-12, 27);
+        ctx.lineTo(0, 44);
+        ctx.lineTo(12, 27);
+        ctx.closePath();
+        fillStroke(ctx, '#ffffff', 3);
+      }
+    }
+
+    bustHat(ctx, who) {
+      if (who === 'afeng') {
+        ctx.beginPath();
+        ctx.arc(0, -2, 38, Math.PI, 0);
+        ctx.closePath();
+        fillStroke(ctx, '#f2a33a', 4);
+        roundRect(ctx, -30, -12, 60, 11, 5);
+        fillStroke(ctx, '#2b4a6a', 3);
+      } else if (who === 'bubbles') {
+        ctx.fillStyle = '#7a5434';
+        ctx.beginPath();
+        ctx.arc(0, -2, 34, Math.PI * 1.05, Math.PI * 1.95);
+        ctx.quadraticCurveTo(10, -14, -30, -12);
+        ctx.fill();
+        for (const [bx, by, br] of [[-18, -44, 11], [6, -52, 14], [26, -40, 9]]) {
+          circle(ctx, bx, by, br);
+          ctx.fillStyle = 'rgba(190,235,255,0.75)';
+          ctx.fill();
+          ctx.strokeStyle = '#4fa3c7';
+          ctx.lineWidth = 2.5;
+          ctx.stroke();
+          circle(ctx, bx - br * 0.35, by - br * 0.35, br * 0.25);
+          ctx.fillStyle = '#ffffff';
+          ctx.fill();
+        }
+      } else if (who === 'jinjin') {
+        ctx.fillStyle = '#2b2018';
+        ctx.beginPath();
+        ctx.arc(0, -2, 34, Math.PI * 1.02, Math.PI * 1.98);
+        ctx.lineTo(30, -10);
+        ctx.lineTo(-30, -10);
+        ctx.fill();
+        roundRect(ctx, -34, -24, 68, 9, 4);
+        fillStroke(ctx, '#3aa067', 3);
+        ctx.beginPath();
+        ctx.ellipse(0, -16, 30, 9, 0, 0, Math.PI);
+        fillStroke(ctx, 'rgba(58,160,103,0.85)', 3);
+        for (const sx of [-1, 1]) {
+          circle(ctx, sx * 35, 18, 5);
+          fillStroke(ctx, '#f4c430', 2);
+        }
+      } else if (who === 'bing') {
+        for (const sx of [-1, 1]) {
+          roundRect(ctx, sx * 36 - 9, -14, 18, 34, 8);
+          fillStroke(ctx, '#f4f4f4', 3);
+        }
+        roundRect(ctx, -34, -52, 68, 34, 10);
+        fillStroke(ctx, '#8a6a4a', 4);
+        roundRect(ctx, -40, -26, 80, 15, 7);
+        fillStroke(ctx, '#f4f4f4', 3);
+        ctx.strokeStyle = '#f4f4f4';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(-12, 20);
+        ctx.quadraticCurveTo(-4, 26, 0, 20);
+        ctx.quadraticCurveTo(4, 26, 12, 20);
+        ctx.stroke();
+        ctx.fillStyle = 'rgba(255,110,120,0.4)';
+        for (const sx of [-1, 1]) {
+          circle(ctx, sx * 22, 14, 6);
+          ctx.fill();
+        }
+      } else if (who === 'thug') {
+        roundRect(ctx, -35, -22, 70, 13, 5);
+        fillStroke(ctx, '#d63a32', 3);
+        ctx.beginPath();
+        ctx.moveTo(33, -16);
+        ctx.lineTo(48, -24);
+        ctx.lineTo(48, -6);
+        ctx.closePath();
+        fillStroke(ctx, '#d63a32', 3);
+      } else if (who === 'elite') {
+        roundRect(ctx, -26, -4, 52, 14, 5);
+        fillStroke(ctx, '#151515', 3);
+      }
     }
 
     // ---------- HUD ----------
@@ -8734,6 +10055,27 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
       }
 
       if (me.alive && !ui.bigMap && ui.mouseX != null && !ui.touch) this.drawCrosshair(ctx, ui, me);
+      // Where a ready parcel would land: a dashed circle on the ground, pulled in to the longest throw.
+      if (me.alive && !ui.bigMap && ui.mouseX != null && !ui.touch && me.sk === 'parcel' && me.sc <= 0) {
+        const z = this.zoom || 1;
+        const t3 = this.mode3d ? TILT : 1;
+        const fy = H / 2 + this.viewOffsetY();
+        let px = ui.mouseX;
+        let py = ui.mouseY;
+        const d = this.aimDist(px, py);
+        if (d > 420) {
+          px = W / 2 + (px - W / 2) * (420 / d);
+          py = fy + (py - fy) * (420 / d);
+        }
+        const rr = 140 * (me.pk === 'bigbox' ? 1.35 : 1) * z;
+        ctx.beginPath();
+        ctx.ellipse(px, py, rr, rr * t3, 0, 0, TAU);
+        ctx.strokeStyle = 'rgba(255,240,200,0.8)';
+        ctx.lineWidth = 2.5;
+        ctx.setLineDash([10, 8]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
     }
 
     drawMinimap(ctx, view, x, y, size, span) {
@@ -8893,6 +10235,7 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
           this.outlinedText(ctx, String(hud.scs), cx, cy + 8 * s, 22 * s, '#ffffff');
         }
         this.outlinedText(ctx, ui.touch ? I.t('skill') : I.lang === 'zh' ? '右鍵 / X' : 'RMB / X', cx, cy + r + 16 * s, 11 * s, '#ffffff');
+        this.drawPowerButtons(ctx, hud, own, cx, cy, r, s, ui);
       }
 
       const hbw = Math.max(total, 330 * s);
@@ -8948,9 +10291,170 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
       }
     }
 
+    newSkillIcon(ctx, sk, r) {
+      ctx.lineJoin = 'round';
+      if (sk === 'parcel') {
+        roundRect(ctx, -r * 0.7, -r * 0.55, r * 1.4, r * 1.1, 3);
+        fillStroke(ctx, '#d49a4a', 3);
+        ctx.strokeStyle = '#8a5a30';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(0, -r * 0.55);
+        ctx.lineTo(0, r * 0.55);
+        ctx.moveTo(-r * 0.7, 0);
+        ctx.lineTo(r * 0.7, 0);
+        ctx.stroke();
+      } else if (sk === 'bubble') {
+        circle(ctx, 0, 0, r * 0.85);
+        ctx.fillStyle = 'rgba(190,235,255,0.85)';
+        ctx.fill();
+        ctx.strokeStyle = '#4fa3c7';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+        circle(ctx, -r * 0.3, -r * 0.3, r * 0.2);
+        ctx.fillStyle = '#ffffff';
+        ctx.fill();
+      } else if (sk === 'coins') {
+        for (const [dx, dy] of [[-r * 0.3, r * 0.15], [r * 0.25, -r * 0.2]]) {
+          circle(ctx, dx, dy, r * 0.5);
+          fillStroke(ctx, '#f4c430', 3);
+          ctx.fillStyle = '#b8860b';
+          ctx.font = 'bold ' + Math.round(r * 0.6) + 'px ' + FONT;
+          ctx.textAlign = 'center';
+          ctx.fillText('$', dx, dy + r * 0.2);
+        }
+      } else if (sk === 'freeze') {
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 3.5;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        for (let i = 0; i < 3; i++) {
+          const a = (i / 3) * Math.PI;
+          ctx.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+          ctx.lineTo(-Math.cos(a) * r, -Math.sin(a) * r);
+        }
+        ctx.stroke();
+        ctx.strokeStyle = '#7fd3ff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+    }
+
+    // The gadget button (green, uses left as dots) to the left of the skill circle, and the Wok Overdrive
+    // meter as a purple ring around the skill circle with a button above it once full.
+    drawPowerButtons(ctx, hud, own, cx, cy, r, s, ui) {
+      if (hud.gd) {
+        const gr = 24 * s;
+        const gx = cx - r - gr - 12 * s;
+        const gy = cy + 4 * s;
+        if (own) this.hit.gadget = { x: gx - gr, y: gy - gr, w: gr * 2, h: gr * 2 };
+        const ready = hud.gu > 0 && hud.gc <= 0;
+        circle(ctx, gx, gy, gr);
+        ctx.fillStyle = ready ? 'rgba(95,211,107,0.95)' : 'rgba(30,30,28,0.6)';
+        ctx.fill();
+        ctx.strokeStyle = ready ? '#ffffff' : 'rgba(255,255,255,0.4)';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+        const G = D.GADGETS[hud.gd];
+        this.outlinedText(ctx, I.pick(G.name).slice(0, I.lang === 'zh' ? 1 : 2), gx, gy + 7 * s, 19 * s, '#ffffff');
+        if (hud.gc > 0) {
+          ctx.beginPath();
+          ctx.moveTo(gx, gy);
+          ctx.arc(gx, gy, gr, -Math.PI / 2, -Math.PI / 2 + TAU * hud.gc);
+          ctx.closePath();
+          ctx.fillStyle = 'rgba(0,0,0,0.5)';
+          ctx.fill();
+        }
+        for (let i = 0; i < D.GADGET_USES; i++) {
+          circle(ctx, gx - 10 * s + i * 10 * s, gy + gr + 8 * s, 3.5 * s);
+          ctx.fillStyle = i < hud.gu ? '#5fd36b' : 'rgba(255,255,255,0.25)';
+          ctx.fill();
+        }
+        this.outlinedText(ctx, ui.touch ? '' : 'G', gx, gy - gr - 6 * s, 11 * s, '#ffffff');
+      }
+      if (hud.odOk) {
+        const active = hud.odT > 0;
+        const frac = active ? hud.odT / D.OVERDRIVE.time : hud.od;
+        ctx.beginPath();
+        ctx.arc(cx, cy, r + 6 * s, -Math.PI / 2, -Math.PI / 2 + TAU * frac);
+        ctx.strokeStyle = active ? '#e0b8ff' : '#b46bff';
+        ctx.lineWidth = 6 * s;
+        ctx.stroke();
+        if (hud.od >= 1 && !active) {
+          const oy = cy - r - 34 * s;
+          const orr = 20 * s;
+          if (own) this.hit.od = { x: cx - orr - 6, y: oy - orr - 6, w: orr * 2 + 12, h: orr * 2 + 12 };
+          const pulse = 0.85 + Math.sin(this.time * 8) * 0.15;
+          circle(ctx, cx, oy, orr * pulse);
+          ctx.fillStyle = '#9b4dff';
+          ctx.fill();
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 3;
+          ctx.stroke();
+          this.outlinedText(ctx, ui.touch ? '火' : 'V', cx, oy + 7 * s, 18 * s, '#ffffff');
+        }
+      }
+    }
+
+    // Effects on a character that show in both views: bubble shield, Overdrive aura, mouthguard.
+    drawAuras(ctx, p, x, y, R) {
+      if (p.od) {
+        for (let i = 0; i < 6; i++) {
+          const a = this.time * 4 + (i / 6) * TAU;
+          const fl = 0.6 + Math.sin(this.time * 13 + i) * 0.4;
+          circle(ctx, x + Math.cos(a) * R * 1.05, y + Math.sin(a) * R * 1.05, R * 0.28 * fl + 2);
+          ctx.fillStyle = 'rgba(180,107,255,0.55)';
+          ctx.fill();
+        }
+      }
+      if (p.bb) {
+        circle(ctx, x, y, R + 12);
+        ctx.fillStyle = 'rgba(190,235,255,0.28)';
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(127,208,232,0.9)';
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+        circle(ctx, x - R * 0.5, y - R * 0.6, 4);
+        ctx.fillStyle = 'rgba(255,255,255,0.9)';
+        ctx.fill();
+      }
+      if (p.gd) {
+        circle(ctx, x, y, R + 5);
+        ctx.strokeStyle = 'rgba(255,255,255,0.75)';
+        ctx.lineWidth = 3;
+        ctx.setLineDash([6, 5]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+    }
+
+    drawParcel(ctx, x, y, s) {
+      roundRect(ctx, x - 12 * s, y - 10 * s, 24 * s, 20 * s, 3);
+      fillStroke(ctx, '#d49a4a', 2.5);
+      ctx.strokeStyle = '#8a5a30';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(x, y - 10 * s);
+      ctx.lineTo(x, y + 10 * s);
+      ctx.stroke();
+    }
+
+    drawMine(ctx, m, mine) {
+      circle(ctx, m.x, m.y, 14);
+      fillStroke(ctx, '#4a4f55', 3);
+      circle(ctx, m.x, m.y, 5);
+      ctx.fillStyle = m.arm && Math.sin(this.time * 9) > 0 ? (mine ? '#5fd36b' : '#ff4a3a') : '#7a7f85';
+      ctx.fill();
+    }
+
     drawSkillIcon(ctx, sk, x, y, r) {
       ctx.save();
       ctx.translate(x, y);
+      if (sk === 'parcel' || sk === 'bubble' || sk === 'coins' || sk === 'freeze') {
+        this.newSkillIcon(ctx, sk, r);
+        ctx.restore();
+        return;
+      }
       if (sk === 'flame') {
         ctx.beginPath();
         ctx.moveTo(0, -r);
@@ -9082,7 +10586,9 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
     char: D.CHARS[store.get('char', 'yunwang')] ? store.get('char', 'yunwang') : 'yunwang',
     diff: D.diffLevel(store.get('diff', '')) || 2,
     bots: SIM.clamp(Number(store.get('bots', 13)) || 13, 1, 29),
-    progress: SIM.clamp(Number(store.get('progress', 0)) || 0, 0, D.STORY.length)
+    progress: SIM.clamp(Number(store.get('progress', 0)) || 0, 0, D.STORY.length),
+    trial: store.get('trial', '0') === '1',
+    view3d: store.get('view3d', '1') === '1'
   };
   Sound.initMusic(window.YW_MUSIC || { theme: 'assets/yunwang_theme.mp3', quiet: 'assets/quiet_room.mp3' });
   Sound.initSamples(window.YW_SFX || { win: 'assets/sfx/winner_music.mp3', kill: 'assets/sfx/kill_effect.mp3', dead: 'assets/sfx/dead_effect.mp3' });
@@ -9138,14 +10644,14 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
       this.opts = o;
       if (o.mode === 'story') {
         this.sim = new SIM.Sim({ mode: 'story', chapter: o.chapter, difficulty: o.difficulty });
-        this.myId = this.sim.startStory(o.name, o.char);
+        this.myId = this.sim.startStory(o.name, o.char, { level: o.level, gadget: o.gadget, perk: o.perk });
       } else {
-        this.sim = new SIM.Sim({ difficulty: o.difficulty });
+        this.sim = new SIM.Sim({ difficulty: o.difficulty, botLevel: o.level });
         if (this.demo) {
           this.sim.fillBots(o.bots);
           this.myId = this.sim.players[0].id;
         } else {
-          this.myId = this.sim.addPlayer(o.name, false, { char: o.char });
+          this.myId = this.sim.addPlayer(o.name, false, { char: o.char, level: o.level, gadget: o.gadget, perk: o.perk });
           this.sim.fillBots(o.bots + 1);
         }
       }
@@ -9236,6 +10742,7 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
     out.ve = list(a.ve, b.ve, true);
     out.bu = list(a.bu, b.bu, false);
     out.tu = list(a.tu || [], b.tu || [], false);
+    out.bo = list(a.bo || [], b.bo || [], false);
     if (a.cam === b.cam) {
       out.cx = a.cx + (b.cx - a.cx) * f;
       out.cy = a.cy + (b.cy - a.cy) * f;
@@ -9266,7 +10773,7 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
         setTimeout(() => this.handlers.onClose && this.handlers.onClose(this), 0);
         return;
       }
-      this.ws.onopen = () => this.send({ t: 'join', name: o.name, char: o.char, aspect: window.innerWidth / window.innerHeight });
+      this.ws.onopen = () => this.send(Object.assign({ t: 'join', name: o.name, char: o.char, aspect: window.innerWidth / window.innerHeight }, loadoutOf(o.char)));
       this.ws.onmessage = m => {
         let msg;
         try {
@@ -9378,7 +10885,7 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
     }
 
     setChar(char) {
-      this.send({ t: 'char', char });
+      this.send(Object.assign({ t: 'char', char }, loadoutOf(char)));
     }
 
     destroy() {
@@ -9426,6 +10933,8 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
     $('tSfx').textContent = '🔊 ' + I.t('sfx') + ': ' + onOff(prefs.sfx);
     $('pauseMusic').textContent = I.t('music') + ': ' + onOff(prefs.music);
     $('pauseSfx').textContent = I.t('sfx') + ': ' + onOff(prefs.sfx);
+    $('t3d').textContent = '◆ ' + I.t('view3d') + ': ' + onOff(prefs.view3d);
+    $('pause3d').textContent = I.t('view3d') + ': ' + onOff(prefs.view3d);
     const served = window.location.protocol === 'http:' || window.location.protocol === 'https:';
     $('lanNote').textContent = served ? I.t('lanNoteServed', window.location.host) : I.t('lanNoteLocal');
     $('server').placeholder = I.t('serverHint');
@@ -9437,6 +10946,51 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
     renderChapters();
   }
 
+  // ---------- character levels and loadouts ----------
+
+  function xpOf(id) {
+    return Math.max(0, Number(store.get('xp.' + id, 0)) || 0);
+  }
+
+  function levelOf(id) {
+    return prefs.trial ? D.LEVELS.max : D.levelForXp(xpOf(id));
+  }
+
+  function choiceOf(tbl, key, id) {
+    const ids = Object.keys(tbl).filter(k => tbl[k].char === id);
+    const saved = store.get(key + id, '');
+    return ids.indexOf(saved) >= 0 ? saved : ids[0];
+  }
+
+  function loadoutOf(id) {
+    const level = levelOf(id);
+    return {
+      level,
+      gadget: level >= D.LEVELS.gadget ? choiceOf(D.GADGETS, 'gad.', id) : '',
+      perk: level >= D.LEVELS.perk ? choiceOf(D.PERKS, 'perk.', id) : ''
+    };
+  }
+
+  // Experience for the character just played. Returns what to show on the result screen.
+  function awardXp(id, gain) {
+    if (prefs.trial || !D.CHARS[id]) return '';
+    const before = D.levelForXp(xpOf(id));
+    const xp = xpOf(id) + gain;
+    store.set('xp.' + id, xp);
+    const after = D.levelForXp(xp);
+    let txt = I.t('xpGain', I.pick(D.CHARS[id].name), gain);
+    if (after > before) {
+      txt += '  ' + I.t('levelUp', after);
+      if (before < D.LEVELS.gadget && after >= D.LEVELS.gadget) txt += ' ' + I.t('unlockGadget');
+      if (before < D.LEVELS.perk && after >= D.LEVELS.perk) txt += ' ' + I.t('unlockPerk');
+      if (before < D.LEVELS.overdrive && after >= D.LEVELS.overdrive) txt += ' ' + I.t('unlockOd');
+      Sound.play('rare');
+    }
+    if (after < D.LEVELS.max) txt += '  (' + I.t('xpToNext', D.xpForLevel(after + 1) - xp, after + 1) + ')';
+    renderHeroCards();
+    return txt;
+  }
+
   function renderHeroCards() {
     const box = $('heroCards');
     box.innerHTML = '';
@@ -9445,32 +10999,17 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
       const b = document.createElement('button');
       b.className = 'hero-card' + (prefs.char === id ? ' on' : '');
       const cv = document.createElement('canvas');
-      cv.width = 220;
-      cv.height = 220;
-      renderer.drawPortrait(cv.getContext('2d'), id, 0, 0, 220);
+      cv.width = 160;
+      cv.height = 160;
+      renderer.drawPortrait(cv.getContext('2d'), id, 0, 0, 160);
       const name = document.createElement('b');
       name.textContent = I.pick(C.name);
-      const role = document.createElement('div');
-      role.className = 'role';
-      role.textContent = I.pick(C.role);
-      const desc = document.createElement('div');
-      desc.className = 'desc';
-      const p1 = document.createElement('div');
-      const e1 = document.createElement('em');
-      e1.textContent = I.t('passive') + '｜';
-      p1.appendChild(e1);
-      p1.appendChild(document.createTextNode(I.pick(C.passive)));
-      const p2 = document.createElement('div');
-      const e2 = document.createElement('em');
-      e2.textContent = I.t('skill') + '｜';
-      p2.appendChild(e2);
-      p2.appendChild(document.createTextNode(I.pick(C.skillText)));
-      desc.appendChild(p1);
-      desc.appendChild(p2);
+      const lv = document.createElement('span');
+      lv.className = 'lv';
+      lv.textContent = 'Lv ' + levelOf(id);
       b.appendChild(cv);
       b.appendChild(name);
-      b.appendChild(role);
-      b.appendChild(desc);
+      b.appendChild(lv);
       b.addEventListener('click', () => {
         prefs.char = id;
         store.set('char', id);
@@ -9479,7 +11018,71 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
       });
       box.appendChild(b);
     }
+    renderHeroInfo();
   }
+
+  // The chosen character's details: level, experience, skills, and the gadget and perk choices.
+  function renderHeroInfo() {
+    const id = prefs.char;
+    const C = D.CHARS[id];
+    const box = $('heroInfo');
+    box.innerHTML = '';
+    const el = (tag, cls, txt) => {
+      const e = document.createElement(tag);
+      if (cls) e.className = cls;
+      if (txt != null) e.textContent = txt;
+      return e;
+    };
+    const level = levelOf(id);
+    const head = el('div', 'hi-head');
+    head.appendChild(el('b', '', I.pick(C.name)));
+    head.appendChild(el('span', 'role', I.pick(C.role)));
+    head.appendChild(el('span', 'lv', 'Lv ' + level + ' / ' + D.LEVELS.max));
+    box.appendChild(head);
+    const bar = el('div', 'xpbar');
+    const xp = xpOf(id);
+    const lo = D.xpForLevel(Math.min(level, D.LEVELS.max));
+    const hi = D.xpForLevel(Math.min(level + 1, D.LEVELS.max));
+    const fill = el('i');
+    fill.style.width = (level >= D.LEVELS.max || prefs.trial ? 100 : Math.round(((xp - lo) / Math.max(1, hi - lo)) * 100)) + '%';
+    bar.appendChild(fill);
+    bar.appendChild(el('span', '', prefs.trial ? I.t('trialOn') : level >= D.LEVELS.max ? I.t('maxLevel') : I.t('xpBar', xp - lo, hi - lo, level + 1)));
+    box.appendChild(bar);
+    const row = (label, txt, cls) => {
+      const r = el('div', 'hi-row' + (cls ? ' ' + cls : ''));
+      r.appendChild(el('em', '', label + '｜'));
+      r.appendChild(document.createTextNode(txt));
+      box.appendChild(r);
+    };
+    row(I.t('passive'), I.pick(C.passive));
+    row(I.t('skill'), I.pick(C.skillText));
+    const pick = (tbl, key, need, label) => {
+      const wrap = el('div', 'hi-pick');
+      wrap.appendChild(el('span', 'hp-label', label + (level < need ? '  🔒 Lv ' + need : '')));
+      const btns = el('div', 'seg');
+      const chosen = choiceOf(tbl, key, id);
+      for (const k of Object.keys(tbl).filter(q => tbl[q].char === id)) {
+        const b = el('button', k === chosen && level >= need ? 'on' : '', I.pick(tbl[k].name));
+        b.disabled = level < need;
+        b.title = I.pick(tbl[k].text);
+        b.addEventListener('click', () => {
+          store.set(key + id, k);
+          Sound.play('click');
+          renderHeroInfo();
+        });
+        btns.appendChild(b);
+      }
+      wrap.appendChild(btns);
+      wrap.appendChild(el('div', 'hp-text', I.pick(tbl[chosen].text)));
+      box.appendChild(wrap);
+    };
+    pick(D.GADGETS, 'gad.', D.LEVELS.gadget, I.t('gadgetLabel'));
+    pick(D.PERKS, 'perk.', D.LEVELS.perk, I.t('perkLabel'));
+    const O = D.OVERDRIVE_SKILL[id];
+    row(I.t('odLabel') + (level < D.LEVELS.overdrive ? '  🔒 Lv ' + D.LEVELS.overdrive : ''), I.pick(O.name) + (I.lang === 'zh' ? '：' : ': ') + I.pick(O.text) + (I.lang === 'zh' ? '。' : '. ') + I.t('odGeneral'), level < D.LEVELS.overdrive ? 'locked' : 'od');
+    $('tTrial').textContent = I.t('trialToggle') + ': ' + onOff(prefs.trial);
+  }
+
 
   function renderChapters() {
     const box = $('chapterList');
@@ -9517,7 +11120,7 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
   function heroOpts() {
     const name = $('name').value.trim().slice(0, 16) || I.pick(D.CHARS[prefs.char].name);
     store.set('name', $('name').value.trim().slice(0, 16));
-    return { name, char: prefs.char, difficulty: prefs.diff, bots: prefs.bots };
+    return Object.assign({ name, char: prefs.char, difficulty: prefs.diff, bots: prefs.bots }, loadoutOf(prefs.char));
   }
 
   function openHeroSelect(mode) {
@@ -9599,6 +11202,7 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
   }
 
   function resetUi() {
+    $('ovXp').textContent = '';
     blurFocus();
     ui.killfeed.length = 0;
     ui.notices.length = 0;
@@ -9730,7 +11334,7 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
         renderer.drawPortrait(cv.getContext('2d'), D.CHARS[pl.char] ? pl.char : 'yunwang', 0, 0, 80);
         const nm = document.createElement('span');
         nm.className = 'nm';
-        nm.textContent = pl.name;
+        nm.textContent = pl.name + (pl.lv ? '  Lv' + pl.lv : '');
         d.appendChild(cv);
         d.appendChild(nm);
         for (const [cond, txt, cls] of [[pl.cid === r.host, I.t('hostTag'), 'tag'], [pl.cid === r.you, I.t('youTag'), 'tag you']]) {
@@ -9858,6 +11462,10 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
       $('ovTitle').className = won ? 'win' : '';
       $('ovSub').textContent = !ended ? I.t('teamFighting', teamName(me.tm)) : won ? I.t(coop ? 'coopWinSub' : 'teamWinSub') : coop || !view.wt ? '' : I.t('teamWin', teamName(view.wt));
       statCells([[I.t('st_kills'), me.k], [I.t('st_damage'), me.dd], [I.t('st_time'), fmt(survivedT)], [I.t('yourTeam'), coop ? I.t('family') : teamName(me.tm)]]);
+      if (ended && !gameOver.xpDone) {
+        gameOver.xpDone = true;
+        $('ovXp').textContent = awardXp(prefs.char, 25 + me.k * 15 + (won ? 60 : 15));
+      }
       $('ovSpectate').hidden = ended || view.al === 0;
       $('ovAgain').textContent = session && session.kind === 'online' ? I.t('backToLobby') : I.t('playAgain');
       show('overlay', true);
@@ -9869,6 +11477,10 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
     $('ovTitle').className = won ? 'win' : '';
     $('ovSub').textContent = won ? I.t('outlasted', view.tot - 1) : me.killerNk === 'zone' ? I.t('zoneDeath') : me.killer || me.killerNk ? I.t('eliminatedBy', who(me.killer, me.killerNk)) : '';
     statCells([[I.t('st_kills'), me.k], [I.t('st_damage'), me.dd], [I.t('st_time'), fmt(survived)], [I.t('st_place', view.tot), '#' + (won ? 1 : me.plc)]]);
+    if (!gameOver.xpDone) {
+      gameOver.xpDone = true;
+      $('ovXp').textContent = awardXp(prefs.char, 25 + me.k * 15 + (won ? 60 : me.plc <= 3 ? 30 : 0));
+    }
     $('ovSpectate').hidden = won || view.st === 'ended' || view.al === 0;
     $('ovAgain').textContent = session && session.kind === 'online' ? I.t('backToLobby') : I.t('playAgain');
     show('overlay', true);
@@ -9883,6 +11495,10 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
     $('ovTitle').className = won ? 'win' : '';
     $('ovSub').textContent = won ? I.pick(I.STORY.titles[D.STORY[flow.idx].id]) : view.why === 'time' ? I.t('fail_time') : I.t('fail_dead');
     statCells([[I.t('st_kills'), view.me.k], [I.t('st_damage'), view.me.dd], [I.t('st_time'), fmt(view.t)], [I.t('heroLabel'), I.pick(D.CHARS[prefs.char].name)]]);
+    if (!flow.xpDone) {
+      flow.xpDone = true;
+      $('ovXp').textContent = awardXp(prefs.char, won ? 70 + view.me.k * 5 : 15);
+    }
     $('ovSpectate').hidden = true;
     $('ovAgain').textContent = won ? (last ? I.t('replay') : I.t('next')) : I.t('retry');
     show('overlay', true);
@@ -10155,10 +11771,11 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
     if (touch.on) return touchInput(mx, my);
     let aim = lastAim;
     if (ui.mouseX != null) {
-      aim = Math.atan2(ui.mouseY - renderer.H / 2, ui.mouseX - renderer.W / 2);
+      aim = renderer.aimAt(ui.mouseX, ui.mouseY);
       lastAim = aim;
     }
-    return { mx, my, aim, shoot: mouseDown && !ui.bigMap, sprint: keys.has('Space'), brake: keys.has('Space') };
+    const ad = ui.mouseX != null ? renderer.aimDist(ui.mouseX, ui.mouseY) : 380;
+    return { mx, my, aim, ad, shoot: mouseDown && !ui.bigMap, sprint: keys.has('Space'), brake: keys.has('Space') };
   }
 
   function act(a) {
@@ -10222,6 +11839,12 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
         break;
       case 'KeyX':
         act({ a: 'skill' });
+        break;
+      case 'KeyG':
+        act({ a: 'gadget' });
+        break;
+      case 'KeyV':
+        act({ a: 'overdrive' });
         break;
       case 'ShiftLeft':
       case 'ShiftRight':
@@ -10332,6 +11955,8 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
   function hudTarget(x, y) {
     const h = renderer.hit;
     if (ui.bigMap || inRect(h.mini, x, y)) return { k: 'map' };
+    if (inRect(h.od, x, y)) return { k: 'overdrive' };
+    if (inRect(h.gadget, x, y)) return { k: 'gadget' };
     if (inRect(h.skill, x, y)) return { k: 'skill' };
     if (inRect(h.heal, x, y)) return { k: 'heal' };
     for (const sl of h.slots) if (inRect(sl, x, y)) return { k: 'slot', i: sl.i };
@@ -10396,7 +12021,7 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
     }
     const av = stickVec(touch.aim);
     if (av && av.len > 10) {
-      aim = Math.atan2(av.dy, av.dx);
+      aim = renderer.screenDir(av.dx, av.dy);
       shoot = av.len > 22;
     } else if (!av && (mx || my) && now > touch.tapUntil) {
       aim = Math.atan2(my, mx);
@@ -10405,7 +12030,9 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
     if (tapping) shoot = true;
     if (shoot) aim = assistAim(aim, tapping && !(av && av.len > 10) ? 1.05 : 0.38);
     lastAim = aim;
-    return { mx, my, aim, shoot: shoot && !ui.bigMap, sprint, brake: false };
+    // A full drag of the aim stick throws as far as possible.
+    const ad = av ? 80 + Math.min(1, av.len / (STICK_R * 1.3)) * 340 : 380;
+    return { mx, my, aim, ad, shoot: shoot && !ui.bigMap, sprint, brake: false };
   }
 
   canvas.addEventListener('pointerdown', e => {
@@ -10423,6 +12050,8 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
     if (hit) {
       if (hit.k === 'map') ui.bigMap = !ui.bigMap;
       else if (hit.k === 'skill') act({ a: 'skill' });
+      else if (hit.k === 'gadget') act({ a: 'gadget' });
+      else if (hit.k === 'overdrive') act({ a: 'overdrive' });
       else if (hit.k === 'heal') act({ a: 'heal' });
       else {
         act({ a: 'slot', i: hit.i });
@@ -10609,6 +12238,12 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
   });
   if (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) setTouchMode(true);
   $('tFull').addEventListener('click', () => goFullscreen());
+  $('tTrial').addEventListener('click', () => {
+    prefs.trial = !prefs.trial;
+    store.set('trial', prefs.trial ? 1 : 0);
+    Sound.play('click');
+    renderHeroCards();
+  });
   $('rotateAnyway').addEventListener('click', () => {
     touch.portraitOk = true;
     $('rotate').hidden = true;
@@ -10760,6 +12395,16 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
     Sound.setSfx(prefs.sfx);
     applyI18n();
   };
+  const toggle3d = () => {
+    prefs.view3d = !prefs.view3d;
+    store.set('view3d', prefs.view3d ? 1 : 0);
+    renderer.mode3d = prefs.view3d;
+    renderer.zoom = 0;
+    applyI18n();
+  };
+  renderer.mode3d = prefs.view3d;
+  $('t3d').addEventListener('click', toggle3d);
+  $('pause3d').addEventListener('click', toggle3d);
   $('tMusic').addEventListener('click', toggleMusic);
   $('tSfx').addEventListener('click', toggleSfx);
   $('pauseMusic').addEventListener('click', toggleMusic);

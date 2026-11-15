@@ -34,6 +34,7 @@
       <button id="tLang" class="chip">中文 / EN</button>
       <button id="tMusic" class="chip"></button>
       <button id="tSfx" class="chip"></button>
+      <button id="t3d" class="chip"></button>
       <button id="tFull" class="chip" hidden data-i18n="fullscreen"></button>
     </div>
     <details id="secrets" class="controls secrets"><summary id="secretsSum"></summary><ul id="secretsList"></ul></details>
@@ -46,6 +47,8 @@
         <tr><td>Mouse</td><td data-i18n="ctl_mouse"></td></tr>
         <tr><td>H</td><td data-i18n="ctl_heal"></td></tr>
         <tr><td>Right click / X</td><td data-i18n="ctl_skill"></td></tr>
+        <tr><td>G</td><td data-i18n="ctl_gadget"></td></tr>
+        <tr><td>V</td><td data-i18n="ctl_od"></td></tr>
         <tr><td>Space</td><td data-i18n="ctl_run"></td></tr>
         <tr><td>Shift</td><td data-i18n="ctl_jump"></td></tr>
         <tr><td>F / E</td><td data-i18n="ctl_f"></td></tr>
@@ -62,6 +65,7 @@
         <tr><td data-i18n="th_tap"></td><td data-i18n="th_tap_do"></td></tr>
         <tr><td data-i18n="th_slots"></td><td data-i18n="th_slots_do"></td></tr>
         <tr><td data-i18n="th_hud"></td><td data-i18n="th_hud_do"></td></tr>
+        <tr><td data-i18n="th_gadget"></td><td data-i18n="th_gadget_do"></td></tr>
         <tr><td data-i18n="th_buttons"></td><td data-i18n="th_buttons_do"></td></tr>
       </table>
     </details>
@@ -72,11 +76,13 @@
   <div class="card wide">
     <h2 data-i18n="chooseHero"></h2>
     <div id="heroCards" class="hero-cards"></div>
+    <div id="heroInfo" class="hero-info"></div>
     <div class="form">
       <label class="field"><span data-i18n="name"></span><input id="name" maxlength="16" placeholder="Player" autocomplete="off" spellcheck="false"></label>
       <div class="field"><span data-i18n="diff"></span><div class="seg diff-seg" id="diff"></div></div>
       <p id="diffHint" class="note diff-hint"></p>
       <div class="field" id="botsRow"><span data-i18n="bots"></span><div class="range"><input type="range" id="bots" min="1" max="29" value="13"><b id="botsv">13</b></div></div>
+      <div class="field"><span></span><button id="tTrial" class="chip trial"></button></div>
       <label class="field" id="serverRow" hidden><span data-i18n="serverAddr"></span><input id="server" maxlength="80" autocomplete="off" spellcheck="false"></label>
     </div>
     <div class="btns">
@@ -117,6 +123,7 @@
     <h2 id="ovTitle"></h2>
     <p id="ovSub"></p>
     <div id="ovStats" class="stats"></div>
+    <p id="ovXp" class="note xp-note"></p>
     <div class="btns">
       <button id="ovSpectate" class="btn" data-i18n="spectate"></button>
       <button id="ovAgain" class="btn primary"></button>
@@ -132,6 +139,7 @@
     <div class="field pause-diff" id="pauseDiffRow"><span data-i18n="diff"></span><div class="seg diff-seg" id="pauseDiff"></div></div>
     <button id="pauseMusic" class="btn"></button>
     <button id="pauseSfx" class="btn"></button>
+    <button id="pause3d" class="btn"></button>
     <button id="pauseQuit" class="btn"></button>
   </div>
 </div>

@@ -1180,3 +1180,138 @@ body.touch .controls table:not(.touch-help) {
     z-index: 1;
   }
 }
+
+/* ---------- character levels and loadouts ---------- */
+
+.hero-card {
+  position: relative;
+}
+
+.hero-card .lv,
+.hi-head .lv {
+  font-size: 12px;
+  font-weight: bold;
+  color: #fff3dc;
+  background: #6b3fa0;
+  border-radius: 6px;
+  padding: 1px 7px;
+}
+
+.hero-cards {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+.hero-card canvas {
+  width: 84px;
+  height: 84px;
+}
+
+.hero-info {
+  margin-top: 12px;
+  background: var(--paper-dark);
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--ink);
+}
+
+.hi-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.hi-head b {
+  font-size: 18px;
+}
+
+.hi-head .role {
+  color: var(--red);
+  font-weight: bold;
+}
+
+.xpbar {
+  position: relative;
+  height: 18px;
+  border-radius: 9px;
+  background: rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+  margin: 4px 0 8px;
+}
+
+.xpbar i {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background: linear-gradient(90deg, #8a5bd0, #c08aff);
+}
+
+.xpbar span {
+  position: relative;
+  display: block;
+  text-align: center;
+  font-size: 11px;
+  line-height: 18px;
+  font-weight: bold;
+  color: #2b1d40;
+}
+
+.hi-row {
+  margin: 4px 0;
+  line-height: 1.4;
+}
+
+.hi-row em {
+  font-style: normal;
+  font-weight: bold;
+}
+
+.hi-row.od em {
+  color: #6b3fa0;
+}
+
+.hi-row.locked {
+  opacity: 0.55;
+}
+
+.hi-pick {
+  margin: 6px 0;
+}
+
+.hi-pick .hp-label {
+  display: block;
+  font-weight: bold;
+  margin-bottom: 3px;
+}
+
+.hi-pick .seg button:disabled {
+  opacity: 0.5;
+}
+
+.hi-pick .hp-text {
+  color: var(--muted);
+  margin-top: 3px;
+}
+
+.xp-note {
+  color: #6b3fa0;
+  font-weight: bold;
+  font-size: 13px;
+}
+
+.chip.trial {
+  margin-left: 0;
+}
+
+@media (max-height: 560px) {
+  .hero-card canvas {
+    width: 48px;
+    height: 48px;
+  }
+  .hero-info {
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+}

@@ -331,6 +331,44 @@ function duel(charA, charB, opts) {
   }
 }
 
+// ---------- levels, gadgets, perks, overdrive ----------
+{
+  const { sim, a, b } = duel('bubbles', 'jinjin', { dist: 150 });
+  const lv9 = sim.playerMap.get(sim.addPlayer('Max', false, { char: 'bubbles', level: 9, gadget: 'rinse', perk: 'thick' }));
+  check(Math.abs(lv9.maxHp - a.maxHp * 1.32) < 1 && lv9.gadget === 'rinse' && lv9.perk === 'thick' && lv9.odOk, 'level 9: 32% more health, gadget, perk and overdrive');
+  const lv3 = sim.playerMap.get(sim.addPlayer('Low', false, { char: 'bubbles', level: 3, gadget: 'rinse', perk: 'thick' }));
+  check(!lv3.gadget && !lv3.perk && !lv3.odOk, 'level 3 cannot use gadgets, perks or overdrive yet');
+  let uses = 0;
+  for (let i = 0; i < 6; i++) {
+    lv9.gCool = 0;
+    const before = lv9.gUses;
+    sim.useGadget(lv9);
+    if (lv9.gUses < before) uses++;
+  }
+  check(uses === 3, 'a gadget works 3 times a match');
+  a.skillCool = 0;
+  sim.useSkill(a);
+  const hp0 = a.hp;
+  sim.damagePlayer(a, 30, b.id, 'pistol');
+  check(a.hp === hp0 && a.bubHp === 20, 'Bubble Guard soaks up damage before health');
+  lv9.od = 0;
+  const dummy = sim.playerMap.get(sim.addPlayer('Dummy', false, { char: 'luap' }));
+  dummy.maxHp = dummy.hp = 9999;
+  sim.damagePlayer(dummy, D.OVERDRIVE.need, lv9.id, 'pistol');
+  sim.startOverdrive(lv9);
+  check(lv9.odT > 0 && lv9.skillCool === 0, 'dealing damage fills Wok Overdrive, which then starts with the skill ready');
+  b.hp = b.maxHp;
+  b.x = a.x + 200;
+  b.y = a.y;
+  a.a = 0;
+  a.skillCool = 0;
+  a.char = 'afeng';
+  a.input.ad = 200;
+  sim.useSkill(a);
+  steps(sim, 30);
+  check(b.hp < b.maxHp, 'Afeng\'s parcel lands and blows up on the target');
+}
+
 // ---------- physics ----------
 {
   const sim = new Sim({ seed: 99 });
@@ -378,7 +416,7 @@ for (const [seed, diff] of [[1, 4], [2, 5], [3, 1]]) {
   const chars = new Set(sim.players.map(p => p.char));
   console.log('royale ' + seed + ' (level ' + diff + '): ' + sim.time.toFixed(0) + 's, kills=' + kills + ', winner=' + (sim.winner ? sim.winner.name || sim.winner.char : '-') + ', ' + (ms / n).toFixed(3) + ' ms/step');
   check(sim.state === 'ended' && sim.players.filter(p => p.alive).length <= 1, 'royale ' + seed + ': ends with one survivor');
-  check(!nan && kills >= 5 && chars.size === 4, 'royale ' + seed + ': no NaN, kills happen, all four characters present');
+  check(!nan && kills >= 5 && chars.size >= 4, 'royale ' + seed + ': no NaN, kills happen, at least four different characters');
 }
 
 // ---------- characters ----------

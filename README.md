@@ -36,6 +36,18 @@ Touch controls:
 
 Phones zoom in a little compared with a computer screen so characters stay readable, so a phone player sees slightly less of the map. Tested in emulated Android and iPhone browsers (screen sizes, multi-touch, fullscreen, rotation); not yet on a physical device.
 
+## 🧪 Experiment branch: hero-shooter progression and 3D view
+
+This branch (`joshua/brawl-style-experiment`) tries out ideas from hero shooters. The names, characters and art are this game's own.
+
+- **Semi-3D view (on by default).** The camera looks down at an angle: walls, crates, containers, vehicles and buildings stand up as solid blocks, trees and lanterns stand on trunks and posts, and characters are standing figures with shadows who turn toward where they aim. Walls and trees in front of your character turn see-through. Switch it off with **◆ 3D 視角** on the title screen or in the pause menu.
+- **Four new characters** (eight in all): 阿風 Afeng the delivery rider (throws a parcel bomb that lands where you aim; drives 20% faster), 小泡 Bubbles the dishwasher (bubble shields for herself and nearby teammates; shrugs off half of any knockback), 金金 Jinjin the cashier (a fan of coins; knocked-out foes drop a soup dumpling), 冰師傅 Master Bing of the cold room (a freezing fog that slows; never slowed himself).
+- **Character levels 1 to 9.** Each character earns experience from matches (more for knockouts and wins) and levels up separately; each level adds 4% health and damage. Bots in a brawl play at your level (in multiplayer, the people's average).
+- **廚房道具 Kitchen gadgets** (level 4): two to choose from per character, three uses per match, key **G** or the green button.
+- **招牌絕活 Signature perks** (level 6): two always-on upgrades to choose from per character.
+- **大火快炒 Wok Overdrive** (level 8): dealing damage fills a purple meter around the skill button; when full, press **V** (or the purple button) for 6 seconds of extra speed, damage and toughness, with the skill ready at once in a stronger form.
+- Choose gadgets and perks on the character screen. **試玩：全部解鎖 Trial: unlock all** there sets every character to level 9 for trying things out (no experience is earned while it is on).
+
 ## Characters
 
 | Character | Role | Passive | Skill (right click or X) |
@@ -104,6 +116,8 @@ Besides weapon sounds: wood knocks, cracks and a crash when a wooden building co
 | F / E | Pick up or swap items, get in or out of vehicles |
 | Q / wheel | Change weapon |
 | 1 2 3 4 | Select weapon slot (slot 4 needs a thermal bag) |
+| G | Kitchen gadget (level 4 and up) |
+| V | Wok Overdrive, when the meter is full (level 8 and up) |
 | R | Reload |
 | C | Drop the held item |
 | M | Full map |

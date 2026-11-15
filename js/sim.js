@@ -253,8 +253,8 @@
   }
 
   const RANK = { fists: 0, knife: 1, pistol: 3, uzi: 4, shotgun: 4, pan: 5, cleaver: 5, rollingpin: 5, sniper: 5, rifle: 6, minigun: 6, wok: 6, chopsticks: 6, bowl: 6, harpoon: 7, swordfish: 8 };
-  const VALID_ACTIONS = { slot: 1, cycle: 1, reload: 1, interact: 1, drop: 1, jump: 1, skill: 1, heal: 1 };
-  const ALLY_WEAPONS = { yunwang: 'shotgun', luap: 'uzi', auhsoj: 'rifle', meibao: 'chopsticks' };
+  const VALID_ACTIONS = { slot: 1, cycle: 1, reload: 1, interact: 1, drop: 1, jump: 1, skill: 1, heal: 1, gadget: 1, overdrive: 1 };
+  const ALLY_WEAPONS = { yunwang: 'shotgun', luap: 'uzi', auhsoj: 'rifle', meibao: 'chopsticks', afeng: 'uzi', bubbles: 'shotgun', jinjin: 'pistol', bing: 'rifle' };
 
   class Sim {
     constructor(opts) {
@@ -275,6 +275,10 @@
       this.playerMap = new Map();
       this.bullets = [];
       this.turrets = [];
+      this.bombs = [];
+      this.mines = [];
+      // Bots in a brawl play at this character level (the people's average level, set by the host).
+      this.botLevel = clamp(Math.round(Number(opts.botLevel) || 1), 1, D.LEVELS.max);
       this.vehicles = [];
       this.obstacles = [];
       this.buildings = [];
@@ -841,7 +845,9 @@
       } else {
         nm = String(name || '').replace(/[^\w \-.!?㐀-鿿]/g, '').trim().slice(0, 16) || 'Player';
       }
-      const maxHp = foe ? Math.round(foe.hp * (o.hpMul || 1)) : D.CHARS[char].hp;
+      const lo = foe ? { level: 1, gadget: '', perk: '' } : isBot && o.level == null ? this.randomLoadout(char, this.botLevel) : this.loadout(char, o.level, o.gadget, o.perk);
+      const lvMul = 1 + D.LEVELS.step * (lo.level - 1);
+      const maxHp = foe ? Math.round(foe.hp * (o.hpMul || 1)) : Math.round(D.CHARS[char].hp * lvMul * (lo.perk === 'chin' ? 1.2 : 1));
       const p = {
         id,
         name: nm,
@@ -874,6 +880,19 @@
         skillUses: 0,
         boostT: 0,
         shieldT: 0,
+        lvl: lo.level,
+        dmgMul: lvMul,
+        gadget: lo.gadget,
+        perk: lo.perk,
+        gUses: D.GADGET_USES,
+        gCool: 0,
+        odOk: kind === 'player' && lo.level >= D.LEVELS.overdrive,
+        od: 0,
+        odT: 0,
+        bubHp: 0,
+        bubT: 0,
+        guardT: 0,
+        clockUntil: 0,
         burnT: 0,
         burnDps: 0,
         burnSrc: 0,
@@ -907,7 +926,7 @@
         specialT: 4,
         inBush: false,
         aspect: 16 / 9,
-        input: { mx: 0, my: 0, aim: 0, shoot: false, sprint: false, brake: false },
+        input: { mx: 0, my: 0, aim: 0, ad: 380, shoot: false, sprint: false, brake: false },
         actions: [],
         triggerHeld: false,
         ai: null
@@ -1140,6 +1159,9 @@
       p.killerId = 0;
       p.placement = 0;
       p.shieldT = this.time + 2;
+      p.odT = 0;
+      p.bubT = 0;
+      p.bubHp = 0;
       this.ev({ e: 'respawn', i: p.id, x: p.x, y: p.y });
     }
 
@@ -1171,6 +1193,9 @@
       i.shoot = !!inp.shoot;
       i.sprint = !!inp.sprint;
       i.brake = !!inp.brake;
+      // How far away the player is aiming (thrown skills land there).
+      const ad = Number(inp.ad);
+      if (Number.isFinite(ad)) i.ad = clamp(ad, 80, 420);
     }
 
     pushAction(id, act) {
@@ -1484,9 +1509,12 @@
       p.skillCool = C.skill.cd;
       p.skillUses++;
       const id = C.skill.id;
-      this.ev({ e: 'skill', i: p.id, s: id, x: p.x, y: p.y, a: p.a });
+      // During Wok Overdrive every skill comes out in its stronger form.
+      const od = p.odT > 0;
+      this.ev({ e: 'skill', i: p.id, s: id, x: p.x, y: p.y, a: p.a, od: od ? 1 : 0 });
       if (id === 'flame') {
-        const R = 165;
+        const R = 165 * (p.perk === 'fierce' ? 1.3 : 1) * (od ? 1.4 : 1);
+        const dmg = od ? 55 : 40;
         for (const q of this.players) {
           if (!q.alive || q.veh || !this.enemies(p, q)) continue;
           const d = Math.hypot(q.x - p.x, q.y - p.y);
@@ -1494,33 +1522,213 @@
           const n = Math.max(1, d);
           this.knock(q, ((q.x - p.x) / n) * 380, ((q.y - p.y) / n) * 380);
           this.burn(q, 7, 3, p.id);
-          this.damagePlayer(q, 40, p.id, 'flame');
+          this.damagePlayer(q, dmg, p.id, 'flame');
         }
         for (const o of this.grid.query(p.x - R, p.y - R, p.x + R, p.y + R, [])) {
           if (!o.dead && o.mhp && Math.hypot(o.x - p.x, o.y - p.y) < R) this.damageObstacle(o, 60, p.id);
         }
         this.heal(p, 15);
       } else if (id === 'rush') {
-        let dx = Math.cos(p.a);
-        let dy = Math.sin(p.a);
-        p.rx = dx;
-        p.ry = dy;
-        p.rushT = 0.38;
+        p.rx = Math.cos(p.a);
+        p.ry = Math.sin(p.a);
+        p.rushT = 0.38 * (od ? 1.4 : 1);
+        p.rushDmg = 45 * (p.perk === 'haymaker' ? 1.5 : 1) * (od ? 1.4 : 1);
         p.rushHit = new Set();
         p.jumpT = 0;
       } else if (id === 'turret') {
-        const tx = p.x + Math.cos(p.a) * (p.r + 30);
-        const ty = p.y + Math.sin(p.a) * (p.r + 30);
-        const free = !this.blockedAt(tx, ty, 18);
-        this.turrets.push({ id: this.nextId++, owner: p.id, team: p.team, x: free ? tx : p.x, y: free ? ty : p.y, a: p.a, life: 10, cool: 0.4 });
+        const n = od ? 3 : p.perk === 'twin' ? 2 : 1;
+        for (let k = 0; k < n; k++) {
+          const a = p.a + (k - (n - 1) / 2) * 0.7;
+          const tx = p.x + Math.cos(a) * (p.r + 30);
+          const ty = p.y + Math.sin(a) * (p.r + 30);
+          const free = !this.blockedAt(tx, ty, 18);
+          this.turrets.push({ id: this.nextId++, owner: p.id, team: p.team, x: free ? tx : p.x, y: free ? ty : p.y, a, life: od ? 14 : 10, cool: 0.4, ap: p.perk === 'ap', fast: this.time < p.clockUntil });
+        }
         const mine = this.turrets.filter(t => t.owner === p.id);
-        if (mine.length > 2) this.turrets.splice(this.turrets.indexOf(mine[0]), 1);
+        const keep = Math.max(2, n);
+        for (let k = 0; k < mine.length - keep; k++) this.turrets.splice(this.turrets.indexOf(mine[k]), 1);
       } else if (id === 'boba') {
-        p.hp = Math.min(p.maxHp, p.hp + 30);
+        const heal = p.perk === 'double' ? 60 : 30;
+        p.hp = Math.min(p.maxHp, p.hp + heal);
         p.stamina = 100;
-        p.boostT = 5;
+        p.boostT = od ? 7 : 5;
+        this.ev({ e: 'heal', i: p.id, x: p.x, y: p.y });
+        if (od) {
+          for (const q of this.players) {
+            if (q === p || !q.alive || this.enemies(p, q) || Math.hypot(q.x - p.x, q.y - p.y) > 260) continue;
+            q.hp = Math.min(q.maxHp, q.hp + heal);
+            q.boostT = Math.max(q.boostT, 4);
+            this.ev({ e: 'heal', i: q.id, x: q.x, y: q.y });
+          }
+        }
+      } else if (id === 'parcel') {
+        const n = od ? 3 : 1;
+        for (let k = 0; k < n; k++) {
+          const a = p.a + (k - (n - 1) / 2) * 0.32;
+          this.throwParcel(p, a, p.input.ad || 380, 140 * (p.perk === 'bigbox' ? 1.35 : 1), 55);
+        }
+      } else if (id === 'bubble') {
+        const amount = od ? 120 : p.perk === 'thick' ? 90 : 50;
+        const R = 220 * (p.perk === 'wide' ? 1.5 : 1);
+        for (const q of this.players) {
+          if (!q.alive) continue;
+          const d = Math.hypot(q.x - p.x, q.y - p.y);
+          if (q === p || (!this.enemies(p, q) && d < R)) {
+            q.bubHp = amount;
+            q.bubT = 5;
+          } else if (od && this.enemies(p, q) && !q.veh && d < R) {
+            const n2 = Math.max(1, d);
+            this.knock(q, ((q.x - p.x) / n2) * 520, ((q.y - p.y) / n2) * 520);
+          }
+        }
+      } else if (id === 'coins') {
+        const n = od ? 14 : p.perk === 'bills' ? 11 : 7;
+        const dmg = (od ? 20 : 15) + (p.perk === 'jackpot' ? 5 : 0);
+        const spread = od ? 1.2 : 0.9;
+        for (let k = 0; k < n; k++) this.coin(p, p.a + (k / (n - 1) - 0.5) * spread, dmg);
+      } else if (id === 'freeze') {
+        const R = 190 * (od ? 1.4 : 1);
+        const mul = od ? 0.3 : 0.5;
+        const t = p.perk === 'deep' ? 5 : 3;
+        for (const q of this.players) {
+          if (!q.alive || q.veh || !this.enemies(p, q) || Math.hypot(q.x - p.x, q.y - p.y) > R + q.r) continue;
+          this.chill(q, t, mul);
+          this.damagePlayer(q, 20, p.id, 'freeze');
+        }
+      }
+    }
+
+    // Master Bing's passive: cold does not slow him.
+    chill(q, t, mul) {
+      if (q.char === 'bing') return;
+      q.slowT = Math.max(q.slowT, t);
+      q.slowMul = Math.min(q.slowT > t ? q.slowMul : 1, mul);
+    }
+
+    coin(p, a, dmg) {
+      this.spawnBullet(p, 'coin', a, p.x + Math.cos(a) * p.r, p.y + Math.sin(a) * p.r);
+      this.bullets[this.bullets.length - 1].dmg = dmg;
+    }
+
+    // A parcel flies in an arc to a point up to dist ahead (stopping short of walls) and blows up there.
+    throwParcel(p, a, dist, r, dmg) {
+      let d = dist;
+      while (d > 40 && this.losBlocked(p.x, p.y, p.x + Math.cos(a) * d, p.y + Math.sin(a) * d)) d -= 40;
+      this.bombs.push({ id: this.nextId++, owner: p.id, x0: p.x, y0: p.y, x1: p.x + Math.cos(a) * d, y1: p.y + Math.sin(a) * d, t: 0, T: 0.6, r, dmg });
+    }
+
+    // Kitchen gadgets: three uses a match, D.GADGET_CD seconds apart.
+    useGadget(p) {
+      if (!p.alive || p.veh || !p.gadget) return;
+      if (p.gUses <= 0 || p.gCool > 0) {
+        this.toPlayer(p, 'gadgetWait');
+        return;
+      }
+      p.gUses--;
+      p.gCool = D.GADGET_CD;
+      const g = p.gadget;
+      this.ev({ e: 'gadget', i: p.id, g, x: p.x, y: p.y });
+      const near = R => this.players.filter(q => q.alive && !q.veh && this.enemies(p, q) && Math.hypot(q.x - p.x, q.y - p.y) < R + q.r);
+      const away = (q, f) => {
+        const d = Math.max(1, Math.hypot(q.x - p.x, q.y - p.y));
+        this.knock(q, ((q.x - p.x) / d) * f, ((q.y - p.y) / d) * f);
+      };
+      if (g === 'chili') {
+        for (const q of near(170)) this.burn(q, 10, 3, p.id);
+      } else if (g === 'taste') {
+        this.heal(p, 40);
+        this.ev({ e: 'heal', i: p.id, x: p.x, y: p.y });
+      } else if (g === 'guard') {
+        p.guardT = this.time + 3;
+      } else if (g === 'second') {
+        p.skillCool *= 0.5;
+      } else if (g === 'mine') {
+        this.mines.push({ id: this.nextId++, owner: p.id, team: p.team, x: p.x, y: p.y, arm: this.time + 0.8 });
+        const mine = this.mines.filter(m => m.owner === p.id);
+        if (mine.length > 3) this.mines.splice(this.mines.indexOf(mine[0]), 1);
+      } else if (g === 'overclock') {
+        p.clockUntil = this.time + 12;
+        for (const t of this.turrets) if (t.owner === p.id) t.fast = true;
+      } else if (g === 'pearls') {
+        for (const q of near(190)) this.chill(q, 3, 0.55);
+      } else if (g === 'sugar') {
+        p.stamina = 100;
+        p.boostT = Math.max(p.boostT, 2.5);
+      } else if (g === 'swerve') {
+        const ml = Math.hypot(p.input.mx, p.input.my);
+        p.jx = ml > 0.1 ? p.input.mx / ml : Math.cos(p.a);
+        p.jy = ml > 0.1 ? p.input.my / ml : Math.sin(p.a);
+        p.jumpT = 0.42;
+      } else if (g === 'extra') {
+        this.spawnItem(p.x + 34, p.y, 'soup');
+        this.spawnItem(p.x - 34, p.y, 'bao');
+      } else if (g === 'soap') {
+        for (const q of near(200)) away(q, 680);
+      } else if (g === 'rinse') {
+        p.burnT = 0;
+        p.slowT = 0;
+        this.heal(p, 25);
+        this.ev({ e: 'heal', i: p.id, x: p.x, y: p.y });
+      } else if (g === 'refund') {
+        for (const sl of p.slots) if (sl && isGun(sl.t)) sl.m = D.WEAPONS[sl.t].mag;
+        p.reload = null;
+      } else if (g === 'rain') {
+        for (let k = 0; k < 12; k++) this.coin(p, (k / 12) * TAU, 15);
+      } else if (g === 'nova') {
+        for (const q of near(170)) {
+          this.chill(q, 1, 0.05);
+          this.damagePlayer(q, 10, p.id, 'freeze');
+        }
+      } else if (g === 'icepack') {
+        p.burnT = 0;
+        this.heal(p, 30);
         this.ev({ e: 'heal', i: p.id, x: p.x, y: p.y });
       }
+    }
+
+    // Wok Overdrive: needs level 8 and a full meter.
+    startOverdrive(p) {
+      if (!p.alive || !p.odOk || p.od < 1 || p.odT > 0) {
+        if (!p.bot) this.toPlayer(p, 'odWait');
+        return;
+      }
+      p.odT = D.OVERDRIVE.time;
+      p.od = 0;
+      p.skillCool = 0;
+      this.ev({ e: 'overdrive', i: p.id, x: p.x, y: p.y, g: 1 });
+    }
+
+    updateGadgets(dt) {
+      for (let i = this.bombs.length - 1; i >= 0; i--) {
+        const b = this.bombs[i];
+        b.t += dt;
+        if (b.t < b.T) continue;
+        this.bombs.splice(i, 1);
+        this.explode(b.x1, b.y1, b.r, b.dmg, b.owner, b.owner);
+      }
+      for (let i = this.mines.length - 1; i >= 0; i--) {
+        const m = this.mines[i];
+        if (this.time < m.arm) continue;
+        const owner = this.playerMap.get(m.owner);
+        const hit = this.players.some(q => q.alive && !q.veh && (owner ? this.enemies(owner, q) : true) && q.id !== m.owner && Math.hypot(q.x - m.x, q.y - m.y) < 60 + q.r);
+        if (!hit) continue;
+        this.mines.splice(i, 1);
+        this.explode(m.x, m.y, 120, 70, m.owner, m.owner);
+      }
+    }
+
+    // Which gadgets and perks a character may use at a level; anything else is dropped.
+    loadout(char, level, gadget, perk) {
+      return D.validLoadout(char, level, gadget, perk);
+    }
+
+    // A random but legal loadout, for bots and story allies.
+    randomLoadout(char, level) {
+      const pick = tbl => {
+        const ids = Object.keys(tbl).filter(k => tbl[k].char === char);
+        return ids[Math.floor(this.rng() * ids.length)] || '';
+      };
+      return this.loadout(char, level, pick(D.GADGETS), pick(D.PERKS));
     }
 
     burn(q, dps, t, src) {
@@ -1554,6 +1762,12 @@
           break;
         case 'heal':
           this.drinkSoup(p);
+          break;
+        case 'gadget':
+          this.useGadget(p);
+          break;
+        case 'overdrive':
+          this.startOverdrive(p);
           break;
       }
     }
@@ -1613,7 +1827,7 @@
     }
 
     knock(p, ix, iy) {
-      const m = this.massOf(p);
+      const m = this.massOf(p) * (p.char === 'bubbles' ? 2 : 1);
       p.kx += ix / m;
       p.ky += iy / m;
     }
@@ -1700,6 +1914,10 @@
       p.jumpCool = Math.max(0, p.jumpCool - dt);
       p.skillCool = Math.max(0, p.skillCool - dt);
       p.boostT = Math.max(0, p.boostT - dt);
+      p.gCool = Math.max(0, p.gCool - dt);
+      p.odT = Math.max(0, p.odT - dt);
+      p.bubT = Math.max(0, p.bubT - dt);
+      if (p.bubT <= 0) p.bubHp = 0;
       p.slowT = Math.max(0, p.slowT - dt);
 
       if (!p.veh) {
@@ -1715,11 +1933,13 @@
         if (isGun(t)) speed *= D.WEAPONS[t].move;
         if (p.inject) speed *= 0.5;
         if (p.boostT > 0) speed *= 1.35;
-        if (p.slowT > 0) speed *= p.slowMul;
+        if (p.slowT > 0 && p.char !== 'bing') speed *= p.slowMul;
+        if (p.odT > 0) speed *= D.OVERDRIVE.speed;
+        if (p.perk === 'feather') speed *= 1.08;
         const sprinting = inp.sprint && ml > 0.1 && p.stamina > 0 && !p.inject;
         if (sprinting) {
           speed *= D.SPRINT_MUL;
-          p.stamina = Math.max(0, p.stamina - D.STAMINA_DRAIN * dt);
+          p.stamina = Math.max(0, p.stamina - D.STAMINA_DRAIN * (p.char === 'afeng' ? 0.7 : 1) * dt);
           p.sprintT = this.time;
         } else if (this.time - p.sprintT > 0.8) {
           p.stamina = Math.min(100, p.stamina + D.STAMINA_REGEN * (p.char === 'meibao' ? 1.5 : 1) * dt);
@@ -1804,7 +2024,8 @@
         if (Math.hypot(q.x - p.x, q.y - p.y) > p.r + q.r + 10) continue;
         p.rushHit.add(q.id);
         this.knock(q, p.rx * 520, p.ry * 520);
-        this.damagePlayer(q, 45, p.id, 'rush');
+        this.damagePlayer(q, p.rushDmg || 45, p.id, 'rush');
+        if (p.perk === 'haymaker') this.chill(q, 1.5, 0.6);
         this.ev({ e: 'hit', x: q.x, y: q.y, ty: 'p', by: p.id, w: 'fists' });
       }
     }
@@ -1825,7 +2046,7 @@
         return;
       }
       p.reload = null;
-      p.inject = { t: 0, total: D.ITEMS.soup.time };
+      p.inject = { t: 0, total: D.ITEMS.soup.time * (p.perk === 'slurp' ? 0.5 : 1) };
     }
 
     spawnBullet(p, wid, ang, x, y) {
@@ -1925,6 +2146,20 @@
       if (att && att !== p && !this.enemies(att, p)) return;
       if (att && att.kind !== 'player' && p.team === 1) amt *= D.BOT_SKILL[this.difficulty].foeDmg;
       else if (att && att.bot && !p.bot && this.mode === 'royale') amt *= D.BOT_SKILL[this.difficulty].botDmg * (this.teamMode === 'coop' ? D.COOP_BOT_DMG : 1);
+      // Character level, Wok Overdrive and the Brittle perk raise damage dealt; Overdrive, the mouthguard and
+      // Master Bing's cold blood lower damage taken; a bubble soaks up what is left first.
+      if (att && att !== p && att.kind === 'player') amt *= att.dmgMul * (att.odT > 0 ? D.OVERDRIVE.dmg : 1) * (att.perk === 'brittle' && p.slowT > 0 ? 1.25 : 1);
+      if (p.odT > 0) amt *= D.OVERDRIVE.taken;
+      if (p.guardT > this.time) amt *= 0.4;
+      if (cause === 'zone' && p.char === 'bing') amt *= 0.7;
+      if (p.bubT > 0 && p.bubHp > 0) {
+        const soak = Math.min(p.bubHp, amt);
+        p.bubHp -= soak;
+        amt -= soak;
+        if (p.bubHp <= 0) this.ev({ e: 'pop', x: p.x, y: p.y });
+        if (amt <= 0) return;
+      }
+      if (att && att !== p && att.odOk && att.odT <= 0) att.od = Math.min(1, att.od + amt / D.OVERDRIVE.need);
       p.hp -= amt;
       p.hitT = this.time;
       if (p.inject && cause !== 'zone' && cause !== 'burn') p.inject = null;
@@ -1961,6 +2196,8 @@
       const killer = src ? this.playerMap.get(src) : null;
       if (killer && killer !== p) {
         killer.kills++;
+        if (killer.perk === 'tip') this.heal(killer, 25);
+        if (killer.char === 'jinjin' && killer !== p) this.dropNear(p, 'bao');
         killer.streak = this.time - killer.streakT < 4 ? killer.streak + 1 : 1;
         killer.streakT = this.time;
         if (killer.streak >= 2) this.ev({ e: 'streak', to: killer.id, n: killer.streak });
@@ -2061,10 +2298,10 @@
       this.explode(v.x, v.y, 220, 85, src);
     }
 
-    explode(x, y, radius, dmg, src) {
+    explode(x, y, radius, dmg, src, spare) {
       this.ev({ e: 'exp', x, y, r: radius });
       for (const p of this.players) {
-        if (!p.alive || p.veh) continue;
+        if (!p.alive || p.veh || (spare && p.id === spare)) continue;
         const d = Math.hypot(p.x - x, p.y - y);
         if (d > radius + p.r) continue;
         let f = 1 - Math.max(0, d - p.r) / radius;
@@ -2085,7 +2322,7 @@
 
     // ---------- story ----------
 
-    startStory(name, char) {
+    startStory(name, char, lo) {
       const ch = this.chapter;
       const S = this.size;
       let hx = S / 2;
@@ -2101,7 +2338,8 @@
         hx = sp[0];
         hy = sp[1];
       }
-      const heroId = this.addPlayer(name, false, { char, team: 1, x: hx, y: hy });
+      const heroLo = lo || {};
+      const heroId = this.addPlayer(name, false, { char, team: 1, x: hx, y: hy, level: heroLo.level, gadget: heroLo.gadget, perk: heroLo.perk });
       this.hero = this.playerMap.get(heroId);
       this.hero.skillCool = 0;
       this.story = { def: ch, goal: ch.goal, killed: 0, collected: 0, tl: ch.goal.time || 0, waveIdx: 0, waveT: ch.waves ? ch.waves.first || 6 : 0, boxes: [] };
@@ -2129,10 +2367,11 @@
         for (const b of boxes) this.spawnItem(b[0], b[1], 'coldbox');
         this.story.boxes = boxes;
       }
-      const allyChars = D.CHAR_IDS.filter(c => c !== char);
+      const allyChars = D.CORE_IDS.filter(c => c !== char);
       for (let i = 0; i < (ch.allies || 0) && i < allyChars.length; i++) {
         const sp = this.findSpot(hx, hy, 60, 140, PR);
-        this.addPlayer('', true, { char: allyChars[i], team: 1, ally: true, weapon: ALLY_WEAPONS[allyChars[i]], x: sp[0], y: sp[1], follow: heroId, hunt: 0 });
+        const alo = this.randomLoadout(allyChars[i], this.hero.lvl);
+        this.addPlayer('', true, { char: allyChars[i], team: 1, ally: true, weapon: ALLY_WEAPONS[allyChars[i]], x: sp[0], y: sp[1], follow: heroId, hunt: 0, level: alo.level, gadget: alo.gadget, perk: alo.perk });
       }
       for (const grp of ch.enemies || []) {
         for (let i = 0; i < grp.n; i++) {
@@ -2233,6 +2472,7 @@
       this.updateBullets(dt);
       this.updateSecrets(dt);
       this.updateRespawns();
+      this.updateGadgets(dt);
       this.updateStory(dt);
     }
 
@@ -2363,8 +2603,9 @@
         const want = Math.atan2(best.y - t.y, best.x - t.x);
         t.a += clamp(angleDiff(t.a, want), -8 * dt, 8 * dt);
         if (t.cool <= 0 && Math.abs(angleDiff(t.a, want)) < 0.2) {
-          t.cool = 0.28 * (P ? 1 + P.react : 1);
+          t.cool = 0.28 * (P ? 1 + P.react : 1) * (t.fast ? 0.5 : 1);
           this.spawnBullet(owner, 'turret', t.a + (this.rng() - 0.5) * (0.06 + (P ? P.aimNoise * 2 : 0)), t.x + Math.cos(t.a) * 20, t.y + Math.sin(t.a) * 20);
+          if (t.ap) this.bullets[this.bullets.length - 1].dmg *= 1.4;
           this.ev({ e: 'shot', i: 0, x: t.x, y: t.y, a: t.a, w: 'turret' });
         }
       }
@@ -2389,9 +2630,11 @@
         const fy = Math.sin(v.a);
         let vf = v.vx * fx + v.vy * fy;
         let vr = -v.vx * fy + v.vy * fx;
-        if (thr > 0.05) vf += (vf < -20 ? V.brake : V.accel * thr) * dt;
+        // Afeng drives 20% faster: more engine force against the same drag curve scaled to the higher top speed.
+        const rider = drv && drv.char === 'afeng' ? 1.2 : 1;
+        if (thr > 0.05) vf += (vf < -20 ? V.brake : V.accel * rider * thr) * dt;
         else if (thr < -0.05) vf += (vf > 20 ? -V.brake : V.accel * 0.6 * thr) * dt;
-        vf -= (V.accel / (V.max * V.max)) * vf * Math.abs(vf) * dt;
+        vf -= ((V.accel * rider) / (V.max * rider * V.max * rider)) * vf * Math.abs(vf) * dt;
         const roll = (Math.abs(thr) > 0.05 ? 30 : 170) * dt;
         vf -= Math.sign(vf) * Math.min(Math.abs(vf), roll);
         if (handbrake) vf -= Math.sign(vf) * Math.min(Math.abs(vf), V.brake * 0.8 * dt);
@@ -2772,7 +3015,19 @@
           p.actions.push({ a: 'skill' });
         } else if (sk === 'turret' && tgt && ai.los && tdist < 600) p.actions.push({ a: 'skill' });
         else if (sk === 'boba' && (p.hp < p.maxHp * 0.6 || (tgt && tdist > 300 && tdist < 700))) p.actions.push({ a: 'skill' });
+        else if ((sk === 'parcel' || sk === 'coins') && tgt && ai.los && tdist > 120 && tdist < (sk === 'parcel' ? 420 : 380)) {
+          p.a = Math.atan2(tgt.y - p.y, tgt.x - p.x);
+          p.input.aim = p.a;
+          p.input.ad = tdist;
+          p.actions.push({ a: 'skill' });
+        } else if (sk === 'bubble' && (p.hp < p.maxHp * 0.7 || (tgt && tdist < 300))) p.actions.push({ a: 'skill' });
+        else if (sk === 'freeze' && tgt && tdist < 180) p.actions.push({ a: 'skill' });
       }
+      if (p.gadget && p.gUses > 0 && p.gCool <= 0 && tgt && tdist < 260 && this.rng() < 0.25 && !(this.mode === 'royale' && this.time < 20)) {
+        const healer = p.gadget === 'taste' || p.gadget === 'rinse' || p.gadget === 'icepack' || p.gadget === 'extra';
+        if (!healer || p.hp < p.maxHp * 0.55) p.actions.push({ a: 'gadget' });
+      }
+      if (p.odOk && p.od >= 1 && tgt && tdist < 500) p.actions.push({ a: 'overdrive' });
       if (p.kind === 'boss') {
         p.specialT -= P.react;
         if (p.specialT <= 0 && tgt && tdist < 500) {
@@ -3177,6 +3432,14 @@
         tm: p.team,
         rsp: Math.round(this.respawnLeft(p) * 10) / 10,
         sh: p.shieldT > this.time ? 1 : 0,
+        lv: p.lvl,
+        gd: p.gadget,
+        gu: p.gUses,
+        gc: Math.round((p.gCool / D.GADGET_CD) * 100) / 100,
+        pk: p.perk,
+        odOk: p.odOk ? 1 : 0,
+        od: Math.round(p.od * 100) / 100,
+        odT: Math.round(p.odT * 10) / 10,
         pr: full ? this.promptFor(p) : null
       };
     }
@@ -3214,6 +3477,10 @@
           sw: q.swingT > 0 ? Math.round((q.swingT / 0.22) * q.swingSide * 100) / 100 : 0,
           jz: q.jumpT > 0 ? Math.round(Math.sin((1 - q.jumpT / D.JUMP_TIME) * Math.PI) * 100) / 100 : 0,
           rs: q.rushT > 0 ? 1 : 0,
+          lv: q.kind === 'player' ? q.lvl : 0,
+          od: q.odT > 0 ? 1 : 0,
+          bb: q.bubT > 0 && q.bubHp > 0 ? 1 : 0,
+          gd: q.guardT > this.time ? 1 : 0,
           fx: (q.burnT > 0 ? 1 : 0) | (q.slowT > 0 ? 2 : 0) | (q.boostT > 0 ? 4 : 0),
           hp: q.kind !== 'player' || q.team !== 0 ? Math.round((q.hp / q.maxHp) * 100) / 100 : -1,
           hit: this.time - q.hitT < 0.12 ? 1 : 0,
@@ -3229,6 +3496,17 @@
       const tu = [];
       for (const t of this.turrets) {
         if (inView(t.x, t.y, 60)) tu.push({ i: t.id, x: r1(t.x), y: r1(t.y), a: Math.round(t.a * 100) / 100, tm: t.team, lf: Math.round(t.life * 10) / 10 });
+      }
+      const bo = [];
+      for (const b of this.bombs) {
+        const f = b.t / b.T;
+        const x = b.x0 + (b.x1 - b.x0) * f;
+        const y = b.y0 + (b.y1 - b.y0) * f;
+        if (inView(x, y, 200)) bo.push({ i: b.id, x: r1(x), y: r1(y), z: Math.round(Math.sin(f * Math.PI) * 130), r: Math.round(b.r) });
+      }
+      const mi = [];
+      for (const m of this.mines) {
+        if (inView(m.x, m.y, 40)) mi.push({ i: m.id, x: r1(m.x), y: r1(m.y), tm: m.team, o: m.owner, arm: this.time >= m.arm ? 1 : 0 });
       }
       const it = [];
       for (const t of this.itemGrid.query(x0 - 30, y0 - 30, x1 + 30, y1 + 30, [])) {
@@ -3274,6 +3552,8 @@
         pl,
         bu,
         tu,
+        bo,
+        mi,
         it,
         sx,
         ve,

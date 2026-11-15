@@ -35,7 +35,9 @@
     char: D.CHARS[store.get('char', 'yunwang')] ? store.get('char', 'yunwang') : 'yunwang',
     diff: D.diffLevel(store.get('diff', '')) || 2,
     bots: SIM.clamp(Number(store.get('bots', 13)) || 13, 1, 29),
-    progress: SIM.clamp(Number(store.get('progress', 0)) || 0, 0, D.STORY.length)
+    progress: SIM.clamp(Number(store.get('progress', 0)) || 0, 0, D.STORY.length),
+    trial: store.get('trial', '0') === '1',
+    view3d: store.get('view3d', '1') === '1'
   };
   Sound.initMusic(window.YW_MUSIC || { theme: 'assets/yunwang_theme.mp3', quiet: 'assets/quiet_room.mp3' });
   Sound.initSamples(window.YW_SFX || { win: 'assets/sfx/winner_music.mp3', kill: 'assets/sfx/kill_effect.mp3', dead: 'assets/sfx/dead_effect.mp3' });
@@ -91,14 +93,14 @@
       this.opts = o;
       if (o.mode === 'story') {
         this.sim = new SIM.Sim({ mode: 'story', chapter: o.chapter, difficulty: o.difficulty });
-        this.myId = this.sim.startStory(o.name, o.char);
+        this.myId = this.sim.startStory(o.name, o.char, { level: o.level, gadget: o.gadget, perk: o.perk });
       } else {
-        this.sim = new SIM.Sim({ difficulty: o.difficulty });
+        this.sim = new SIM.Sim({ difficulty: o.difficulty, botLevel: o.level });
         if (this.demo) {
           this.sim.fillBots(o.bots);
           this.myId = this.sim.players[0].id;
         } else {
-          this.myId = this.sim.addPlayer(o.name, false, { char: o.char });
+          this.myId = this.sim.addPlayer(o.name, false, { char: o.char, level: o.level, gadget: o.gadget, perk: o.perk });
           this.sim.fillBots(o.bots + 1);
         }
       }
@@ -189,6 +191,7 @@
     out.ve = list(a.ve, b.ve, true);
     out.bu = list(a.bu, b.bu, false);
     out.tu = list(a.tu || [], b.tu || [], false);
+    out.bo = list(a.bo || [], b.bo || [], false);
     if (a.cam === b.cam) {
       out.cx = a.cx + (b.cx - a.cx) * f;
       out.cy = a.cy + (b.cy - a.cy) * f;
@@ -219,7 +222,7 @@
         setTimeout(() => this.handlers.onClose && this.handlers.onClose(this), 0);
         return;
       }
-      this.ws.onopen = () => this.send({ t: 'join', name: o.name, char: o.char, aspect: window.innerWidth / window.innerHeight });
+      this.ws.onopen = () => this.send(Object.assign({ t: 'join', name: o.name, char: o.char, aspect: window.innerWidth / window.innerHeight }, loadoutOf(o.char)));
       this.ws.onmessage = m => {
         let msg;
         try {
@@ -331,7 +334,7 @@
     }
 
     setChar(char) {
-      this.send({ t: 'char', char });
+      this.send(Object.assign({ t: 'char', char }, loadoutOf(char)));
     }
 
     destroy() {
@@ -379,6 +382,8 @@
     $('tSfx').textContent = '🔊 ' + I.t('sfx') + ': ' + onOff(prefs.sfx);
     $('pauseMusic').textContent = I.t('music') + ': ' + onOff(prefs.music);
     $('pauseSfx').textContent = I.t('sfx') + ': ' + onOff(prefs.sfx);
+    $('t3d').textContent = '◆ ' + I.t('view3d') + ': ' + onOff(prefs.view3d);
+    $('pause3d').textContent = I.t('view3d') + ': ' + onOff(prefs.view3d);
     const served = window.location.protocol === 'http:' || window.location.protocol === 'https:';
     $('lanNote').textContent = served ? I.t('lanNoteServed', window.location.host) : I.t('lanNoteLocal');
     $('server').placeholder = I.t('serverHint');
@@ -390,6 +395,51 @@
     renderChapters();
   }
 
+  // ---------- character levels and loadouts ----------
+
+  function xpOf(id) {
+    return Math.max(0, Number(store.get('xp.' + id, 0)) || 0);
+  }
+
+  function levelOf(id) {
+    return prefs.trial ? D.LEVELS.max : D.levelForXp(xpOf(id));
+  }
+
+  function choiceOf(tbl, key, id) {
+    const ids = Object.keys(tbl).filter(k => tbl[k].char === id);
+    const saved = store.get(key + id, '');
+    return ids.indexOf(saved) >= 0 ? saved : ids[0];
+  }
+
+  function loadoutOf(id) {
+    const level = levelOf(id);
+    return {
+      level,
+      gadget: level >= D.LEVELS.gadget ? choiceOf(D.GADGETS, 'gad.', id) : '',
+      perk: level >= D.LEVELS.perk ? choiceOf(D.PERKS, 'perk.', id) : ''
+    };
+  }
+
+  // Experience for the character just played. Returns what to show on the result screen.
+  function awardXp(id, gain) {
+    if (prefs.trial || !D.CHARS[id]) return '';
+    const before = D.levelForXp(xpOf(id));
+    const xp = xpOf(id) + gain;
+    store.set('xp.' + id, xp);
+    const after = D.levelForXp(xp);
+    let txt = I.t('xpGain', I.pick(D.CHARS[id].name), gain);
+    if (after > before) {
+      txt += '  ' + I.t('levelUp', after);
+      if (before < D.LEVELS.gadget && after >= D.LEVELS.gadget) txt += ' ' + I.t('unlockGadget');
+      if (before < D.LEVELS.perk && after >= D.LEVELS.perk) txt += ' ' + I.t('unlockPerk');
+      if (before < D.LEVELS.overdrive && after >= D.LEVELS.overdrive) txt += ' ' + I.t('unlockOd');
+      Sound.play('rare');
+    }
+    if (after < D.LEVELS.max) txt += '  (' + I.t('xpToNext', D.xpForLevel(after + 1) - xp, after + 1) + ')';
+    renderHeroCards();
+    return txt;
+  }
+
   function renderHeroCards() {
     const box = $('heroCards');
     box.innerHTML = '';
@@ -398,32 +448,17 @@
       const b = document.createElement('button');
       b.className = 'hero-card' + (prefs.char === id ? ' on' : '');
       const cv = document.createElement('canvas');
-      cv.width = 220;
-      cv.height = 220;
-      renderer.drawPortrait(cv.getContext('2d'), id, 0, 0, 220);
+      cv.width = 160;
+      cv.height = 160;
+      renderer.drawPortrait(cv.getContext('2d'), id, 0, 0, 160);
       const name = document.createElement('b');
       name.textContent = I.pick(C.name);
-      const role = document.createElement('div');
-      role.className = 'role';
-      role.textContent = I.pick(C.role);
-      const desc = document.createElement('div');
-      desc.className = 'desc';
-      const p1 = document.createElement('div');
-      const e1 = document.createElement('em');
-      e1.textContent = I.t('passive') + '｜';
-      p1.appendChild(e1);
-      p1.appendChild(document.createTextNode(I.pick(C.passive)));
-      const p2 = document.createElement('div');
-      const e2 = document.createElement('em');
-      e2.textContent = I.t('skill') + '｜';
-      p2.appendChild(e2);
-      p2.appendChild(document.createTextNode(I.pick(C.skillText)));
-      desc.appendChild(p1);
-      desc.appendChild(p2);
+      const lv = document.createElement('span');
+      lv.className = 'lv';
+      lv.textContent = 'Lv ' + levelOf(id);
       b.appendChild(cv);
       b.appendChild(name);
-      b.appendChild(role);
-      b.appendChild(desc);
+      b.appendChild(lv);
       b.addEventListener('click', () => {
         prefs.char = id;
         store.set('char', id);
@@ -432,7 +467,71 @@
       });
       box.appendChild(b);
     }
+    renderHeroInfo();
   }
+
+  // The chosen character's details: level, experience, skills, and the gadget and perk choices.
+  function renderHeroInfo() {
+    const id = prefs.char;
+    const C = D.CHARS[id];
+    const box = $('heroInfo');
+    box.innerHTML = '';
+    const el = (tag, cls, txt) => {
+      const e = document.createElement(tag);
+      if (cls) e.className = cls;
+      if (txt != null) e.textContent = txt;
+      return e;
+    };
+    const level = levelOf(id);
+    const head = el('div', 'hi-head');
+    head.appendChild(el('b', '', I.pick(C.name)));
+    head.appendChild(el('span', 'role', I.pick(C.role)));
+    head.appendChild(el('span', 'lv', 'Lv ' + level + ' / ' + D.LEVELS.max));
+    box.appendChild(head);
+    const bar = el('div', 'xpbar');
+    const xp = xpOf(id);
+    const lo = D.xpForLevel(Math.min(level, D.LEVELS.max));
+    const hi = D.xpForLevel(Math.min(level + 1, D.LEVELS.max));
+    const fill = el('i');
+    fill.style.width = (level >= D.LEVELS.max || prefs.trial ? 100 : Math.round(((xp - lo) / Math.max(1, hi - lo)) * 100)) + '%';
+    bar.appendChild(fill);
+    bar.appendChild(el('span', '', prefs.trial ? I.t('trialOn') : level >= D.LEVELS.max ? I.t('maxLevel') : I.t('xpBar', xp - lo, hi - lo, level + 1)));
+    box.appendChild(bar);
+    const row = (label, txt, cls) => {
+      const r = el('div', 'hi-row' + (cls ? ' ' + cls : ''));
+      r.appendChild(el('em', '', label + '｜'));
+      r.appendChild(document.createTextNode(txt));
+      box.appendChild(r);
+    };
+    row(I.t('passive'), I.pick(C.passive));
+    row(I.t('skill'), I.pick(C.skillText));
+    const pick = (tbl, key, need, label) => {
+      const wrap = el('div', 'hi-pick');
+      wrap.appendChild(el('span', 'hp-label', label + (level < need ? '  🔒 Lv ' + need : '')));
+      const btns = el('div', 'seg');
+      const chosen = choiceOf(tbl, key, id);
+      for (const k of Object.keys(tbl).filter(q => tbl[q].char === id)) {
+        const b = el('button', k === chosen && level >= need ? 'on' : '', I.pick(tbl[k].name));
+        b.disabled = level < need;
+        b.title = I.pick(tbl[k].text);
+        b.addEventListener('click', () => {
+          store.set(key + id, k);
+          Sound.play('click');
+          renderHeroInfo();
+        });
+        btns.appendChild(b);
+      }
+      wrap.appendChild(btns);
+      wrap.appendChild(el('div', 'hp-text', I.pick(tbl[chosen].text)));
+      box.appendChild(wrap);
+    };
+    pick(D.GADGETS, 'gad.', D.LEVELS.gadget, I.t('gadgetLabel'));
+    pick(D.PERKS, 'perk.', D.LEVELS.perk, I.t('perkLabel'));
+    const O = D.OVERDRIVE_SKILL[id];
+    row(I.t('odLabel') + (level < D.LEVELS.overdrive ? '  🔒 Lv ' + D.LEVELS.overdrive : ''), I.pick(O.name) + (I.lang === 'zh' ? '：' : ': ') + I.pick(O.text) + (I.lang === 'zh' ? '。' : '. ') + I.t('odGeneral'), level < D.LEVELS.overdrive ? 'locked' : 'od');
+    $('tTrial').textContent = I.t('trialToggle') + ': ' + onOff(prefs.trial);
+  }
+
 
   function renderChapters() {
     const box = $('chapterList');
@@ -470,7 +569,7 @@
   function heroOpts() {
     const name = $('name').value.trim().slice(0, 16) || I.pick(D.CHARS[prefs.char].name);
     store.set('name', $('name').value.trim().slice(0, 16));
-    return { name, char: prefs.char, difficulty: prefs.diff, bots: prefs.bots };
+    return Object.assign({ name, char: prefs.char, difficulty: prefs.diff, bots: prefs.bots }, loadoutOf(prefs.char));
   }
 
   function openHeroSelect(mode) {
@@ -552,6 +651,7 @@
   }
 
   function resetUi() {
+    $('ovXp').textContent = '';
     blurFocus();
     ui.killfeed.length = 0;
     ui.notices.length = 0;
@@ -683,7 +783,7 @@
         renderer.drawPortrait(cv.getContext('2d'), D.CHARS[pl.char] ? pl.char : 'yunwang', 0, 0, 80);
         const nm = document.createElement('span');
         nm.className = 'nm';
-        nm.textContent = pl.name;
+        nm.textContent = pl.name + (pl.lv ? '  Lv' + pl.lv : '');
         d.appendChild(cv);
         d.appendChild(nm);
         for (const [cond, txt, cls] of [[pl.cid === r.host, I.t('hostTag'), 'tag'], [pl.cid === r.you, I.t('youTag'), 'tag you']]) {
@@ -811,6 +911,10 @@
       $('ovTitle').className = won ? 'win' : '';
       $('ovSub').textContent = !ended ? I.t('teamFighting', teamName(me.tm)) : won ? I.t(coop ? 'coopWinSub' : 'teamWinSub') : coop || !view.wt ? '' : I.t('teamWin', teamName(view.wt));
       statCells([[I.t('st_kills'), me.k], [I.t('st_damage'), me.dd], [I.t('st_time'), fmt(survivedT)], [I.t('yourTeam'), coop ? I.t('family') : teamName(me.tm)]]);
+      if (ended && !gameOver.xpDone) {
+        gameOver.xpDone = true;
+        $('ovXp').textContent = awardXp(prefs.char, 25 + me.k * 15 + (won ? 60 : 15));
+      }
       $('ovSpectate').hidden = ended || view.al === 0;
       $('ovAgain').textContent = session && session.kind === 'online' ? I.t('backToLobby') : I.t('playAgain');
       show('overlay', true);
@@ -822,6 +926,10 @@
     $('ovTitle').className = won ? 'win' : '';
     $('ovSub').textContent = won ? I.t('outlasted', view.tot - 1) : me.killerNk === 'zone' ? I.t('zoneDeath') : me.killer || me.killerNk ? I.t('eliminatedBy', who(me.killer, me.killerNk)) : '';
     statCells([[I.t('st_kills'), me.k], [I.t('st_damage'), me.dd], [I.t('st_time'), fmt(survived)], [I.t('st_place', view.tot), '#' + (won ? 1 : me.plc)]]);
+    if (!gameOver.xpDone) {
+      gameOver.xpDone = true;
+      $('ovXp').textContent = awardXp(prefs.char, 25 + me.k * 15 + (won ? 60 : me.plc <= 3 ? 30 : 0));
+    }
     $('ovSpectate').hidden = won || view.st === 'ended' || view.al === 0;
     $('ovAgain').textContent = session && session.kind === 'online' ? I.t('backToLobby') : I.t('playAgain');
     show('overlay', true);
@@ -836,6 +944,10 @@
     $('ovTitle').className = won ? 'win' : '';
     $('ovSub').textContent = won ? I.pick(I.STORY.titles[D.STORY[flow.idx].id]) : view.why === 'time' ? I.t('fail_time') : I.t('fail_dead');
     statCells([[I.t('st_kills'), view.me.k], [I.t('st_damage'), view.me.dd], [I.t('st_time'), fmt(view.t)], [I.t('heroLabel'), I.pick(D.CHARS[prefs.char].name)]]);
+    if (!flow.xpDone) {
+      flow.xpDone = true;
+      $('ovXp').textContent = awardXp(prefs.char, won ? 70 + view.me.k * 5 : 15);
+    }
     $('ovSpectate').hidden = true;
     $('ovAgain').textContent = won ? (last ? I.t('replay') : I.t('next')) : I.t('retry');
     show('overlay', true);
@@ -1108,10 +1220,11 @@
     if (touch.on) return touchInput(mx, my);
     let aim = lastAim;
     if (ui.mouseX != null) {
-      aim = Math.atan2(ui.mouseY - renderer.H / 2, ui.mouseX - renderer.W / 2);
+      aim = renderer.aimAt(ui.mouseX, ui.mouseY);
       lastAim = aim;
     }
-    return { mx, my, aim, shoot: mouseDown && !ui.bigMap, sprint: keys.has('Space'), brake: keys.has('Space') };
+    const ad = ui.mouseX != null ? renderer.aimDist(ui.mouseX, ui.mouseY) : 380;
+    return { mx, my, aim, ad, shoot: mouseDown && !ui.bigMap, sprint: keys.has('Space'), brake: keys.has('Space') };
   }
 
   function act(a) {
@@ -1175,6 +1288,12 @@
         break;
       case 'KeyX':
         act({ a: 'skill' });
+        break;
+      case 'KeyG':
+        act({ a: 'gadget' });
+        break;
+      case 'KeyV':
+        act({ a: 'overdrive' });
         break;
       case 'ShiftLeft':
       case 'ShiftRight':
@@ -1285,6 +1404,8 @@
   function hudTarget(x, y) {
     const h = renderer.hit;
     if (ui.bigMap || inRect(h.mini, x, y)) return { k: 'map' };
+    if (inRect(h.od, x, y)) return { k: 'overdrive' };
+    if (inRect(h.gadget, x, y)) return { k: 'gadget' };
     if (inRect(h.skill, x, y)) return { k: 'skill' };
     if (inRect(h.heal, x, y)) return { k: 'heal' };
     for (const sl of h.slots) if (inRect(sl, x, y)) return { k: 'slot', i: sl.i };
@@ -1349,7 +1470,7 @@
     }
     const av = stickVec(touch.aim);
     if (av && av.len > 10) {
-      aim = Math.atan2(av.dy, av.dx);
+      aim = renderer.screenDir(av.dx, av.dy);
       shoot = av.len > 22;
     } else if (!av && (mx || my) && now > touch.tapUntil) {
       aim = Math.atan2(my, mx);
@@ -1358,7 +1479,9 @@
     if (tapping) shoot = true;
     if (shoot) aim = assistAim(aim, tapping && !(av && av.len > 10) ? 1.05 : 0.38);
     lastAim = aim;
-    return { mx, my, aim, shoot: shoot && !ui.bigMap, sprint, brake: false };
+    // A full drag of the aim stick throws as far as possible.
+    const ad = av ? 80 + Math.min(1, av.len / (STICK_R * 1.3)) * 340 : 380;
+    return { mx, my, aim, ad, shoot: shoot && !ui.bigMap, sprint, brake: false };
   }
 
   canvas.addEventListener('pointerdown', e => {
@@ -1376,6 +1499,8 @@
     if (hit) {
       if (hit.k === 'map') ui.bigMap = !ui.bigMap;
       else if (hit.k === 'skill') act({ a: 'skill' });
+      else if (hit.k === 'gadget') act({ a: 'gadget' });
+      else if (hit.k === 'overdrive') act({ a: 'overdrive' });
       else if (hit.k === 'heal') act({ a: 'heal' });
       else {
         act({ a: 'slot', i: hit.i });
@@ -1562,6 +1687,12 @@
   });
   if (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) setTouchMode(true);
   $('tFull').addEventListener('click', () => goFullscreen());
+  $('tTrial').addEventListener('click', () => {
+    prefs.trial = !prefs.trial;
+    store.set('trial', prefs.trial ? 1 : 0);
+    Sound.play('click');
+    renderHeroCards();
+  });
   $('rotateAnyway').addEventListener('click', () => {
     touch.portraitOk = true;
     $('rotate').hidden = true;
@@ -1713,6 +1844,16 @@
     Sound.setSfx(prefs.sfx);
     applyI18n();
   };
+  const toggle3d = () => {
+    prefs.view3d = !prefs.view3d;
+    store.set('view3d', prefs.view3d ? 1 : 0);
+    renderer.mode3d = prefs.view3d;
+    renderer.zoom = 0;
+    applyI18n();
+  };
+  renderer.mode3d = prefs.view3d;
+  $('t3d').addEventListener('click', toggle3d);
+  $('pause3d').addEventListener('click', toggle3d);
   $('tMusic').addEventListener('click', toggleMusic);
   $('tSfx').addEventListener('click', toggleSfx);
   $('pauseMusic').addEventListener('click', toggleMusic);
