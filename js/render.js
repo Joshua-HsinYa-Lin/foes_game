@@ -2470,13 +2470,26 @@
     // In "upright" space a ground point (x, y) sits at (x, y * TILT) and height goes up the screen.
 
     viewOffsetY() {
-      return this.mode3d ? this.H * 0.05 : 0;
+      return this.mode3d ? this.H * 0.04 : 0;
     }
 
     // World aim angle for a screen point, from the player's feet at the centre of the view.
     aimAt(sx, sy) {
       if (!this.mode3d) return Math.atan2(sy - this.H / 2, sx - this.W / 2);
       return Math.atan2((sy - (this.H / 2 + this.viewOffsetY())) / TILT, sx - this.W / 2);
+    }
+
+    // World ground area on screen, for comparing the two views.
+    visibleArea() {
+      const z = this.zoom || 1;
+      return (this.W / z) * (this.H / (z * (this.mode3d ? TILT : 1)));
+    }
+
+    // Screen point for a world ground point, in the current view (the inverse of aimAt and aimDist).
+    worldToScreen(x, y) {
+      const z = this.zoom || 1;
+      if (!this.mode3d) return [this.W / 2 + (x - this.camX) * z, this.H / 2 + (y - this.camY) * z];
+      return [this.W / 2 + (x - this.camX) * z, this.H / 2 + this.viewOffsetY() + (y - this.camY) * z * TILT];
     }
 
     // World distance from the player's feet to a screen point.
@@ -2816,8 +2829,9 @@
       if (!map || !view) return;
       this.updateParticles(dt);
       const T = TILT;
-      // Zoomed in a little against the flat view, so the tilted view never shows past what the game sends.
-      const target = this.computeZoom(view.cveh) * 1.25;
+      // Zoomed so the tilted view shows the same ground area as the flat view (no advantage either way)
+      // and never more than the game sends.
+      const target = this.computeZoom(view.cveh) / Math.sqrt(TILT);
       this.zoom = this.zoom ? lerp(this.zoom, target, Math.min(1, dt * 4)) : target;
       const z = this.zoom;
       this.camX = view.cx;

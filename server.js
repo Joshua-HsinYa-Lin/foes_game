@@ -473,15 +473,15 @@ server.on('upgrade', (req, socket) => {
 });
 
 server.listen(PORT, HOST, () => {
-  console.log(D.TITLE + ' ' + D.TITLE_EN + ' multiplayer server running.');
-  console.log('  This computer: http://localhost:' + PORT);
+  console.log(D.TITLE + ' ' + D.TITLE_EN + '：區網伺服器已啟動 / LAN server running');
+  console.log('  本機 This computer:  http://localhost:' + PORT);
   const nets = os.networkInterfaces();
   for (const name of Object.keys(nets)) {
     for (const n of nets[name] || []) {
-      if (n.family === 'IPv4' && !n.internal) console.log('  Friends:       http://' + n.address + ':' + PORT + '   (or type ' + n.address + ':' + PORT + ' in the game)');
+      if (n.family === 'IPv4' && !n.internal) console.log('  朋友 Friends:        http://' + n.address + ':' + PORT + '  （遊戲內輸入 / in the game: ' + n.address + ':' + PORT + '）');
     }
   }
-  console.log('The first player to join is the host and picks the bots (default ' + DEFAULT_BOTS + ') and difficulty (1 to 5, default ' + DIFFICULTY + '). Press Ctrl+C to stop.');
+  console.log('第一位加入的人是房主 / The first to join is the host. Ctrl+C 結束 / to stop.');
 });
 
 setInterval(tick, 1000 / D.TICK_RATE);

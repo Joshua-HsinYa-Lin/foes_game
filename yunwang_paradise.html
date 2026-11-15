@@ -1328,6 +1328,15 @@ body.touch .controls table:not(.touch-help) {
     font-size: 12px;
   }
 }
+
+.view-row {
+  max-width: 360px;
+  margin: 12px auto 0;
+}
+
+.view-row > span {
+  width: auto;
+}
 </style>
 </head>
 <body>
@@ -1348,11 +1357,11 @@ body.touch .controls table:not(.touch-help) {
       <button id="btnRoyale" class="mode"><b data-i18n="royale"></b><span data-i18n="royaleSub"></span></button>
       <button id="btnLan" class="mode"><b data-i18n="lan"></b><span data-i18n="lanSub"></span></button>
     </div>
+    <div class="field view-row"><span data-i18n="viewLabel"></span><div class="seg view-seg" id="viewSeg"><button data-v="2d" data-i18n="view2d"></button><button data-v="25d" data-i18n="view25d"></button></div></div>
     <div class="toggles">
       <button id="tLang" class="chip">中文 / EN</button>
       <button id="tMusic" class="chip"></button>
       <button id="tSfx" class="chip"></button>
-      <button id="t3d" class="chip"></button>
       <button id="tFull" class="chip" hidden data-i18n="fullscreen"></button>
     </div>
     <details id="secrets" class="controls secrets"><summary id="secretsSum"></summary><ul id="secretsList"></ul></details>
@@ -1457,7 +1466,7 @@ body.touch .controls table:not(.touch-help) {
     <div class="field pause-diff" id="pauseDiffRow"><span data-i18n="diff"></span><div class="seg diff-seg" id="pauseDiff"></div></div>
     <button id="pauseMusic" class="btn"></button>
     <button id="pauseSfx" class="btn"></button>
-    <button id="pause3d" class="btn"></button>
+    <div class="field pause-diff"><span data-i18n="viewLabel"></span><div class="seg view-seg" id="pauseView"><button data-v="2d" data-i18n="view2d"></button><button data-v="25d" data-i18n="view25d"></button></div></div>
     <button id="pauseQuit" class="btn"></button>
   </div>
 </div>
@@ -2100,7 +2109,9 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
       ctl_od: '啟動大火快炒',
       th_gadget: '綠色道具鈕／紫色火力鈕',
       th_gadget_do: '在技能圓鈕旁邊，點一下使用',
-      view3d: '3D 視角',
+      viewLabel: '畫面',
+      view2d: '2D 平面',
+      view25d: '2.5D 立體',
       medPouch: '雞湯',
       msg_zone: '冷鏈正在失溫！冷鏈圈開始縮小！',
       msg_wave: '鹹水幫第 {0} 波來襲！',
@@ -2361,7 +2372,9 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
       ctl_od: 'Start Wok Overdrive',
       th_gadget: 'Green gadget / purple overdrive',
       th_gadget_do: 'Next to the skill circle; tap to use',
-      view3d: '3D view',
+      viewLabel: 'View',
+      view2d: '2D flat',
+      view25d: '2.5D',
       medPouch: 'Soup',
       msg_zone: 'The cold chain is failing! The zone is shrinking!',
       msg_wave: 'Brine Gang wave {0} incoming!',
@@ -9250,13 +9263,26 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
     // In "upright" space a ground point (x, y) sits at (x, y * TILT) and height goes up the screen.
 
     viewOffsetY() {
-      return this.mode3d ? this.H * 0.05 : 0;
+      return this.mode3d ? this.H * 0.04 : 0;
     }
 
     // World aim angle for a screen point, from the player's feet at the centre of the view.
     aimAt(sx, sy) {
       if (!this.mode3d) return Math.atan2(sy - this.H / 2, sx - this.W / 2);
       return Math.atan2((sy - (this.H / 2 + this.viewOffsetY())) / TILT, sx - this.W / 2);
+    }
+
+    // World ground area on screen, for comparing the two views.
+    visibleArea() {
+      const z = this.zoom || 1;
+      return (this.W / z) * (this.H / (z * (this.mode3d ? TILT : 1)));
+    }
+
+    // Screen point for a world ground point, in the current view (the inverse of aimAt and aimDist).
+    worldToScreen(x, y) {
+      const z = this.zoom || 1;
+      if (!this.mode3d) return [this.W / 2 + (x - this.camX) * z, this.H / 2 + (y - this.camY) * z];
+      return [this.W / 2 + (x - this.camX) * z, this.H / 2 + this.viewOffsetY() + (y - this.camY) * z * TILT];
     }
 
     // World distance from the player's feet to a screen point.
@@ -9596,8 +9622,9 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
       if (!map || !view) return;
       this.updateParticles(dt);
       const T = TILT;
-      // Zoomed in a little against the flat view, so the tilted view never shows past what the game sends.
-      const target = this.computeZoom(view.cveh) * 1.25;
+      // Zoomed so the tilted view shows the same ground area as the flat view (no advantage either way)
+      // and never more than the game sends.
+      const target = this.computeZoom(view.cveh) / Math.sqrt(TILT);
       this.zoom = this.zoom ? lerp(this.zoom, target, Math.min(1, dt * 4)) : target;
       const z = this.zoom;
       this.camX = view.cx;
@@ -11047,8 +11074,7 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
     $('tSfx').textContent = '🔊 ' + I.t('sfx') + ': ' + onOff(prefs.sfx);
     $('pauseMusic').textContent = I.t('music') + ': ' + onOff(prefs.music);
     $('pauseSfx').textContent = I.t('sfx') + ': ' + onOff(prefs.sfx);
-    $('t3d').textContent = '◆ ' + I.t('view3d') + ': ' + onOff(prefs.view3d);
-    $('pause3d').textContent = I.t('view3d') + ': ' + onOff(prefs.view3d);
+    markView();
     const served = window.location.protocol === 'http:' || window.location.protocol === 'https:';
     $('lanNote').textContent = served ? I.t('lanNoteServed', window.location.host) : I.t('lanNoteLocal');
     $('server').placeholder = I.t('serverHint');
@@ -12612,16 +12638,21 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
     Sound.setSfx(prefs.sfx);
     applyI18n();
   };
-  const toggle3d = () => {
-    prefs.view3d = !prefs.view3d;
-    store.set('view3d', prefs.view3d ? 1 : 0);
-    renderer.mode3d = prefs.view3d;
-    renderer.zoom = 0;
-    applyI18n();
-  };
+  // The view is only how this screen draws the game; the match itself is the same for everyone.
+  function markView() {
+    for (const b of document.querySelectorAll('.view-seg button')) b.classList.toggle('on', (b.dataset.v === '25d') === prefs.view3d);
+  }
   renderer.mode3d = prefs.view3d;
-  $('t3d').addEventListener('click', toggle3d);
-  $('pause3d').addEventListener('click', toggle3d);
+  for (const b of document.querySelectorAll('.view-seg button')) {
+    b.addEventListener('click', () => {
+      prefs.view3d = b.dataset.v === '25d';
+      store.set('view3d', prefs.view3d ? 1 : 0);
+      renderer.mode3d = prefs.view3d;
+      renderer.zoom = 0;
+      Sound.play('click');
+      markView();
+    });
+  }
   $('tMusic').addEventListener('click', toggleMusic);
   $('tSfx').addEventListener('click', toggleSfx);
   $('pauseMusic').addEventListener('click', toggleMusic);

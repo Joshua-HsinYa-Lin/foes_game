@@ -382,8 +382,7 @@
     $('tSfx').textContent = '🔊 ' + I.t('sfx') + ': ' + onOff(prefs.sfx);
     $('pauseMusic').textContent = I.t('music') + ': ' + onOff(prefs.music);
     $('pauseSfx').textContent = I.t('sfx') + ': ' + onOff(prefs.sfx);
-    $('t3d').textContent = '◆ ' + I.t('view3d') + ': ' + onOff(prefs.view3d);
-    $('pause3d').textContent = I.t('view3d') + ': ' + onOff(prefs.view3d);
+    markView();
     const served = window.location.protocol === 'http:' || window.location.protocol === 'https:';
     $('lanNote').textContent = served ? I.t('lanNoteServed', window.location.host) : I.t('lanNoteLocal');
     $('server').placeholder = I.t('serverHint');
@@ -1947,16 +1946,21 @@
     Sound.setSfx(prefs.sfx);
     applyI18n();
   };
-  const toggle3d = () => {
-    prefs.view3d = !prefs.view3d;
-    store.set('view3d', prefs.view3d ? 1 : 0);
-    renderer.mode3d = prefs.view3d;
-    renderer.zoom = 0;
-    applyI18n();
-  };
+  // The view is only how this screen draws the game; the match itself is the same for everyone.
+  function markView() {
+    for (const b of document.querySelectorAll('.view-seg button')) b.classList.toggle('on', (b.dataset.v === '25d') === prefs.view3d);
+  }
   renderer.mode3d = prefs.view3d;
-  $('t3d').addEventListener('click', toggle3d);
-  $('pause3d').addEventListener('click', toggle3d);
+  for (const b of document.querySelectorAll('.view-seg button')) {
+    b.addEventListener('click', () => {
+      prefs.view3d = b.dataset.v === '25d';
+      store.set('view3d', prefs.view3d ? 1 : 0);
+      renderer.mode3d = prefs.view3d;
+      renderer.zoom = 0;
+      Sound.play('click');
+      markView();
+    });
+  }
   $('tMusic').addEventListener('click', toggleMusic);
   $('tSfx').addEventListener('click', toggleSfx);
   $('pauseMusic').addEventListener('click', toggleMusic);

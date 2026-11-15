@@ -1315,3 +1315,12 @@ body.touch .controls table:not(.touch-help) {
     font-size: 12px;
   }
 }
+
+.view-row {
+  max-width: 360px;
+  margin: 12px auto 0;
+}
+
+.view-row > span {
+  width: auto;
+}
