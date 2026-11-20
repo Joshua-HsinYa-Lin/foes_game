@@ -79,16 +79,24 @@ const addr = process.argv[2] || 'localhost:8099';
   check(diff(aliceAimSeenByBob.a, want(a2.me, b2.me)) < 0.15, 'Alice aims in 2.5D; Bob sees her facing him');
   check(diff(bobAimSeenByAlice.a, want(b2.me, a2.me)) < 0.15, 'Bob aims in 2D; Alice sees him facing her');
 
-  await alice.keyboard.down('KeyD');
-  await bob.keyboard.down('KeyS');
-  await alice.waitForTimeout(700);
-  await alice.keyboard.up('KeyD');
-  await bob.keyboard.up('KeyS');
-  await alice.waitForTimeout(400);
+  // The map is random, so a tree or wall can be right in the way: if one direction is blocked, try the other.
+  const walk = async (page, key, back, axis) => {
+    for (const [k, sign] of [[key, 1], [back, -1]]) {
+      const p0 = (await info(page)).me;
+      await page.keyboard.down(k);
+      await page.waitForTimeout(700);
+      await page.keyboard.up(k);
+      await page.waitForTimeout(400);
+      const p1 = (await info(page)).me;
+      if ((p1[axis] - p0[axis]) * sign > 100) return true;
+    }
+    return false;
+  };
+  const aliceMoved = await walk(alice, 'KeyD', 'KeyA', 0);
+  const bobMoved = await walk(bob, 'KeyS', 'KeyW', 1);
   const a3 = await info(alice);
-  const b3 = await info(bob);
   const bobSeesAlice2 = await seen(bob, a.you);
-  check(a3.me[0] - a2.me[0] > 100 && b3.me[1] - b2.me[1] > 100, 'both move: Alice right, Bob down');
+  check(aliceMoved && bobMoved, 'both move: Alice sideways, Bob up or down');
   check(bobSeesAlice2 && Math.hypot(bobSeesAlice2.x - a3.me[0], bobSeesAlice2.y - a3.me[1]) < 30, 'Bob sees Alice\'s new position');
 
   console.log(notes.join('\n'));

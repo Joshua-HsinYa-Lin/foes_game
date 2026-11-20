@@ -55,7 +55,9 @@ Tested with 8 people in one room. Options: `node server.js --port 8080 --bots 13
 
 ## Also in the game
 
-Six hidden details to find (the title screen counts them), breakable wooden buildings, cold-chain airdrops, drivable vans and scooters with a handbrake drift, recorded victory and knockout sounds, and the 允望樓 theme music.
+Six hidden details to find (the title screen counts them), breakable wooden buildings, cold-chain airdrops, drivable vans and scooters with a handbrake drift (only a moving vehicle hurts), recorded victory and knockout sounds, and the 允望樓 theme music.
+
+**Scopes:** 2倍鏡, 4倍鏡 and 8倍鏡 lie around the map and in airdrops. Walk over one to see more of the map; you keep the best one until you are knocked out, then it drops.
 
 ## For developers
 

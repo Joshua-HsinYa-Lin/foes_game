@@ -449,8 +449,9 @@
 
     // ---------- world ----------
 
-    computeZoom(veh) {
-      const vh = D.VIEW_H * (veh ? 1.2 : 1);
+    // vm: how much wider than normal the camera's view is (driving, scopes), sent by the simulation.
+    computeZoom(vm) {
+      const vh = D.VIEW_H * (vm || 1);
       // Small phone screens zoom in a little so characters and names stay readable.
       const phone = Math.min(this.W, this.H) < 500 ? 1.2 : 1;
       return Math.max(this.H / vh, this.W / (vh * D.MAX_ASPECT)) * phone;
@@ -466,7 +467,7 @@
       const map = this.map;
       if (!map || !view) return;
       this.updateParticles(dt);
-      const target = this.computeZoom(view.cveh);
+      const target = this.computeZoom(view.cvm || (view.cveh ? 1.2 : 1));
       this.zoom = this.zoom ? lerp(this.zoom, target, Math.min(1, dt * 4)) : target;
       const z = this.zoom;
       this.camX = view.cx;
@@ -1337,6 +1338,24 @@
         ctx.font = 'bold ' + Math.round(9 * scale) + 'px ' + FONT;
         ctx.textAlign = 'center';
         ctx.fillText('允', 0, 4 * scale);
+      } else if (D.ITEMS[t] && D.ITEMS[t].lv) {
+        scale *= 1.3;
+        roundRect(ctx, -17 * scale, -6 * scale, 22 * scale, 12 * scale, 3 * scale);
+        fillStroke(ctx, '#3b4148', 2.5 * scale);
+        circle(ctx, 9 * scale, 0, 11 * scale);
+        fillStroke(ctx, '#3b4148', 3 * scale);
+        circle(ctx, 9 * scale, 0, 7 * scale);
+        ctx.fillStyle = D.ITEMS[t].lv === 8 ? '#ffd76a' : D.ITEMS[t].lv === 4 ? '#9fe0a0' : '#9fd4ff';
+        ctx.fill();
+        ctx.strokeStyle = '#2b2a28';
+        ctx.lineWidth = 1.5 * scale;
+        ctx.beginPath();
+        ctx.moveTo(2 * scale, 0);
+        ctx.lineTo(16 * scale, 0);
+        ctx.moveTo(9 * scale, -7 * scale);
+        ctx.lineTo(9 * scale, 7 * scale);
+        ctx.stroke();
+        this.outlinedText(ctx, D.ITEMS[t].lv + 'x', -6 * scale, 20 * scale, 11 * scale, '#ffffff');
       } else if (t === 'coldbox') {
         roundRect(ctx, -16 * scale, -14 * scale, 32 * scale, 28 * scale, 4 * scale);
         fillStroke(ctx, '#d8f2ff', 3 * scale);
@@ -2831,7 +2850,7 @@
       const T = TILT;
       // Zoomed so the tilted view shows the same ground area as the flat view (no advantage either way)
       // and never more than the game sends.
-      const target = this.computeZoom(view.cveh) / Math.sqrt(TILT);
+      const target = this.computeZoom(view.cvm || (view.cveh ? 1.2 : 1)) / Math.sqrt(TILT);
       this.zoom = this.zoom ? lerp(this.zoom, target, Math.min(1, dt * 4)) : target;
       const z = this.zoom;
       this.camX = view.cx;
@@ -3559,6 +3578,7 @@
         ctx.globalAlpha = 1;
         this.outlinedText(ctx, 'H', px + 12 * s, y + 20 * s, 14 * s, '#ffffff');
         this.outlinedText(ctx, I.t('medPouch') + ' ' + hud.so + '/' + hud.soc, px + pw / 2, y + bh - 10 * s, 12 * s, hud.so > 0 ? '#b8f5a0' : 'rgba(255,255,255,0.6)');
+        if (hud.zm > 1) this.outlinedText(ctx, itemName('scope' + hud.zm), px + pw / 2, y - 10 * s, 13 * s, '#ffe27a');
       }
 
       if (hud.ch) {

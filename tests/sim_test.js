@@ -394,6 +394,41 @@ function duel(charA, charB, opts) {
   check(boss.kx < a.kx, 'the heavy boss is knocked back less than a person by the same hit');
 }
 
+// ---------- parked and moving vehicles ----------
+{
+  const sim = new Sim({ seed: 99 });
+  for (const o of sim.obstacles) o.dead = true;
+  sim.vehicles.length = 0;
+  sim.spawnVehicle('car', 2000, 2000, 0);
+  const p = sim.playerMap.get(sim.addPlayer('Runner', false, {}));
+  p.x = 1800;
+  p.y = 2000;
+  for (let i = 0; i < 60; i++) {
+    sim.setInput(p.id, { mx: 1, my: 0, aim: 0, sprint: true });
+    sim.step(1 / 30);
+  }
+  check(p.hp === p.maxHp, 'running into a parked van does not hurt');
+  const v = sim.spawnVehicle('car', 1500, 2400, 0);
+  const q = sim.playerMap.get(sim.addPlayer('Walker', false, {}));
+  q.x = 1600;
+  q.y = 2400;
+  v.vx = 500;
+  steps(sim, 10);
+  check(q.hp < q.maxHp, 'a moving van hurts a person it hits');
+}
+
+// ---------- scopes ----------
+{
+  const sim = new Sim({ seed: 5 });
+  const p = sim.playerMap.get(sim.addPlayer('Looker', false, {}));
+  const before = sim.viewHalf(p, 16 / 9)[1];
+  sim.spawnItem(p.x, p.y, 'scope4');
+  steps(sim, 1);
+  check(p.scope === 4 && sim.viewHalf(p, 16 / 9)[1] > before, 'walking over a 4x scope picks it up and widens the view');
+  sim.killPlayer(p, 0, 'zone');
+  check(p.scope === 1 && [...sim.items.values()].some(it => it.t === 'scope4'), 'the scope is dropped on death');
+}
+
 // ---------- royale ----------
 for (const [seed, diff] of [[1, 4], [2, 5], [3, 1]]) {
   const sim = new Sim({ seed, difficulty: diff });

@@ -1757,8 +1757,14 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
     soup: { name: { zh: '雞湯', en: 'Chicken Soup' }, heal: 60, time: 1.6 },
     bao: { name: { zh: '小籠包', en: 'Soup Dumplings' }, heal: 40 },
     bag: { name: { zh: '保溫外送袋', en: 'Thermal Bag' } },
-    coldbox: { name: { zh: '冷鏈箱', en: 'Cold-Chain Crate' } }
+    coldbox: { name: { zh: '冷鏈箱', en: 'Cold-Chain Crate' } },
+    scope2: { name: { zh: '2倍鏡', en: '2x Scope' }, lv: 2 },
+    scope4: { name: { zh: '4倍鏡', en: '4x Scope' }, lv: 4 },
+    scope8: { name: { zh: '8倍鏡', en: '8x Scope' }, lv: 8 }
   };
+
+  // A scope widens how much of the map you see: zoom multiplies the view height (and the width with it).
+  D.SCOPE_ZOOM = { 1: 1, 2: 1.2, 4: 1.4, 8: 1.65 };
 
   // item, weight in a normal spawn, weight in an ingredient crate
   D.LOOT = [
@@ -1778,7 +1784,10 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
     ['swordfish', 0.3, 1.4],
     ['soup', 12, 14],
     ['bao', 12, 8],
-    ['bag', 3, 6]
+    ['bag', 3, 6],
+    ['scope2', 8, 5],
+    ['scope4', 4.5, 5],
+    ['scope8', 1.5, 3.5]
   ];
 
   // Vehicles: max is top speed (air drag balances the engine there), grip the sideways acceleration the tyres
@@ -2126,6 +2135,7 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
       drop: '丟下 {0}',
       fullHp: '生命已經是滿的',
       haveBag: '已經有保溫外送袋了',
+      haveScope: '已經有一樣或更好的倍鏡了',
       driving: '駕駛 {0}，按 F 下車',
       kill_by: '{0} 用{2}擊倒了 {1}',
       kill_zone: '{0} 在退冰區倒下了',
@@ -2389,6 +2399,7 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
       drop: 'Dropped {0}',
       fullHp: 'Already at full health',
       haveBag: 'You already have a thermal bag',
+      haveScope: 'You already have this scope or a better one',
       driving: 'Driving the {0}, press F to get out',
       kill_by: '{0} took out {1} · {2}',
       kill_zone: '{0} melted in the thaw zone',
@@ -3447,6 +3458,7 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
         alive: true,
         slots: [null, null, null, null],
         soups: 0,
+        scope: 1,
         nslots: D.SLOTS,
         act: 0,
         cool: 0,
@@ -3700,6 +3712,7 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
       p.act = 0;
       p.nslots = D.SLOTS;
       p.soups = 1;
+      p.scope = 1;
       p.killer = '';
       p.killerNk = '';
       p.killerId = 0;
@@ -3819,6 +3832,20 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
         this.toPlayer(p, 'pick_heal', [Math.round(D.ITEMS.bao.heal * this.healMul(p))], true);
         return true;
       }
+      const SC = D.ITEMS[it.t] && D.ITEMS[it.t].lv;
+      if (SC) {
+        // Bots see the same either way, so scopes are left on the ground for people.
+        if (p.bot) return false;
+        if (SC <= p.scope) {
+          if (manual) this.toPlayer(p, 'haveScope');
+          return false;
+        }
+        this.removeItem(it);
+        if (p.scope > 1) this.dropNear(p, 'scope' + p.scope);
+        p.scope = SC;
+        this.toPlayer(p, 'pick_item', [it.t], true);
+        return true;
+      }
       if (it.t === 'bag') {
         if (p.nslots >= D.SLOTS_BAG) {
           if (manual) this.toPlayer(p, 'haveBag');
@@ -3932,7 +3959,8 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
       this.secret(p, sc.id);
     }
 
-    // A cold-chain airdrop holds one rare kitchen weapon, one crate-tier item and one healing item.
+    // A cold-chain airdrop holds one rare kitchen weapon, one crate-tier item, one healing item and,
+    // half the time, a 4x or 8x scope.
     openDrop(p, it) {
       const R = this.sr;
       const rares = D.LOOT.filter(e => D.WEAPONS[e[0]] && D.WEAPONS[e[0]].rare);
@@ -3948,6 +3976,7 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
         }
       }
       const got = [rare, this.rollItem(1, R), R() < 0.5 ? 'soup' : 'bao'];
+      if (R() < 0.5) got.push(R() < 0.4 ? 'scope8' : 'scope4');
       got.forEach((t, i) => {
         const a = (i / got.length) * TAU + R();
         this.spawnItem(it.x + Math.cos(a) * 34, it.y + Math.sin(a) * 34, t);
@@ -4559,7 +4588,7 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
         const near = q.slice();
         q.length = 0;
         for (const it of near) {
-          if (it.t !== 'bao' && it.t !== 'bag' && it.t !== 'soup' && it.t !== 'coldbox') continue;
+          if (it.t !== 'bao' && it.t !== 'bag' && it.t !== 'soup' && it.t !== 'coldbox' && !(D.ITEMS[it.t] && D.ITEMS[it.t].lv)) continue;
           const m = p.r + D.ITEM_R;
           if ((it.x - p.x) * (it.x - p.x) + (it.y - p.y) * (it.y - p.y) < m * m) this.tryPickup(p, it, false);
         }
@@ -4750,6 +4779,8 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
       for (let i = 0; i < p.soups; i++) this.dropNear(p, 'soup');
       p.soups = 0;
       if (p.nslots > D.SLOTS) this.dropNear(p, 'bag');
+      if (p.scope > 1) this.dropNear(p, 'scope' + p.scope);
+      p.scope = 1;
       if (p.kind !== 'player' && this.rng() < 0.3) this.dropNear(p, 'bao');
       this.turrets = this.turrets.filter(t => t.owner !== p.id);
       const killer = src ? this.playerMap.get(src) : null;
@@ -5310,9 +5341,9 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
       }
     }
 
-    // A person is far lighter than a vehicle: on contact they are pushed out and, if the vehicle is coming
-    // at them, thrown off at about the vehicle's closing speed; the vehicle loses a little speed in return.
-    // Only the closing speed along the line between them counts, so a glancing touch does little.
+    // A person is far lighter than a vehicle. Only the vehicle's own motion toward the person counts: a
+    // vehicle driving into someone throws them off at about its closing speed and, if fast enough, hurts
+    // them; a person walking or running into a parked or slow vehicle just stops against it, like a wall.
     vehicleHitsPlayers(v) {
       const V = D.VEHICLES[v.t];
       const drv = v.driver ? this.playerMap.get(v.driver) : null;
@@ -5328,19 +5359,24 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
         const ny = dy / d;
         p.x = v.x + nx * m;
         p.y = v.y + ny * m;
-        const rel = v.vx * nx + v.vy * ny - ((p.vx + p.kx) * nx + (p.vy + p.ky) * ny);
-        if (rel > 0) {
-          const pm = D.PLAYER_MASS * this.massOf(p);
-          const dvp = (1.3 * rel * V.mass) / (V.mass + pm);
-          p.kx += nx * dvp;
-          p.ky += ny * dvp;
-          v.vx -= (nx * dvp * pm) / V.mass;
-          v.vy -= (ny * dvp * pm) / V.mass;
-          if (rel > 150 && this.time - p.ranT > 0.6 && (!drv || this.enemies(drv, p))) {
+        const push = v.vx * nx + v.vy * ny;
+        if (push > 40) {
+          const rel = push - ((p.vx + p.kx) * nx + (p.vy + p.ky) * ny);
+          if (rel > 0) {
+            const pm = D.PLAYER_MASS * this.massOf(p);
+            const dvp = (1.3 * rel * V.mass) / (V.mass + pm);
+            p.kx += nx * dvp;
+            p.ky += ny * dvp;
+            v.vx -= (nx * dvp * pm) / V.mass;
+            v.vy -= (ny * dvp * pm) / V.mass;
+          }
+          if (push > 150 && this.time - p.ranT > 0.6 && (!drv || this.enemies(drv, p))) {
             p.ranT = this.time;
-            this.damagePlayer(p, rel * V.ram, v.driver, 'vehicle');
+            this.damagePlayer(p, push * V.ram, v.driver, 'vehicle');
             this.ev({ e: 'hit', x: p.x, y: p.y, ty: 'p', by: v.driver });
           }
+        } else {
+          this.wallStop(p, [nx, ny]);
         }
         this.resolvePlayer(p);
       }
@@ -5480,6 +5516,7 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
       if (it.t === 'coldbox') return p.team === 1 ? 9 : 0;
       if (it.t === 'bao') return p.hp < p.maxHp * 0.85 ? 2 + 7 * (1 - p.hp / p.maxHp) : 0;
       if (it.t === 'bag') return p.nslots < D.SLOTS_BAG ? 6 : 0;
+      if (D.ITEMS[it.t] && D.ITEMS[it.t].lv) return 0;
       if (it.t === 'soup') return p.soups < this.soupCap(p) ? (p.hp < p.maxHp * 0.7 ? 6 : 3) : 0;
       const r = RANK[it.t] || 0;
       if (this.hasEmptySlot(p)) return 5 + r;
@@ -5889,8 +5926,13 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
 
     // ---------- views ----------
 
+    // How much bigger than normal this player's view is: driving and a scope each widen it.
+    viewMul(p) {
+      return (p.veh ? 1.2 : 1) * (D.SCOPE_ZOOM[p.scope] || 1);
+    }
+
     viewHalf(p, aspect) {
-      const h = D.VIEW_H * (p.veh ? 1.2 : 1);
+      const h = D.VIEW_H * this.viewMul(p);
       const w = h * clamp(aspect, 1, D.MAX_ASPECT);
       return [w / 2 + 160, h / 2 + 160];
     }
@@ -5904,7 +5946,7 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
       if (tg.secret) return { k: 'see_' + tg.secret.id };
       const it = tg.item;
       if (it.t === 'drop') return { k: 'openDrop' };
-      if (it.t === 'bao' || it.t === 'bag' || it.t === 'soup') return { k: 'pickUp', t: it.t };
+      if (it.t === 'bao' || it.t === 'bag' || it.t === 'soup' || (D.ITEMS[it.t] && D.ITEMS[it.t].lv)) return { k: 'pickUp', t: it.t };
       let free = !p.slots[p.act];
       for (let i = 0; i < p.nslots; i++) if (!p.slots[i]) free = true;
       return { k: free ? 'pickUp' : 'swapFor', t: it.t };
@@ -5970,6 +6012,7 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
         st: Math.round(p.stamina),
         sl: p.slots.slice(0, p.nslots).map(s => (s ? { t: s.t, m: s.m != null ? s.m : null } : null)),
         so: p.soups,
+        zm: p.scope,
         soc: this.soupCap(p),
         act: p.act,
         rl: p.reload ? clamp(p.reload.t / p.reload.total, 0, 1) : -1,
@@ -6106,6 +6149,7 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
         cx: r1(cam.x),
         cy: r1(cam.y),
         cveh: cam.veh ? 1 : 0,
+        cvm: Math.round(this.viewMul(cam) * 1000) / 1000,
         me: this.hudData(me, true),
         cme: cam !== me ? this.hudData(cam, false) : null,
         pl,
@@ -7242,8 +7286,9 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
 
     // ---------- world ----------
 
-    computeZoom(veh) {
-      const vh = D.VIEW_H * (veh ? 1.2 : 1);
+    // vm: how much wider than normal the camera's view is (driving, scopes), sent by the simulation.
+    computeZoom(vm) {
+      const vh = D.VIEW_H * (vm || 1);
       // Small phone screens zoom in a little so characters and names stay readable.
       const phone = Math.min(this.W, this.H) < 500 ? 1.2 : 1;
       return Math.max(this.H / vh, this.W / (vh * D.MAX_ASPECT)) * phone;
@@ -7259,7 +7304,7 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
       const map = this.map;
       if (!map || !view) return;
       this.updateParticles(dt);
-      const target = this.computeZoom(view.cveh);
+      const target = this.computeZoom(view.cvm || (view.cveh ? 1.2 : 1));
       this.zoom = this.zoom ? lerp(this.zoom, target, Math.min(1, dt * 4)) : target;
       const z = this.zoom;
       this.camX = view.cx;
@@ -8130,6 +8175,24 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
         ctx.font = 'bold ' + Math.round(9 * scale) + 'px ' + FONT;
         ctx.textAlign = 'center';
         ctx.fillText('允', 0, 4 * scale);
+      } else if (D.ITEMS[t] && D.ITEMS[t].lv) {
+        scale *= 1.3;
+        roundRect(ctx, -17 * scale, -6 * scale, 22 * scale, 12 * scale, 3 * scale);
+        fillStroke(ctx, '#3b4148', 2.5 * scale);
+        circle(ctx, 9 * scale, 0, 11 * scale);
+        fillStroke(ctx, '#3b4148', 3 * scale);
+        circle(ctx, 9 * scale, 0, 7 * scale);
+        ctx.fillStyle = D.ITEMS[t].lv === 8 ? '#ffd76a' : D.ITEMS[t].lv === 4 ? '#9fe0a0' : '#9fd4ff';
+        ctx.fill();
+        ctx.strokeStyle = '#2b2a28';
+        ctx.lineWidth = 1.5 * scale;
+        ctx.beginPath();
+        ctx.moveTo(2 * scale, 0);
+        ctx.lineTo(16 * scale, 0);
+        ctx.moveTo(9 * scale, -7 * scale);
+        ctx.lineTo(9 * scale, 7 * scale);
+        ctx.stroke();
+        this.outlinedText(ctx, D.ITEMS[t].lv + 'x', -6 * scale, 20 * scale, 11 * scale, '#ffffff');
       } else if (t === 'coldbox') {
         roundRect(ctx, -16 * scale, -14 * scale, 32 * scale, 28 * scale, 4 * scale);
         fillStroke(ctx, '#d8f2ff', 3 * scale);
@@ -9624,7 +9687,7 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
       const T = TILT;
       // Zoomed so the tilted view shows the same ground area as the flat view (no advantage either way)
       // and never more than the game sends.
-      const target = this.computeZoom(view.cveh) / Math.sqrt(TILT);
+      const target = this.computeZoom(view.cvm || (view.cveh ? 1.2 : 1)) / Math.sqrt(TILT);
       this.zoom = this.zoom ? lerp(this.zoom, target, Math.min(1, dt * 4)) : target;
       const z = this.zoom;
       this.camX = view.cx;
@@ -10352,6 +10415,7 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
         ctx.globalAlpha = 1;
         this.outlinedText(ctx, 'H', px + 12 * s, y + 20 * s, 14 * s, '#ffffff');
         this.outlinedText(ctx, I.t('medPouch') + ' ' + hud.so + '/' + hud.soc, px + pw / 2, y + bh - 10 * s, 12 * s, hud.so > 0 ? '#b8f5a0' : 'rgba(255,255,255,0.6)');
+        if (hud.zm > 1) this.outlinedText(ctx, itemName('scope' + hud.zm), px + pw / 2, y - 10 * s, 13 * s, '#ffe27a');
       }
 
       if (hud.ch) {

@@ -226,8 +226,14 @@
     soup: { name: { zh: '雞湯', en: 'Chicken Soup' }, heal: 60, time: 1.6 },
     bao: { name: { zh: '小籠包', en: 'Soup Dumplings' }, heal: 40 },
     bag: { name: { zh: '保溫外送袋', en: 'Thermal Bag' } },
-    coldbox: { name: { zh: '冷鏈箱', en: 'Cold-Chain Crate' } }
+    coldbox: { name: { zh: '冷鏈箱', en: 'Cold-Chain Crate' } },
+    scope2: { name: { zh: '2倍鏡', en: '2x Scope' }, lv: 2 },
+    scope4: { name: { zh: '4倍鏡', en: '4x Scope' }, lv: 4 },
+    scope8: { name: { zh: '8倍鏡', en: '8x Scope' }, lv: 8 }
   };
+
+  // A scope widens how much of the map you see: zoom multiplies the view height (and the width with it).
+  D.SCOPE_ZOOM = { 1: 1, 2: 1.2, 4: 1.4, 8: 1.65 };
 
   // item, weight in a normal spawn, weight in an ingredient crate
   D.LOOT = [
@@ -247,7 +253,10 @@
     ['swordfish', 0.3, 1.4],
     ['soup', 12, 14],
     ['bao', 12, 8],
-    ['bag', 3, 6]
+    ['bag', 3, 6],
+    ['scope2', 8, 5],
+    ['scope4', 4.5, 5],
+    ['scope8', 1.5, 3.5]
   ];
 
   // Vehicles: max is top speed (air drag balances the engine there), grip the sideways acceleration the tyres

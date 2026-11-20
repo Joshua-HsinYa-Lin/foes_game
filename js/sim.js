@@ -901,6 +901,7 @@
         alive: true,
         slots: [null, null, null, null],
         soups: 0,
+        scope: 1,
         nslots: D.SLOTS,
         act: 0,
         cool: 0,
@@ -1154,6 +1155,7 @@
       p.act = 0;
       p.nslots = D.SLOTS;
       p.soups = 1;
+      p.scope = 1;
       p.killer = '';
       p.killerNk = '';
       p.killerId = 0;
@@ -1273,6 +1275,20 @@
         this.toPlayer(p, 'pick_heal', [Math.round(D.ITEMS.bao.heal * this.healMul(p))], true);
         return true;
       }
+      const SC = D.ITEMS[it.t] && D.ITEMS[it.t].lv;
+      if (SC) {
+        // Bots see the same either way, so scopes are left on the ground for people.
+        if (p.bot) return false;
+        if (SC <= p.scope) {
+          if (manual) this.toPlayer(p, 'haveScope');
+          return false;
+        }
+        this.removeItem(it);
+        if (p.scope > 1) this.dropNear(p, 'scope' + p.scope);
+        p.scope = SC;
+        this.toPlayer(p, 'pick_item', [it.t], true);
+        return true;
+      }
       if (it.t === 'bag') {
         if (p.nslots >= D.SLOTS_BAG) {
           if (manual) this.toPlayer(p, 'haveBag');
@@ -1386,7 +1402,8 @@
       this.secret(p, sc.id);
     }
 
-    // A cold-chain airdrop holds one rare kitchen weapon, one crate-tier item and one healing item.
+    // A cold-chain airdrop holds one rare kitchen weapon, one crate-tier item, one healing item and,
+    // half the time, a 4x or 8x scope.
     openDrop(p, it) {
       const R = this.sr;
       const rares = D.LOOT.filter(e => D.WEAPONS[e[0]] && D.WEAPONS[e[0]].rare);
@@ -1402,6 +1419,7 @@
         }
       }
       const got = [rare, this.rollItem(1, R), R() < 0.5 ? 'soup' : 'bao'];
+      if (R() < 0.5) got.push(R() < 0.4 ? 'scope8' : 'scope4');
       got.forEach((t, i) => {
         const a = (i / got.length) * TAU + R();
         this.spawnItem(it.x + Math.cos(a) * 34, it.y + Math.sin(a) * 34, t);
@@ -2013,7 +2031,7 @@
         const near = q.slice();
         q.length = 0;
         for (const it of near) {
-          if (it.t !== 'bao' && it.t !== 'bag' && it.t !== 'soup' && it.t !== 'coldbox') continue;
+          if (it.t !== 'bao' && it.t !== 'bag' && it.t !== 'soup' && it.t !== 'coldbox' && !(D.ITEMS[it.t] && D.ITEMS[it.t].lv)) continue;
           const m = p.r + D.ITEM_R;
           if ((it.x - p.x) * (it.x - p.x) + (it.y - p.y) * (it.y - p.y) < m * m) this.tryPickup(p, it, false);
         }
@@ -2204,6 +2222,8 @@
       for (let i = 0; i < p.soups; i++) this.dropNear(p, 'soup');
       p.soups = 0;
       if (p.nslots > D.SLOTS) this.dropNear(p, 'bag');
+      if (p.scope > 1) this.dropNear(p, 'scope' + p.scope);
+      p.scope = 1;
       if (p.kind !== 'player' && this.rng() < 0.3) this.dropNear(p, 'bao');
       this.turrets = this.turrets.filter(t => t.owner !== p.id);
       const killer = src ? this.playerMap.get(src) : null;
@@ -2764,9 +2784,9 @@
       }
     }
 
-    // A person is far lighter than a vehicle: on contact they are pushed out and, if the vehicle is coming
-    // at them, thrown off at about the vehicle's closing speed; the vehicle loses a little speed in return.
-    // Only the closing speed along the line between them counts, so a glancing touch does little.
+    // A person is far lighter than a vehicle. Only the vehicle's own motion toward the person counts: a
+    // vehicle driving into someone throws them off at about its closing speed and, if fast enough, hurts
+    // them; a person walking or running into a parked or slow vehicle just stops against it, like a wall.
     vehicleHitsPlayers(v) {
       const V = D.VEHICLES[v.t];
       const drv = v.driver ? this.playerMap.get(v.driver) : null;
@@ -2782,19 +2802,24 @@
         const ny = dy / d;
         p.x = v.x + nx * m;
         p.y = v.y + ny * m;
-        const rel = v.vx * nx + v.vy * ny - ((p.vx + p.kx) * nx + (p.vy + p.ky) * ny);
-        if (rel > 0) {
-          const pm = D.PLAYER_MASS * this.massOf(p);
-          const dvp = (1.3 * rel * V.mass) / (V.mass + pm);
-          p.kx += nx * dvp;
-          p.ky += ny * dvp;
-          v.vx -= (nx * dvp * pm) / V.mass;
-          v.vy -= (ny * dvp * pm) / V.mass;
-          if (rel > 150 && this.time - p.ranT > 0.6 && (!drv || this.enemies(drv, p))) {
+        const push = v.vx * nx + v.vy * ny;
+        if (push > 40) {
+          const rel = push - ((p.vx + p.kx) * nx + (p.vy + p.ky) * ny);
+          if (rel > 0) {
+            const pm = D.PLAYER_MASS * this.massOf(p);
+            const dvp = (1.3 * rel * V.mass) / (V.mass + pm);
+            p.kx += nx * dvp;
+            p.ky += ny * dvp;
+            v.vx -= (nx * dvp * pm) / V.mass;
+            v.vy -= (ny * dvp * pm) / V.mass;
+          }
+          if (push > 150 && this.time - p.ranT > 0.6 && (!drv || this.enemies(drv, p))) {
             p.ranT = this.time;
-            this.damagePlayer(p, rel * V.ram, v.driver, 'vehicle');
+            this.damagePlayer(p, push * V.ram, v.driver, 'vehicle');
             this.ev({ e: 'hit', x: p.x, y: p.y, ty: 'p', by: v.driver });
           }
+        } else {
+          this.wallStop(p, [nx, ny]);
         }
         this.resolvePlayer(p);
       }
@@ -2934,6 +2959,7 @@
       if (it.t === 'coldbox') return p.team === 1 ? 9 : 0;
       if (it.t === 'bao') return p.hp < p.maxHp * 0.85 ? 2 + 7 * (1 - p.hp / p.maxHp) : 0;
       if (it.t === 'bag') return p.nslots < D.SLOTS_BAG ? 6 : 0;
+      if (D.ITEMS[it.t] && D.ITEMS[it.t].lv) return 0;
       if (it.t === 'soup') return p.soups < this.soupCap(p) ? (p.hp < p.maxHp * 0.7 ? 6 : 3) : 0;
       const r = RANK[it.t] || 0;
       if (this.hasEmptySlot(p)) return 5 + r;
@@ -3343,8 +3369,13 @@
 
     // ---------- views ----------
 
+    // How much bigger than normal this player's view is: driving and a scope each widen it.
+    viewMul(p) {
+      return (p.veh ? 1.2 : 1) * (D.SCOPE_ZOOM[p.scope] || 1);
+    }
+
     viewHalf(p, aspect) {
-      const h = D.VIEW_H * (p.veh ? 1.2 : 1);
+      const h = D.VIEW_H * this.viewMul(p);
       const w = h * clamp(aspect, 1, D.MAX_ASPECT);
       return [w / 2 + 160, h / 2 + 160];
     }
@@ -3358,7 +3389,7 @@
       if (tg.secret) return { k: 'see_' + tg.secret.id };
       const it = tg.item;
       if (it.t === 'drop') return { k: 'openDrop' };
-      if (it.t === 'bao' || it.t === 'bag' || it.t === 'soup') return { k: 'pickUp', t: it.t };
+      if (it.t === 'bao' || it.t === 'bag' || it.t === 'soup' || (D.ITEMS[it.t] && D.ITEMS[it.t].lv)) return { k: 'pickUp', t: it.t };
       let free = !p.slots[p.act];
       for (let i = 0; i < p.nslots; i++) if (!p.slots[i]) free = true;
       return { k: free ? 'pickUp' : 'swapFor', t: it.t };
@@ -3424,6 +3455,7 @@
         st: Math.round(p.stamina),
         sl: p.slots.slice(0, p.nslots).map(s => (s ? { t: s.t, m: s.m != null ? s.m : null } : null)),
         so: p.soups,
+        zm: p.scope,
         soc: this.soupCap(p),
         act: p.act,
         rl: p.reload ? clamp(p.reload.t / p.reload.total, 0, 1) : -1,
@@ -3560,6 +3592,7 @@
         cx: r1(cam.x),
         cy: r1(cam.y),
         cveh: cam.veh ? 1 : 0,
+        cvm: Math.round(this.viewMul(cam) * 1000) / 1000,
         me: this.hudData(me, true),
         cme: cam !== me ? this.hudData(cam, false) : null,
         pl,
