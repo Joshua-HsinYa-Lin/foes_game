@@ -1235,6 +1235,19 @@
       return p.char === 'yunwang' ? 1.5 : 1;
     }
 
+    // Health back from damage dealt. The gain is shown as one "+N" once enough has built up, not per bullet.
+    lifesteal(p, dealt) {
+      const g = Math.min(p.maxHp - p.hp, dealt * D.LIFESTEAL * this.healMul(p));
+      if (g <= 0) return;
+      p.hp += g;
+      p.lsAcc = (p.lsAcc || 0) + g;
+      if (p.lsAcc >= 3 && this.time - (p.lsT || 0) > 0.7) {
+        this.ev({ e: 'leech', i: p.id, x: p.x, y: p.y, n: Math.round(p.lsAcc) });
+        p.lsAcc = 0;
+        p.lsT = this.time;
+      }
+    }
+
     heal(p, amt) {
       p.hp = Math.min(p.maxHp, p.hp + amt * this.healMul(p));
       this.ev({ e: 'heal', i: p.id, x: p.x, y: p.y });
@@ -2191,6 +2204,7 @@
         if (amt <= 0) return;
       }
       if (att && att !== p && att.odOk && att.odT <= 0) att.od = Math.min(1, att.od + amt / D.OVERDRIVE.need);
+      if (att && att !== p && att.alive && att.kind === 'player') this.lifesteal(att, Math.min(amt, p.hp));
       p.hp -= amt;
       p.hitT = this.time;
       if (p.inject && cause !== 'zone' && cause !== 'burn') p.inject = null;

@@ -1763,6 +1763,9 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
     scope8: { name: { zh: '8倍鏡', en: '8x Scope' }, lv: 8 }
   };
 
+  // Fighting back pays: this share of the damage a fighter deals to opponents comes back as health.
+  D.LIFESTEAL = 0.1;
+
   // A scope widens how much of the map you see: zoom multiplies the view height (and the width with it).
   D.SCOPE_ZOOM = { 1: 1, 2: 1.2, 4: 1.4, 8: 1.65 };
 
@@ -3792,6 +3795,19 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
       return p.char === 'yunwang' ? 1.5 : 1;
     }
 
+    // Health back from damage dealt. The gain is shown as one "+N" once enough has built up, not per bullet.
+    lifesteal(p, dealt) {
+      const g = Math.min(p.maxHp - p.hp, dealt * D.LIFESTEAL * this.healMul(p));
+      if (g <= 0) return;
+      p.hp += g;
+      p.lsAcc = (p.lsAcc || 0) + g;
+      if (p.lsAcc >= 3 && this.time - (p.lsT || 0) > 0.7) {
+        this.ev({ e: 'leech', i: p.id, x: p.x, y: p.y, n: Math.round(p.lsAcc) });
+        p.lsAcc = 0;
+        p.lsT = this.time;
+      }
+    }
+
     heal(p, amt) {
       p.hp = Math.min(p.maxHp, p.hp + amt * this.healMul(p));
       this.ev({ e: 'heal', i: p.id, x: p.x, y: p.y });
@@ -4748,6 +4764,7 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
         if (amt <= 0) return;
       }
       if (att && att !== p && att.odOk && att.odT <= 0) att.od = Math.min(1, att.od + amt / D.OVERDRIVE.need);
+      if (att && att !== p && att.alive && att.kind === 'player') this.lifesteal(att, Math.min(amt, p.hp));
       p.hp -= amt;
       p.hitT = this.time;
       if (p.inject && cause !== 'zone' && cause !== 'burn') p.inject = null;
@@ -7182,6 +7199,10 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
         case 'heal':
           this.addParticles(e.x, e.y, 8, '#7ee08a', 90, 0.6, 5);
           break;
+        case 'leech':
+          this.addParticles(e.x, e.y, 5, '#7ee08a', 60, 0.5, 4);
+          if (e.i === myId) this.dmgNums.push({ x: e.x, y: e.y - 50, n: '+' + e.n, t: this.time, c: '#8ef08a' });
+          break;
         case 'kill':
           this.addParticles(e.x, e.y, 14, '#c0352f', 200, 0.7, 7);
           break;
@@ -9194,7 +9215,7 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
       for (const d of this.dmgNums) {
         const t = (this.time - d.t) / 0.9;
         ctx.globalAlpha = 1 - t;
-        this.outlinedText(ctx, String(d.n), d.x, d.y - t * 40, 22, '#ffe14d');
+        this.outlinedText(ctx, String(d.n), d.x, d.y - t * 40, 22, d.c || '#ffe14d');
       }
       ctx.globalAlpha = 1;
     }
@@ -9842,7 +9863,7 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
       for (const d of this.dmgNums) {
         const t = (this.time - d.t) / 0.9;
         ctx.globalAlpha = Math.max(0, 1 - t);
-        this.outlinedText(ctx, String(d.n), d.x, (d.y + 34) * T - 92 - t * 40, 22, '#ffe14d');
+        this.outlinedText(ctx, String(d.n), d.x, (d.y + 34) * T - 92 - t * 40, 22, d.c || '#ffe14d');
       }
       ctx.globalAlpha = 1;
 

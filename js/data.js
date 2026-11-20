@@ -232,6 +232,9 @@
     scope8: { name: { zh: '8倍鏡', en: '8x Scope' }, lv: 8 }
   };
 
+  // Fighting back pays: this share of the damage a fighter deals to opponents comes back as health.
+  D.LIFESTEAL = 0.1;
+
   // A scope widens how much of the map you see: zoom multiplies the view height (and the width with it).
   D.SCOPE_ZOOM = { 1: 1, 2: 1.2, 4: 1.4, 8: 1.65 };
 

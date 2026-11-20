@@ -345,6 +345,10 @@
         case 'heal':
           this.addParticles(e.x, e.y, 8, '#7ee08a', 90, 0.6, 5);
           break;
+        case 'leech':
+          this.addParticles(e.x, e.y, 5, '#7ee08a', 60, 0.5, 4);
+          if (e.i === myId) this.dmgNums.push({ x: e.x, y: e.y - 50, n: '+' + e.n, t: this.time, c: '#8ef08a' });
+          break;
         case 'kill':
           this.addParticles(e.x, e.y, 14, '#c0352f', 200, 0.7, 7);
           break;
@@ -2357,7 +2361,7 @@
       for (const d of this.dmgNums) {
         const t = (this.time - d.t) / 0.9;
         ctx.globalAlpha = 1 - t;
-        this.outlinedText(ctx, String(d.n), d.x, d.y - t * 40, 22, '#ffe14d');
+        this.outlinedText(ctx, String(d.n), d.x, d.y - t * 40, 22, d.c || '#ffe14d');
       }
       ctx.globalAlpha = 1;
     }
@@ -3005,7 +3009,7 @@
       for (const d of this.dmgNums) {
         const t = (this.time - d.t) / 0.9;
         ctx.globalAlpha = Math.max(0, 1 - t);
-        this.outlinedText(ctx, String(d.n), d.x, (d.y + 34) * T - 92 - t * 40, 22, '#ffe14d');
+        this.outlinedText(ctx, String(d.n), d.x, (d.y + 34) * T - 92 - t * 40, 22, d.c || '#ffe14d');
       }
       ctx.globalAlpha = 1;
 

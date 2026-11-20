@@ -59,6 +59,8 @@ Six hidden details to find (the title screen counts them), breakable wooden buil
 
 **Scopes:** 2倍鏡, 4倍鏡 and 8倍鏡 lie around the map and in airdrops. Walk over one to see more of the map; you keep the best one until you are knocked out, then it drops.
 
+**Fighting heals:** 10% of the damage you deal to opponents comes back as health (a green +N over you).
+
 ## For developers
 
 | Path | Contents |

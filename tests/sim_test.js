@@ -417,6 +417,18 @@ function duel(charA, charB, opts) {
   check(q.hp < q.maxHp, 'a moving van hurts a person it hits');
 }
 
+// ---------- health from damage dealt ----------
+{
+  const sim = new Sim({ seed: 8 });
+  const a = sim.playerMap.get(sim.addPlayer('A', false, { char: 'luap' }));
+  const b = sim.playerMap.get(sim.addPlayer('B', false, { char: 'meibao' }));
+  a.hp = 50;
+  a.dmgMul = 1;
+  b.shieldT = 0;
+  sim.damagePlayer(b, 40, a.id, 'gun');
+  check(Math.abs(a.hp - 54) < 0.01, 'dealing 40 damage gives back 4 health (' + a.hp + ')');
+}
+
 // ---------- scopes ----------
 {
   const sim = new Sim({ seed: 5 });
