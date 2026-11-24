@@ -9,7 +9,7 @@ const { chromium } = require('playwright');
 
 const outDir = process.argv[2] || path.join(__dirname, 'shots');
 const addr = process.argv[3] || 'localhost:8099';
-const fileUrl = 'file://' + path.join(__dirname, '..', 'yunwang_paradise.html') + '?debug';
+const fileUrl = 'file://' + path.join(__dirname, '..', 'yunwang_paradise.html') + '?debug&autoquiz';
 
 (async () => {
   fs.mkdirSync(outDir, { recursive: true });
@@ -33,9 +33,9 @@ const fileUrl = 'file://' + path.join(__dirname, '..', 'yunwang_paradise.html') 
     pages[name] = page;
     return page;
   };
-  const alice = await join('Alice', 'http://' + addr + '/?debug', 1, false);
+  const alice = await join('Alice', 'http://' + addr + '/?debug&autoquiz', 1, false);
   await alice.waitForTimeout(400);
-  const bob = await join('Bob', 'http://' + addr + '/?debug', 4, false);
+  const bob = await join('Bob', 'http://' + addr + '/?debug&autoquiz', 4, false);
   const carol = await join('Carol', fileUrl, 2, true);
   await carol.waitForFunction(() => document.querySelectorAll('#roomPlayers .room-player').length === 3, null, { timeout: 10000 });
   await alice.waitForTimeout(500);
@@ -80,7 +80,7 @@ const fileUrl = 'file://' + path.join(__dirname, '..', 'yunwang_paradise.html') 
   // Alice is the last one standing and the room returns on its own.
   for (const p of [alice, bob, carol]) await p.close();
   await new Promise(r => setTimeout(r, 1200));
-  const dana = await join('Dana', 'http://' + addr + '/?debug', 3, false);
+  const dana = await join('Dana', 'http://' + addr + '/?debug&autoquiz', 3, false);
   await dana.waitForTimeout(400);
   const eli = await join('Eli', fileUrl, 1, true);
   await dana.waitForFunction(() => document.querySelectorAll('#roomPlayers .room-player').length === 2, null, { timeout: 10000 });

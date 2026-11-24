@@ -8,7 +8,7 @@ const { chromium } = require('playwright');
 
 const outDir = process.argv[2] || path.join(__dirname, 'shots');
 const addr = process.argv[3] || '';
-const url = 'file://' + path.join(__dirname, '..', 'yunwang_paradise.html') + '?debug';
+const url = 'file://' + path.join(__dirname, '..', 'yunwang_paradise.html') + '?debug&autoquiz';
 const ANDROID = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36';
 const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1';
 

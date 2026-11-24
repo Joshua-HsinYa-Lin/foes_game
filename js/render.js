@@ -571,7 +571,10 @@
       for (const p of view.pl) {
         if (p.d || p.veh) continue;
         const aim = p.i === view.you && ui.aim != null ? ui.aim : p.a;
+        // Faded until they are in play (still solving the math problem, or bots waiting for everyone).
+        if (p.qz) ctx.globalAlpha = 0.45;
         this.drawPlayer(ctx, p, aim);
+        ctx.globalAlpha = 1;
       }
       for (const p of view.pl) {
         if (!p.d && !p.veh && (p.od || p.bb || p.gd)) this.drawAuras(ctx, p, p.x, p.y, p.r || PR);
@@ -2354,6 +2357,7 @@
         if (p.hp >= 0 && (foe || ally) && (p.hp < 1 || p.ch === 'boss' || ally)) this.bar(ctx, p.x, p.y + R + 10, R * 2.2, p.hp, foe ? '#e8453b' : '#7ad35e');
         const enemyCol = this.tmode === 'teams' ? (p.tm === 1 ? '#ffa294' : '#a8cfff') : '#ffffff';
         if (p.hu || ally) this.outlinedText(ctx, (p.lv ? 'Lv' + p.lv + ' ' : '') + nameOf(p), p.x, p.y - R - 14, Math.max(16, 11 / (this.zoom || 1)), ally ? '#b8f5a0' : enemyCol);
+        if (p.qz && p.hu) this.outlinedText(ctx, I.t('quizSolving'), p.x, p.y - R - 34, Math.max(14, 10 / (this.zoom || 1)), '#ffe27a');
       }
     }
 
@@ -2842,6 +2846,7 @@
         if (p.hp >= 0 && (foe || ally) && (p.hp < 1 || p.ch === 'boss' || ally)) this.bar(ctx, p.x, top - 8, R * 2.2, p.hp, foe ? '#e8453b' : '#7ad35e');
         const enemyCol = this.tmode === 'teams' ? (p.tm === 1 ? '#ffa294' : '#a8cfff') : '#ffffff';
         if (p.hu || ally) this.outlinedText(ctx, (p.lv ? 'Lv' + p.lv + ' ' : '') + nameOf(p), p.x, top - 16, Math.max(15, 11 / (this.zoom || 1)), ally ? '#b8f5a0' : enemyCol);
+        if (p.qz && p.hu) this.outlinedText(ctx, I.t('quizSolving'), p.x, top - 36, Math.max(14, 10 / (this.zoom || 1)), '#ffe27a');
       }
     }
 
@@ -2978,7 +2983,11 @@
           continue;
         }
         const aim = p.i === view.you && ui.aim != null ? ui.aim : p.a;
-        add(p.y + 0.5, () => this.drawFigure3D(ctx, p, aim, view));
+        add(p.y + 0.5, () => {
+          if (p.qz) ctx.globalAlpha = 0.45;
+          this.drawFigure3D(ctx, p, aim, view);
+          ctx.globalAlpha = 1;
+        });
       }
       for (const v of view.ve) {
         if (vis(v.x, v.y, 90)) add(v.y + 8, () => this.drawVehicle3D(ctx, v, plMap));

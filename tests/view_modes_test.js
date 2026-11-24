@@ -44,6 +44,22 @@ const addr = process.argv[2] || 'localhost:8099';
   for (const p of [alice, bob]) await p.waitForFunction(() => PF_DEBUG.view && PF_DEBUG.view.st === 'playing', null, { timeout: 15000 });
   await alice.waitForTimeout(800);
 
+  // The start-of-match math problem: Alice solves first and can move; Bob is still solving.
+  // qp is how many people are still solving; the bots come in when it reaches 0.
+  const quiz = p => p.evaluate(() => ({ open: !document.getElementById('quiz').hidden, q: document.getElementById('quizQ').textContent, qp: PF_DEBUG.view.qp }));
+  const qa = await quiz(alice);
+  const qb = await quiz(bob);
+  check(qa.open && qb.open && qa.q === qb.q && qa.qp === 2, 'both get the same math problem before they can move');
+  await alice.waitForFunction(() => PF_DEBUG.solveQuiz(), null, { timeout: 5000 });
+  await alice.waitForTimeout(600);
+  const qa2 = await quiz(alice);
+  const qb2 = await quiz(bob);
+  check(!qa2.open && qb2.open && qa2.qp === 1, 'Alice solved it and plays while Bob is still solving');
+  await bob.waitForFunction(() => PF_DEBUG.solveQuiz(), null, { timeout: 5000 });
+  await bob.waitForTimeout(600);
+  const qa3 = await quiz(alice);
+  check(qa3.qp === 0, 'once Bob solves it too, nobody is left solving and the bots come in');
+
   const info = p => p.evaluate(() => ({ mode3d: PF_DEBUG.renderer.mode3d, area: PF_DEBUG.renderer.visibleArea(), you: PF_DEBUG.view.you, me: [PF_DEBUG.view.me.x, PF_DEBUG.view.me.y], tot: PF_DEBUG.view.tot }));
   const a = await info(alice);
   const b = await info(bob);

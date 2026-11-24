@@ -417,6 +417,41 @@ function duel(charA, charB, opts) {
   check(q.hp < q.maxHp, 'a moving van hurts a person it hits');
 }
 
+// ---------- start-of-match math problem ----------
+{
+  const Q = require(path.join(__dirname, '..', 'js', 'quiz.js'));
+  let wellFormed = true;
+  for (let s = 1; s <= 2000; s++) {
+    const p = Q.make(s, s + 99);
+    if (p.opts.length !== 5 || p.ans.length < 1 || p.ans.length > 4 || /NaN|undefined/.test(JSON.stringify(p))) wellFormed = false;
+  }
+  check(wellFormed, '2000 problems all have five options and one to four right answers');
+
+  const sim = new Sim({ seed: 4 });
+  const a = sim.playerMap.get(sim.addPlayer('Ann', false, {}));
+  const b = sim.playerMap.get(sim.addPlayer('Bob', false, {}));
+  sim.fillBots(4);
+  const bot = sim.players.find(p => p.bot);
+  sim.startQuiz(777);
+  steps(sim, 30);
+  check(sim.time === 0, 'nothing moves until somebody solves the problem');
+  const ansA = Q.make(777, a.quiz.o).ans;
+  sim.pushAction(a.id, { a: 'quiz', ans: ansA === 'A' ? 'B' : 'A' });
+  steps(sim, 1);
+  sim.pushAction(a.id, { a: 'quiz', ans: ansA });
+  steps(sim, 1);
+  check(!!a.quiz, 'after a wrong answer, even the right one is refused for a few seconds');
+  steps(sim, 160);
+  sim.pushAction(a.id, { a: 'quiz', ans: ansA });
+  steps(sim, 1);
+  check(!a.quiz && sim.time > 0, 'the right answer lets Ann start and the match begins');
+  sim.damagePlayer(b, 40, a.id, 'gun');
+  check(sim.held(b) && sim.held(bot) && b.hp === b.maxHp, 'Bob (still solving) and the bots wait and cannot be hurt');
+  sim.pushAction(b.id, { a: 'quiz', ans: Q.make(777, b.quiz.o).ans });
+  steps(sim, 1);
+  check(!sim.held(b) && !sim.held(bot), 'the bots come in with the last person to solve it');
+}
+
 // ---------- health from damage dealt ----------
 {
   const sim = new Sim({ seed: 8 });

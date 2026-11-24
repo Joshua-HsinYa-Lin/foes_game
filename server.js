@@ -264,6 +264,8 @@ function startMatch() {
   }
   sim.fillBots(humans.length + matchBots());
   sim.setupTeams();
+  // Everyone starts with the same math problem; bots wait until the last person has solved it.
+  sim.startQuiz((Math.random() * 4294967296) >>> 0);
   mapData = sim.getMapData();
   for (const c of humans) c.send({ t: 'welcome', id: c.pid, map: mapData, match: matchNo });
   state = 'playing';
@@ -276,6 +278,7 @@ function lateJoin(c) {
   if (sim.time < 40) {
     c.pid = sim.addPlayer(c.name, false, Object.assign({ char: c.char, team: room.mode === 'teams' ? c.team || 0 : 0 }, c.lo));
     sim.joinTeam(sim.playerMap.get(c.pid));
+    sim.giveQuiz(sim.playerMap.get(c.pid));
     sim.setAspect(c.pid, c.aspect);
     c.spectator = false;
   } else {

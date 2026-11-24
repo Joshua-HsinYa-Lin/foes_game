@@ -2,6 +2,7 @@
   'use strict';
   const isNode = typeof module !== 'undefined' && !!module.exports;
   const D = isNode ? require('./data.js') : globalThis.PF_DATA;
+  const Q = isNode ? require('./quiz.js') : globalThis.PF_QUIZ;
 
   const TAU = Math.PI * 2;
   const DEG = Math.PI / 180;
@@ -253,7 +254,7 @@
   }
 
   const RANK = { fists: 0, knife: 1, pistol: 3, uzi: 4, shotgun: 4, pan: 5, cleaver: 5, rollingpin: 5, sniper: 5, rifle: 6, minigun: 6, wok: 6, chopsticks: 6, bowl: 6, harpoon: 7, swordfish: 8 };
-  const VALID_ACTIONS = { slot: 1, cycle: 1, reload: 1, interact: 1, drop: 1, jump: 1, skill: 1, heal: 1, gadget: 1, overdrive: 1 };
+  const VALID_ACTIONS = { slot: 1, cycle: 1, reload: 1, interact: 1, drop: 1, jump: 1, skill: 1, heal: 1, gadget: 1, overdrive: 1, quiz: 1 };
   const ALLY_WEAPONS = { yunwang: 'shotgun', luap: 'uzi', auhsoj: 'rifle', meibao: 'chopsticks', afeng: 'uzi', bubbles: 'shotgun', jinjin: 'pistol', bing: 'rifle' };
 
   class Sim {
@@ -270,6 +271,9 @@
       this.size = D.MAP_SIZE;
       this.difficulty = D.diffLevel(opts.difficulty) || D.DIFF_DEFAULT;
       this.time = 0;
+      // Wall clock: keeps running while the match waits on the math problem (this.time does not).
+      this.clock = 0;
+      this.quiz = null;
       this.nextId = 1;
       this.players = [];
       this.playerMap = new Map();
@@ -1205,6 +1209,7 @@
       if (!p || !act || !VALID_ACTIONS[act.a] || p.actions.length > 12) return;
       const a = { a: act.a };
       if (act.i != null) a.i = clamp(Math.floor(Number(act.i) || 0), -1, 3);
+      if (act.a === 'quiz') a.ans = String(act.ans || '').slice(0, 10);
       // A skill can carry its own aim (dragged from the skill button, or right mouse released).
       if (act.a === 'skill') {
         const aim = Number(act.aim);
@@ -1871,6 +1876,7 @@
     }
 
     knock(p, ix, iy) {
+      if (this.held(p)) return;
       const m = this.massOf(p) * (p.char === 'bubbles' ? 2 : 1);
       p.kx += ix / m;
       p.ky += iy / m;
@@ -1949,6 +1955,14 @@
 
     updatePlayer(p, dt) {
       if (!p.alive) return;
+      if (this.held(p)) {
+        p.actions.length = 0;
+        p.vx = 0;
+        p.vy = 0;
+        p.kx = 0;
+        p.ky = 0;
+        return;
+      }
       for (const act of p.actions) this.handleAction(p, act);
       p.actions.length = 0;
       const inp = p.input;
@@ -2185,7 +2199,7 @@
     }
 
     damagePlayer(p, amt, src, cause, quiet) {
-      if (!p.alive || amt <= 0 || p.shieldT > this.time) return;
+      if (!p.alive || amt <= 0 || p.shieldT > this.time || this.held(p)) return;
       const att = src ? this.playerMap.get(src) : null;
       if (att && att !== p && !this.enemies(att, p)) return;
       if (att && att.kind !== 'player' && p.team === 1) amt *= D.BOT_SKILL[this.difficulty].foeDmg;
@@ -2503,14 +2517,81 @@
       return o;
     }
 
+    // ---------- start-of-match math problem ----------
+
+    // Everyone in the match gets the same problem, each with the options in their own order. Nothing moves
+    // until somebody solves it; each person then starts as soon as they solve it, and the bots come in
+    // together with the last person to solve it.
+    startQuiz(seed) {
+      this.quiz = { seed: seed >>> 0 || 1, clock: 0, open: false, botsIn: false };
+      for (const p of this.players) this.giveQuiz(p);
+      this.checkQuiz();
+    }
+
+    giveQuiz(p) {
+      if (!this.quiz || p.bot || p.kind !== 'player') return;
+      p.quiz = { o: Math.imul(this.quiz.seed ^ 0x5bd1e995, p.id + 7) >>> 0 || 1, t0: this.quiz.clock, lock: 0, wrong: 0 };
+    }
+
+    // People still solving and bots still waiting are not in play: they cannot move, be hurt or be targeted.
+    held(p) {
+      return !!this.quiz && (!!p.quiz || (p.bot && !this.quiz.botsIn));
+    }
+
+    // Runs the problem part of a step. Returns false while the whole world is still waiting.
+    stepQuiz(dt) {
+      const qz = this.quiz;
+      qz.clock += dt;
+      for (const p of this.players) {
+        if (!p.quiz) continue;
+        for (const a of p.actions) if (a.a === 'quiz' && p.quiz) this.answerQuiz(p, a.ans);
+        p.actions.length = 0;
+      }
+      this.checkQuiz();
+      return qz.open;
+    }
+
+    checkQuiz() {
+      const qz = this.quiz;
+      if (qz.botsIn || this.players.some(p => p.quiz && p.alive)) return;
+      qz.open = true;
+      qz.botsIn = true;
+      if (this.players.some(p => p.bot && p.alive) && this.players.some(p => !p.bot)) this.ev({ e: 'msg', g: 1, k: 'msg_botsIn' });
+    }
+
+    answerQuiz(p, ans) {
+      const qz = this.quiz;
+      if (qz.clock < p.quiz.lock) return;
+      if (Q.norm(ans) !== Q.make(qz.seed, p.quiz.o).ans) {
+        p.quiz.wrong++;
+        p.quiz.lock = qz.clock + D.QUIZ_WAIT;
+        this.ev({ e: 'quiz', to: p.id, ok: 0 });
+        return;
+      }
+      const t = Math.round((qz.clock - p.quiz.t0) * 10) / 10;
+      p.quiz = null;
+      p.shieldT = this.time + 2;
+      qz.open = true;
+      this.ev({ e: 'quiz', to: p.id, ok: 1, t });
+      this.ev({ e: 'msg', g: 1, k: 'msg_solved', a: [p.name, t] });
+    }
+
+    quizHud(p) {
+      if (!p.quiz) return null;
+      const qz = this.quiz;
+      return { s: qz.seed, o: p.quiz.o, lk: Math.max(0, Math.ceil(p.quiz.lock - qz.clock)), c: Math.round((qz.clock - p.quiz.t0) * 10) / 10 };
+    }
+
     // ---------- step ----------
 
     step(dt) {
       this.events.length = 0;
+      this.clock += dt;
+      if (this.quiz && !this.stepQuiz(dt)) return;
       this.time += dt;
       this.updateZone(dt);
       for (const p of this.players) {
-        if (p.bot && p.alive) this.botUpdate(p, dt);
+        if (p.bot && p.alive && !this.held(p)) this.botUpdate(p, dt);
       }
       for (const p of this.players) this.updatePlayer(p, dt);
       this.separatePlayers();
@@ -2639,7 +2720,7 @@
         let best = null;
         let bd = P ? Math.min(D.WEAPONS.turret.range, P.sight) : D.WEAPONS.turret.range;
         for (const q of this.players) {
-          if (!q.alive || q.veh || !this.enemies(owner, q)) continue;
+          if (!q.alive || q.veh || !this.enemies(owner, q) || this.held(q)) continue;
           const d = Math.hypot(q.x - t.x, q.y - t.y);
           if (d < bd && !this.losBlocked(t.x, t.y, q.x, q.y)) {
             bd = d;
@@ -2986,12 +3067,12 @@
     botDecide(p, P) {
       const ai = p.ai;
       let tgt = ai.target ? this.playerMap.get(ai.target) : null;
-      if (tgt && (!tgt.alive || Math.hypot(tgt.x - p.x, tgt.y - p.y) > P.sight * 1.3)) tgt = null;
+      if (tgt && (!tgt.alive || this.held(tgt) || Math.hypot(tgt.x - p.x, tgt.y - p.y) > P.sight * 1.3)) tgt = null;
       const ramp = this.mode === 'royale' && this.time < 75 ? 0.15 + 0.85 * (this.time / 75) : 1;
       let best = null;
       let bd = Infinity;
       for (const q of this.players) {
-        if (!q.alive || !this.enemies(p, q)) continue;
+        if (!q.alive || !this.enemies(p, q) || this.held(q)) continue;
         const d = Math.hypot(q.x - p.x, q.y - p.y);
         let sight = P.sight * ramp * (ai.sightMul || 1);
         if (q.inBush && this.time - q.lastShot > 1.5) sight *= 0.35;
@@ -3120,7 +3201,7 @@
         let prey = null;
         let pd = ai.hunt;
         for (const q of this.players) {
-          if (!q.alive || !this.enemies(p, q)) continue;
+          if (!q.alive || !this.enemies(p, q) || this.held(q)) continue;
           const d = Math.hypot(q.x - p.x, q.y - p.y);
           if (d < pd) {
             pd = d;
@@ -3469,6 +3550,7 @@
         st: Math.round(p.stamina),
         sl: p.slots.slice(0, p.nslots).map(s => (s ? { t: s.t, m: s.m != null ? s.m : null } : null)),
         so: p.soups,
+        qz: this.quizHud(p),
         zm: p.scope,
         soc: this.soupCap(p),
         act: p.act,
@@ -3547,6 +3629,7 @@
           sh: q.shieldT > this.time ? 1 : 0,
           hu: q.bot ? 0 : 1
         });
+        if (this.held(q)) pl[pl.length - 1].qz = 1;
       }
       const bu = [];
       for (const b of this.bullets) {
@@ -3598,7 +3681,9 @@
       }
       const z = this.zone;
       return {
-        t: Math.round(this.time * 1000) / 1000,
+        t: Math.round(this.clock * 1000) / 1000,
+        mt: Math.round(this.time * 10) / 10,
+        qp: this.quiz && !this.quiz.botsIn ? this.players.filter(q => q.quiz && q.alive).length : 0,
         mode: this.mode,
         chap: this.chapter ? this.chapter.id : '',
         you: id,

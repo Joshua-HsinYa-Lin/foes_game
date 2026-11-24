@@ -16,6 +16,8 @@ A browser shooter set on the opening night of 允望樓 (Yunwang Tower). Captain
 - **區網對戰 LAN battle:** free-for-all, 紅藍對戰 Red vs Blue, or 全家合作 Family co-op (everyone against bots, fallen players come back).
 - Difficulty 1 (beginner) to 5 (hard).
 
+**Math check-in:** every game starts with a grade-10 math problem: five options, A to E, and you choose every correct one (for example ACD or BE). You can only move once you answer correctly; a wrong answer locks you out for 5 seconds. In a LAN match everyone gets the same problem with the options in a different order, whoever solves it first starts first, and the bots start together with the last person to solve it. Until then, people still solving and bots that are waiting cannot be hurt.
+
 ## Characters
 
 | Character | Skill |
@@ -69,6 +71,7 @@ Six hidden details to find (the title screen counts them), breakable wooden buil
 | `js/sim.js` | Game simulation (browser and server) |
 | `js/render.js` | 2D and 2.5D drawing, HUD |
 | `js/client.js` | Menus, input, sessions |
+| `js/quiz.js` | Start-of-match math problems (built from a seed) |
 | `js/i18n.js`, `js/audio.js` | Text in both languages; music and sounds |
 | `server.js` | LAN server, no dependencies |
 | `assets/` | Music and recorded sounds (originals in `assets/sfx/original/`) |
@@ -76,4 +79,4 @@ Six hidden details to find (the title screen counts them), breakable wooden buil
 
 After changing `js/`, `css/`, `assets/` or `index.html`, rebuild the single file and zip with `node tools/build_single.js`.
 
-Tests: `node tests/sim_test.js` needs nothing else. The browser tests in `tests/` need Playwright; `lan_test.js`, `family_test.js`, `view_modes_test.js` and the LAN part of `mobile_test.js` need `node server.js --port 8099` running.
+Tests: `node tests/sim_test.js` needs nothing else. The browser tests in `tests/` need Playwright; `lan_test.js`, `family_test.js`, `view_modes_test.js` and the LAN part of `mobile_test.js` need a freshly started `node server.js --port 8099`. Test pages open the game with `?debug&autoquiz`, which answers the math problem automatically.

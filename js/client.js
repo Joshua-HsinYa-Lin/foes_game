@@ -104,6 +104,7 @@
           this.sim.fillBots(o.bots + 1);
         }
       }
+      if (!this.demo) this.sim.startQuiz((Math.random() * 4294967296) >>> 0);
       this.map = this.sim.getMapData();
       this.mapVersion = 1;
       this.spec = 0;
@@ -942,7 +943,7 @@
     $('ovTitle').textContent = won ? (last ? I.t('storyEnd') : I.t('chapterClear')) : I.t('chapterFail');
     $('ovTitle').className = won ? 'win' : '';
     $('ovSub').textContent = won ? I.pick(I.STORY.titles[D.STORY[flow.idx].id]) : view.why === 'time' ? I.t('fail_time') : I.t('fail_dead');
-    statCells([[I.t('st_kills'), view.me.k], [I.t('st_damage'), view.me.dd], [I.t('st_time'), fmt(view.t)], [I.t('heroLabel'), I.pick(D.CHARS[prefs.char].name)]]);
+    statCells([[I.t('st_kills'), view.me.k], [I.t('st_damage'), view.me.dd], [I.t('st_time'), fmt(view.mt != null ? view.mt : view.t)], [I.t('heroLabel'), I.pick(D.CHARS[prefs.char].name)]]);
     if (!flow.xpDone) {
       flow.xpDone = true;
       $('ovXp').textContent = awardXp(prefs.char, won ? 70 + view.me.k * 5 : 15);
@@ -1059,9 +1060,19 @@
           const txt = I.t(e.k, ...(e.a || []));
           ui.notices.push({ txt, t: renderer.time, col: e.k === 'msg_box' ? '#9fdcff' : e.k === 'msg_zone' ? '#ffb38a' : '#ffd75e' });
           if (ui.notices.length > 3) ui.notices.shift();
-          Sound.play(e.k === 'msg_box' ? 'coldbox' : e.k === 'msg_wave' ? 'wave' : e.k === 'msg_boss' ? 'boss' : e.k === 'msg_plane' ? 'plane' : 'zone');
+          if (e.k === 'msg_botsIn') Sound.play('gong');
+          else if (e.k !== 'msg_solved') Sound.play(e.k === 'msg_box' ? 'coldbox' : e.k === 'msg_wave' ? 'wave' : e.k === 'msg_boss' ? 'boss' : e.k === 'msg_plane' ? 'plane' : 'zone');
           break;
         }
+        case 'quiz':
+          quizUi.msg = '';
+          if (e.ok) {
+            Sound.play('pickup');
+            renderer.banner(I.t('quizRight', e.t), '#ffd75e');
+          } else {
+            Sound.play('empty');
+          }
+          break;
         case 'kill': {
           let txt;
           const kn = who(e.k, e.knk);
@@ -1196,15 +1207,110 @@
   }
 
   function tipFor(view) {
+    if (view.qp > 0 && !view.me.qz && view.st === 'playing') return I.t('quizWaitBots', view.qp);
     if (view.chap !== 'ch1' || !view.obj || view.st !== 'playing') return '';
     const me = view.me;
     const t = touch.on ? '_t' : '';
-    if (view.t < 6) return I.t('tip_move' + t);
+    if ((view.mt != null ? view.mt : view.t) < 6) return I.t('tip_move' + t);
     if (!me.sl.some(s => s && D.WEAPONS[s.t])) return I.t('tip_pick' + t);
     if (view.obj.cur === 0) return I.t('tip_attack' + t);
     if (me.su === 0) return I.t('tip_skill' + t);
     if (me.so > 0 && me.hp < me.mhp * 0.8) return I.t('tip_heal' + t);
     return I.t('tip_crate' + t);
+  }
+
+  // ---------- start-of-match math problem ----------
+
+  const QUIZ = globalThis.PF_QUIZ;
+  const QUIZ_KEYS = { KeyA: 'A', KeyB: 'B', KeyC: 'C', KeyD: 'D', KeyE: 'E' };
+  const quizUi = { key: '', sel: new Set(), msg: '', shown: '', auto: '' };
+  // Test pages (?debug&autoquiz) answer the problem through the real buttons as soon as it shows.
+  const AUTO_QUIZ = /[?&]debug\b/.test(window.location.search) && /[?&]autoquiz\b/.test(window.location.search);
+
+  function answerQuiz(qz) {
+    const ans = QUIZ.make(qz.s, qz.o).ans;
+    for (const L of QUIZ.LETTERS) if (quizUi.sel.has(L) !== ans.includes(L)) toggleQuiz(L);
+    submitQuiz();
+  }
+
+  // Rebuilds the problem from the seeds the game sends (same text for everyone, own option order).
+  function renderQuiz(qz) {
+    const id = qz.s + ':' + qz.o;
+    const key = id + ':' + I.lang;
+    if (quizUi.key === key) return;
+    if (quizUi.key.indexOf(id + ':') !== 0) {
+      quizUi.sel.clear();
+      quizUi.msg = '';
+    }
+    quizUi.key = key;
+    const prob = QUIZ.make(qz.s, qz.o);
+    $('quizQ').textContent = I.pick(prob.q);
+    const box = $('quizOpts');
+    box.textContent = '';
+    prob.opts.forEach((o, i) => {
+      const L = QUIZ.LETTERS[i];
+      const b = document.createElement('button');
+      b.className = 'quiz-opt';
+      b.dataset.l = L;
+      b.setAttribute('aria-pressed', quizUi.sel.has(L) ? 'true' : 'false');
+      const tag = document.createElement('b');
+      tag.textContent = L;
+      const tx = document.createElement('span');
+      tx.textContent = I.pick(o);
+      b.append(tag, tx);
+      b.addEventListener('click', () => {
+        toggleQuiz(L);
+        b.blur();
+      });
+      box.appendChild(b);
+    });
+  }
+
+  function toggleQuiz(L) {
+    if (quizUi.sel.has(L)) quizUi.sel.delete(L);
+    else quizUi.sel.add(L);
+    quizUi.msg = '';
+    const b = $('quizOpts').querySelector('[data-l="' + L + '"]');
+    if (b) b.setAttribute('aria-pressed', quizUi.sel.has(L) ? 'true' : 'false');
+  }
+
+  function submitQuiz() {
+    if (!lastView || !lastView.me.qz || lastView.me.qz.lk > 0) return;
+    if (!quizUi.sel.size) {
+      quizUi.msg = I.t('quizPick');
+      return;
+    }
+    act({ a: 'quiz', ans: Array.from(quizUi.sel).sort().join('') });
+    quizUi.msg = I.t('quizCheck');
+  }
+
+  $('quizGo').addEventListener('click', () => {
+    submitQuiz();
+    $('quizGo').blur();
+  });
+
+  function updateQuiz(view) {
+    const qz = view && session && view.st === 'playing' && !view.spec && view.me ? view.me.qz : null;
+    const on = !!qz && !dlg && $('pause').hidden && $('overlay').hidden;
+    if ($('quiz').hidden === on) {
+      $('quiz').hidden = !on;
+      if (on) blurFocus();
+    }
+    if (!qz) quizUi.key = '';
+    if (!on) return;
+    renderQuiz(qz);
+    if (AUTO_QUIZ && quizUi.auto !== quizUi.key && !qz.lk) {
+      quizUi.auto = quizUi.key;
+      answerQuiz(qz);
+    }
+    const clock = '⏱ ' + Math.floor(qz.c) + ' s';
+    const msg = qz.lk > 0 ? I.t('quizWrong', qz.lk) : quizUi.msg;
+    const shown = clock + '|' + msg + '|' + (qz.lk > 0);
+    if (shown === quizUi.shown) return;
+    quizUi.shown = shown;
+    $('quizClock').textContent = clock;
+    $('quizMsg').textContent = msg;
+    $('quizGo').disabled = qz.lk > 0;
   }
 
   // ---------- input ----------
@@ -1252,6 +1358,12 @@
     }
     if (e.code === 'Escape') {
       if (session && $('overlay').hidden && $('lobby').hidden) togglePause();
+      return;
+    }
+    if (!$('quiz').hidden) {
+      const L = QUIZ_KEYS[e.code];
+      if (L && !e.repeat) toggleQuiz(L);
+      else if (e.code === 'Enter' && !e.repeat) submitQuiz();
       return;
     }
     if (!inGame()) return;
@@ -2071,6 +2183,7 @@
         ctx.fillStyle = '#1d2a18';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
       }
+      updateQuiz(isDemo ? null : view);
     }
     requestAnimationFrame(frame);
   }
@@ -2183,7 +2296,14 @@
       },
       startChapter,
       advanceDialogue,
-      endDialogue
+      endDialogue,
+      // Answers the math problem through the real buttons. Returns false when there is none open.
+      solveQuiz() {
+        const qz = lastView && lastView.me && lastView.me.qz;
+        if (!qz || $('quiz').hidden || qz.lk) return false;
+        answerQuiz(qz);
+        return true;
+      }
     };
   }
 

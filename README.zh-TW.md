@@ -16,6 +16,8 @@
 - **區網對戰：** 大亂鬥、紅藍對戰，或全家合作（大家一起打電腦，倒下的人會復活）。
 - 難度 1（新手）到 5（困難）。
 
+**開局數學題：** 每場開始前要先解一題高一程度的多選題：A 到 E 五個選項，選出所有正確的（例如 ACD 或 BE）。答對才能開始移動；答錯要等 5 秒才能再答。區網對戰時大家拿到同一題，但選項順序各不相同；越早答對的人越早出發，電腦玩家會等最後一個人答對後才一起出發。在那之前，還在解題的人和等待中的電腦玩家都不會受傷。
+
 ## 角色
 
 | 角色 | 技能 |
@@ -69,6 +71,7 @@
 | `js/sim.js` | 遊戲模擬（瀏覽器和伺服器共用） |
 | `js/render.js` | 2D 與 2.5D 畫面、介面 |
 | `js/client.js` | 選單、操作、連線 |
+| `js/quiz.js` | 開局數學題（由種子產生題目） |
 | `js/i18n.js`、`js/audio.js` | 中英文字、音樂與音效 |
 | `server.js` | 區網伺服器，不需安裝套件 |
 | `assets/` | 音樂與錄音音效（原始檔在 `assets/sfx/original/`） |
@@ -76,4 +79,4 @@
 
 修改 `js/`、`css/`、`assets/` 或 `index.html` 之後，執行 `node tools/build_single.js` 重新產生單一 HTML 檔和 zip。
 
-測試：`node tests/sim_test.js` 不需要其他東西。`tests/` 裡的瀏覽器測試需要 Playwright；`lan_test.js`、`family_test.js`、`view_modes_test.js` 和 `mobile_test.js` 的連線部分需要先執行 `node server.js --port 8099`。
+測試：`node tests/sim_test.js` 不需要其他東西。`tests/` 裡的瀏覽器測試需要 Playwright；`lan_test.js`、`family_test.js`、`view_modes_test.js` 和 `mobile_test.js` 的連線部分需要先重新啟動 `node server.js --port 8099`。測試用 `?debug&autoquiz` 開啟遊戲，會自動答對數學題。

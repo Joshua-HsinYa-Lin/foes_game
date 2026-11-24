@@ -10,8 +10,8 @@ const { chromium } = require('playwright');
 
 const outDir = process.argv[2] || path.join(__dirname, 'shots');
 const addr = process.argv[3] || 'localhost:8099';
-const served = 'http://' + addr + '/?debug';
-const fileUrl = 'file://' + path.join(__dirname, '..', 'yunwang_paradise.html') + '?debug';
+const served = 'http://' + addr + '/?debug&autoquiz';
+const fileUrl = 'file://' + path.join(__dirname, '..', 'yunwang_paradise.html') + '?debug&autoquiz';
 const FAMILY = [
   { name: '阿嬤', card: 1, team: 1 },
   { name: '阿公', card: 2, team: 2 },

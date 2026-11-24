@@ -175,6 +175,19 @@
 
 <div id="lobbyBanner" class="banner" hidden></div>
 
+<div id="quiz" class="screen dim" hidden>
+  <div class="card quiz-card">
+    <div class="quiz-head"><h2 data-i18n="quizTitle"></h2><span id="quizClock" class="quiz-clock"></span></div>
+    <p class="note quiz-hint" data-i18n="quizHint"></p>
+    <p id="quizQ" class="quiz-q"></p>
+    <div id="quizOpts" class="quiz-opts"></div>
+    <div class="quiz-foot">
+      <span id="quizMsg" class="quiz-msg"></span>
+      <button id="quizGo" class="btn primary" data-i18n="quizSubmit"></button>
+    </div>
+  </div>
+</div>
+
 <div id="touchUI" hidden>
   <div id="stickL" class="stick"><div class="knob"></div></div>
   <div id="stickR" class="stick aim"><div class="knob"></div></div>
@@ -200,6 +213,7 @@
 </div>
 
 <script src="js/data.js"></script>
+<script src="js/quiz.js"></script>
 <script src="js/i18n.js"></script>
 <script src="js/sim.js"></script>
 <script src="js/audio.js"></script>

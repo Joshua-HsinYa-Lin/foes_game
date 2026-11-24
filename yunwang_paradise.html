@@ -1337,6 +1337,146 @@ body.touch .controls table:not(.touch-help) {
 .view-row > span {
   width: auto;
 }
+
+/* Start-of-match math problem */
+#quiz {
+  overflow-y: auto;
+}
+
+.card.quiz-card {
+  max-width: 760px;
+}
+
+.quiz-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.quiz-head h2 {
+  margin: 0;
+}
+
+.quiz-clock {
+  font-weight: bold;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.quiz-hint {
+  margin: 4px 0 8px;
+}
+
+.quiz-q {
+  margin: 0 0 10px;
+  font-size: 18px;
+  font-weight: bold;
+  line-height: 1.45;
+  color: var(--ink);
+}
+
+.quiz-opts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.quiz-opt {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 8px 12px;
+  border-radius: 9px;
+  border: 2px solid var(--wood-light);
+  background: var(--paper-dark);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 15px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.quiz-opt b {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid var(--wood-light);
+}
+
+.quiz-opt[aria-pressed='true'] {
+  background: #f7d58a;
+  border-color: var(--red);
+}
+
+.quiz-opt[aria-pressed='true'] b {
+  background: var(--red);
+  border-color: var(--red);
+  color: #fff3dc;
+}
+
+.quiz-foot {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.quiz-msg {
+  flex: 1;
+  font-weight: bold;
+  color: var(--red);
+}
+
+.quiz-foot .btn {
+  width: auto;
+  min-width: 160px;
+  margin-top: 0;
+}
+
+.quiz-foot .btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+@media (max-width: 560px) {
+  .quiz-opts {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-height: 560px) {
+  .quiz-q {
+    margin-bottom: 6px;
+    font-size: 15px;
+  }
+  .quiz-hint {
+    margin: 2px 0 4px;
+    font-size: 12px;
+  }
+  .quiz-opts {
+    gap: 5px;
+  }
+  .quiz-opt {
+    min-height: 34px;
+    padding: 4px 10px;
+    font-size: 13px;
+  }
+  .quiz-opt b {
+    width: 22px;
+    height: 22px;
+  }
+  .quiz-foot {
+    margin-top: 8px;
+  }
+  .quiz-foot .btn {
+    padding: 8px 14px;
+  }
+}
 </style>
 </head>
 <body>
@@ -1501,6 +1641,19 @@ body.touch .controls table:not(.touch-help) {
 </div>
 
 <div id="lobbyBanner" class="banner" hidden></div>
+
+<div id="quiz" class="screen dim" hidden>
+  <div class="card quiz-card">
+    <div class="quiz-head"><h2 data-i18n="quizTitle"></h2><span id="quizClock" class="quiz-clock"></span></div>
+    <p class="note quiz-hint" data-i18n="quizHint"></p>
+    <p id="quizQ" class="quiz-q"></p>
+    <div id="quizOpts" class="quiz-opts"></div>
+    <div class="quiz-foot">
+      <span id="quizMsg" class="quiz-msg"></span>
+      <button id="quizGo" class="btn primary" data-i18n="quizSubmit"></button>
+    </div>
+  </div>
+</div>
 
 <div id="touchUI" hidden>
   <div id="stickL" class="stick"><div class="knob"></div></div>
@@ -1763,6 +1916,9 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
     scope8: { name: { zh: '8倍鏡', en: '8x Scope' }, lv: 8 }
   };
 
+  // Seconds a player must wait after a wrong answer to the start-of-match math problem.
+  D.QUIZ_WAIT = 5;
+
   // Fighting back pays: this share of the damage a fighter deals to opponents comes back as health.
   D.LIFESTEAL = 0.1;
 
@@ -1915,6 +2071,460 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
   } else {
     globalThis.PF_DATA = D;
   }
+})();
+</script>
+<script>
+(function () {
+  'use strict';
+
+  // Start-of-match math problems: grade-10 multiple-select questions with five options (A to E), one or more
+  // of them correct. A problem is rebuilt from a seed, so the server and every browser get the same problem;
+  // a second seed shuffles the options for each player.
+
+  function rng(seed) {
+    let a = seed >>> 0;
+    return function () {
+      a = (a + 0x6d2b79f5) >>> 0;
+      let t = a;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  function int(R, lo, hi) {
+    return lo + Math.floor(R() * (hi - lo + 1));
+  }
+
+  function pick(R, arr) {
+    return arr[Math.floor(R() * arr.length)];
+  }
+
+  function shuffle(R, arr) {
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(R() * (i + 1));
+      const t = arr[i];
+      arr[i] = arr[j];
+      arr[j] = t;
+    }
+    return arr;
+  }
+
+  function gcd(a, b) {
+    a = Math.abs(a);
+    b = Math.abs(b);
+    while (b) {
+      const t = a % b;
+      a = b;
+      b = t;
+    }
+    return a;
+  }
+
+  const MINUS = '−';
+
+  function num(n) {
+    return n < 0 ? MINUS + -n : String(n);
+  }
+
+  // The exact fraction n/d in lowest terms.
+  function fr(n, d) {
+    if (d < 0) {
+      n = -n;
+      d = -d;
+    }
+    const g = gcd(n, d) || 1;
+    n /= g;
+    d /= g;
+    if (d === 1) return num(n);
+    return (n < 0 ? MINUS : '') + Math.abs(n) + '/' + d;
+  }
+
+  // The square root of a positive integer in simplest radical form, e.g. 20 gives 2√5.
+  function root(n) {
+    let k = 1;
+    let m = n;
+    for (let f = 2; f * f <= m; f++) {
+      while (m % (f * f) === 0) {
+        m /= f * f;
+        k *= f;
+      }
+    }
+    if (m === 1) return String(k);
+    return (k === 1 ? '' : String(k)) + '√' + m;
+  }
+
+  const SUB = '₀₁₂₃₄₅₆₇₈₉';
+
+  function sub(n) {
+    return String(n)
+      .split('')
+      .map(c => SUB[Number(c)])
+      .join('');
+  }
+
+  // A polynomial in x from its coefficients, highest power first.
+  function poly(cs) {
+    const deg = cs.length - 1;
+    let s = '';
+    cs.forEach((c, i) => {
+      if (c === 0) return;
+      const p = deg - i;
+      const a = Math.abs(c);
+      const pow = p === 1 ? '' : p === 2 ? '²' : '³';
+      const body = p === 0 ? String(a) : (a === 1 ? '' : String(a)) + 'x' + pow;
+      if (!s) s = (c < 0 ? MINUS : '') + body;
+      else s += (c < 0 ? ' − ' : ' + ') + body;
+    });
+    return s || '0';
+  }
+
+  function pt(x, y) {
+    return '(' + x + ', ' + y + ')';
+  }
+
+  function claim(ok, zh, en) {
+    return { ok: !!ok, zh, en: en === undefined ? zh : en };
+  }
+
+  // A statement about a value: true with the right value, or false with one of the usual mistakes.
+  // Values are compared as text, so a "mistake" that happens to equal the right value is never used.
+  function val(R, right, wrongs, zh, en) {
+    const bad = wrongs.filter(w => w !== right);
+    if (!bad.length || R() < 0.5) return claim(true, zh(right), en(right));
+    const w = pick(R, bad);
+    return claim(false, zh(w), en(w));
+  }
+
+  // ---------- problem types ----------
+
+  function quadratic(R) {
+    const a = pick(R, [1, 1, 2, -1, -2, 3]);
+    const p = int(R, -6, 5);
+    const q = int(R, p + 1, 7);
+    const f = x => a * (x - p) * (x - q);
+    const c = a * p * q;
+    const S = p + q;
+    const P = p * q;
+    const F = 'f(x) = ' + poly([a, -a * S, c]);
+    const k = int(R, -3, 3);
+    const gap2 = (q - p) * (q - p);
+    return {
+      q: { zh: '設 ' + F + '。下列哪些選項正確？', en: 'Let ' + F + '. Which of the following are true?' },
+      gens: [
+        R => val(R, num(S), [num(-S), num(a * S), num(S + 2)], v => 'f(x) = 0 的兩根之和為 ' + v, v => 'The two roots of f(x) = 0 add up to ' + v),
+        R => val(R, num(P), [num(c), num(-P), num(P + 1)], v => 'f(x) = 0 的兩根之積為 ' + v, v => 'The product of the two roots of f(x) = 0 is ' + v),
+        R => val(R, fr(S, 2), [fr(-S, 2), num(S)], v => '圖形頂點的 x 坐標為 ' + v, v => 'The vertex of the graph has x-coordinate ' + v),
+        R => val(R, fr(-a * gap2, 4), [fr(a * gap2, 4), fr(-a * gap2, 2), fr(-gap2, 4)], v => '圖形頂點的 y 坐標為 ' + v, v => 'The vertex of the graph has y-coordinate ' + v),
+        R => (R() < 0.5 ? claim(a > 0, 'f(x) 有最小值', 'f(x) has a minimum value') : claim(a < 0, 'f(x) 有最大值', 'f(x) has a maximum value')),
+        R => val(R, num(f(k)), [num(f(-k)), num(f(k) + a), num(-f(k))], v => 'f(' + num(k) + ') = ' + v, v => 'f(' + num(k) + ') = ' + v),
+        () => claim(a > 0, '不等式 f(x) < 0 的解為 ' + num(p) + ' < x < ' + num(q), 'The solution of f(x) < 0 is ' + num(p) + ' < x < ' + num(q)),
+        R => val(R, pt(0, num(c)), [pt(0, num(P)), pt(0, num(-c)), pt(num(c), 0)], v => 'y = f(x) 的圖形與 y 軸交於點 ' + v, v => 'The graph of y = f(x) meets the y-axis at ' + v)
+      ]
+    };
+  }
+
+  function arithmetic(R) {
+    const d = pick(R, [-5, -4, -3, -2, 2, 3, 4, 5]);
+    const a1 = int(R, -12, 20);
+    const t = n => a1 + (n - 1) * d;
+    const i = int(R, 2, 4);
+    const j = i + int(R, 3, 5);
+    const given = 'a' + sub(i) + ' = ' + num(t(i));
+    const given2 = 'a' + sub(j) + ' = ' + num(t(j));
+    const n = int(R, 10, 15);
+    const m = int(R, 8, 12);
+    const k1 = int(R, 1, 4);
+    const k2 = int(R, k1 + 4, 12);
+    const p1 = k1 + int(R, 1, 2);
+    const firstSign = () => {
+      for (let x = 2; x < 200; x++) if ((d < 0 && t(x) < 0 && t(x - 1) >= 0) || (d > 0 && t(x) > 0 && t(x - 1) <= 0)) return x;
+      return 0;
+    };
+    const fs = firstSign();
+    const gens = [
+      R => val(R, num(d), [num(-d), num((j - i) * d)], v => '公差為 ' + v, v => 'The common difference is ' + v),
+      R => val(R, num(a1), [num(a1 + d), num(a1 - d)], v => 'a₁ = ' + v, v => 'a₁ = ' + v),
+      R => val(R, num(t(n)), [num(t(n + 1)), num(t(n - 1))], v => 'a' + sub(n) + ' = ' + v, v => 'a' + sub(n) + ' = ' + v),
+      R => val(R, fr(m * (a1 + t(m)), 2), [num(m * (a1 + t(m))), fr(m * (a1 + t(m + 1)), 2)], v => '前 ' + m + ' 項的和為 ' + v, v => 'The sum of the first ' + m + ' terms is ' + v),
+      R => {
+        // a_k1 + a_k2 = a_p1 + a_p2 exactly when k1 + k2 = p1 + p2, because d is not 0
+        const p2 = k1 + k2 - p1 + (R() < 0.5 ? 0 : -1);
+        return claim(k1 + k2 === p1 + p2, 'a' + sub(k1) + ' + a' + sub(k2) + ' = a' + sub(p1) + ' + a' + sub(p2));
+      },
+      R => (R() < 0.5 ? claim(d < 0, '此數列是遞減數列', 'The sequence is decreasing') : claim(d > 0, '此數列是遞增數列', 'The sequence is increasing'))
+    ];
+    if (fs) {
+      const zhWord = d < 0 ? '第一個小於 0 的項是第 ' : '第一個大於 0 的項是第 ';
+      const enWord = d < 0 ? 'The first negative term is term number ' : 'The first positive term is term number ';
+      gens.push(R => val(R, String(fs), [String(fs - 1), String(fs + 1)], v => zhWord + v + ' 項', v => enWord + v));
+    }
+    return {
+      q: { zh: '等差數列 ⟨aₙ⟩ 中，' + given + '，' + given2 + '。下列哪些選項正確？', en: 'In an arithmetic sequence ⟨aₙ⟩, ' + given + ' and ' + given2 + '. Which of the following are true?' },
+      gens
+    };
+  }
+
+  function geometric(R) {
+    const r = pick(R, [2, 3, -2, -3]);
+    const a1 = pick(R, [1, 2, 3, -1, -2, -3]);
+    const t = n => a1 * Math.pow(r, n - 1);
+    const s5 = (a1 * (Math.pow(r, 5) - 1)) / (r - 1);
+    const given = 'a₂ = ' + num(t(2)) + '，a₅ = ' + num(t(5));
+    const givenEn = 'a₂ = ' + num(t(2)) + ' and a₅ = ' + num(t(5));
+    return {
+      q: { zh: '等比數列 ⟨aₙ⟩ 中，' + given + '。下列哪些選項正確？', en: 'In a geometric sequence ⟨aₙ⟩, ' + givenEn + '. Which of the following are true?' },
+      gens: [
+        R => val(R, num(r), [num(-r), num(r * r), num(r * r * r)], v => '公比為 ' + v, v => 'The common ratio is ' + v),
+        R => val(R, num(a1), [num(-a1), num(t(3))], v => 'a₁ = ' + v, v => 'a₁ = ' + v),
+        R => val(R, num(t(6)), [num(t(7)), num(-t(6))], v => 'a₆ = ' + v, v => 'a₆ = ' + v),
+        R => val(R, num(s5), [num(s5 + t(6)), num(s5 - a1)], v => '前 5 項的和為 ' + v, v => 'The sum of the first 5 terms is ' + v),
+        R => (R() < 0.5 ? claim(true, 'a₃ × a₇ = (a₅)²') : claim(false, 'a₃ × a₇ = (a₄)²')),
+        () => claim(a1 > 0 && r > 0, '此數列的每一項都是正數', 'Every term of the sequence is positive'),
+        () => claim(r < 0, '此數列的項正負交替', 'The terms alternate between positive and negative')
+      ]
+    };
+  }
+
+  function line(R) {
+    let x1;
+    let y1;
+    let x2;
+    let y2;
+    do {
+      x1 = int(R, -6, 6);
+      y1 = int(R, -6, 6);
+      x2 = int(R, -6, 6);
+      y2 = int(R, -6, 6);
+    } while (x1 === x2 || y1 === y2);
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    // y = (dy/dx)x + b with b = (y1·dx − dy·x1)/dx
+    const bN = y1 * dx - dy * x1;
+    const P = pt(num(x1), num(y1));
+    const Qp = pt(num(x2), num(y2));
+    const u = int(R, -8, 8);
+    const sq = dx * dx + dy * dy;
+    const diff = Math.abs(dx * dx - dy * dy);
+    const lenWrong = [num(Math.abs(dx) + Math.abs(dy))];
+    if (diff > 0) lenWrong.push(root(diff));
+    return {
+      q: { zh: '坐標平面上有兩點 P' + P + '、Q' + Qp + '。下列哪些選項正確？', en: 'In the coordinate plane, P' + P + ' and Q' + Qp + '. Which of the following are true?' },
+      gens: [
+        R => val(R, fr(dy, dx), [fr(-dy, dx), fr(dx, dy)], v => '直線 PQ 的斜率為 ' + v, v => 'Line PQ has slope ' + v),
+        R => val(R, fr(bN, dx), [fr(-bN, dx), fr(bN + dy, dx)], v => '直線 PQ 的 y 截距為 ' + v, v => 'The y-intercept of line PQ is ' + v),
+        R => {
+          const on = R() < 0.5;
+          const pnt = pt(num(u), fr(dy * u + bN + (on ? 0 : dx), dx));
+          return claim(on, '點 ' + pnt + ' 在直線 PQ 上', 'The point ' + pnt + ' lies on line PQ');
+        },
+        R => val(R, fr(-dx, dy), [fr(dx, dy), fr(-dy, dx)], v => '與直線 PQ 垂直的直線，斜率為 ' + v, v => 'A line perpendicular to PQ has slope ' + v),
+        R => val(R, pt(fr(x1 + x2, 2), fr(y1 + y2, 2)), [pt(fr(dx, 2), fr(dy, 2)), pt(num(x1 + x2), num(y1 + y2))], v => '線段 PQ 的中點為 ' + v, v => 'The midpoint of PQ is ' + v),
+        R => val(R, root(sq), lenWrong, v => '線段 PQ 的長度為 ' + v, v => 'PQ has length ' + v)
+      ]
+    };
+  }
+
+  function triangle(R) {
+    const tr = pick(R, [[3, 4, 5], [5, 12, 13], [8, 15, 17], [7, 24, 25], [20, 21, 29]]);
+    const swap = R() < 0.5;
+    const a = swap ? tr[1] : tr[0];
+    const b = swap ? tr[0] : tr[1];
+    const c = tr[2];
+    const k = pick(R, [1, 2, 3]);
+    const BC = k * a;
+    const AC = k * b;
+    const AB = k * c;
+    return {
+      q: {
+        zh: '直角三角形 ABC 中，∠C = 90°，AB = ' + AB + '，BC = ' + BC + '。下列哪些選項正確？',
+        en: 'In right triangle ABC, ∠C = 90°, AB = ' + AB + ' and BC = ' + BC + '. Which of the following are true?'
+      },
+      gens: [
+        R => val(R, num(AC), [root(AB * AB + BC * BC), num(AB - BC)], v => 'AC = ' + v, v => 'AC = ' + v),
+        R => val(R, fr(a, c), [fr(b, c), fr(a, b)], v => 'sin A = ' + v, v => 'sin A = ' + v),
+        R => val(R, fr(a, c), [fr(b, c), fr(b, a)], v => 'cos B = ' + v, v => 'cos B = ' + v),
+        R => (R() < 0.5 ? claim(true, 'tan A × tan B = 1') : claim(false, 'tan A = tan B')),
+        R => val(R, fr(BC * AC, 2), [fr(BC * AB, 2), num(BC * AC)], v => '△ABC 的面積為 ' + v, v => 'The area of triangle ABC is ' + v),
+        () => claim(a > b, 'sin A > cos A'),
+        R => val(R, fr(BC * AC, AB), [fr(AB, 2), fr(BC + AC, 2)], v => '斜邊 AB 上的高為 ' + v, v => 'The height to the hypotenuse AB is ' + v)
+      ]
+    };
+  }
+
+  function absIneq(R) {
+    const a = pick(R, [1, 2, 3]);
+    const b = int(R, -9, 9);
+    const c = int(R, 2, 9);
+    const strict = R() < 0.4;
+    const rel = strict ? ' < ' : ' ≤ ';
+    const ok = x => (strict ? Math.abs(a * x - b) < c : Math.abs(a * x - b) <= c);
+    const ineq = '|' + poly([a, -b]) + '|' + rel + c;
+    let count = 0;
+    let max = null;
+    for (let x = -60; x <= 60; x++) {
+      if (ok(x)) {
+        count++;
+        max = x;
+      }
+    }
+    const span = (lo, hi) => lo + rel + 'x' + rel + hi;
+    const right = span(fr(b - c, a), fr(b + c, a));
+    const wrong = [span(fr(-b - c, a), fr(-b + c, a))];
+    if (a !== 1) wrong.push(span(num(b - c), num(b + c)));
+    const t = int(R, -6, 6);
+    return {
+      q: { zh: '關於不等式 ' + ineq + '，下列哪些選項正確？', en: 'For the inequality ' + ineq + ', which of the following are true?' },
+      gens: [
+        R => val(R, right, wrong, v => '解為 ' + v, v => 'Its solution is ' + v),
+        R => val(R, String(count), [String(count + 1), String(count - 1)], v => '整數解共有 ' + v + ' 個', v => 'It has exactly ' + v + ' integer solutions'),
+        () => claim(ok(t), 'x = ' + num(t) + ' 是此不等式的解', 'x = ' + num(t) + ' is a solution'),
+        R => val(R, num(max), [num(max + 1), num(max - 1)], v => '最大的整數解為 ' + v, v => 'The largest integer solution is ' + v),
+        R => val(R, fr(2 * c, a), [fr(c, a), num(2 * c)], v => '解區間的長度為 ' + v, v => 'The solution interval has length ' + v),
+        R => val(R, fr(b, a), [fr(-b, a), num(b)], v => '解區間的中點為 x = ' + v, v => 'The midpoint of the solution interval is x = ' + v)
+      ]
+    };
+  }
+
+  function dice(R) {
+    const count = f => {
+      let n = 0;
+      for (let i = 1; i <= 6; i++) for (let j = 1; j <= 6; j++) if (f(i, j)) n++;
+      return n;
+    };
+    const s = int(R, 3, 11);
+    const cs = count((i, j) => i + j === s);
+    const g = int(R, 7, 10);
+    const s1 = int(R, 2, 12);
+    let s2 = int(R, 2, 11);
+    if (s2 >= s1) s2++;
+    return {
+      q: { zh: '同時擲兩顆公正的骰子。下列哪些選項正確？', en: 'Two fair dice are rolled. Which of the following are true?' },
+      gens: [
+        R => val(R, fr(cs, 36), [fr(1, 11), fr(cs, 21)], v => '點數和為 ' + s + ' 的機率是 ' + v, v => 'The probability that the sum is ' + s + ' is ' + v),
+        R => val(R, fr(count((i, j) => i === j), 36), [fr(1, 36), fr(1, 12)], v => '兩顆點數相同的機率是 ' + v, v => 'The probability of rolling a double is ' + v),
+        R => val(R, fr(count((i, j) => i === 6 || j === 6), 36), [fr(1, 3), fr(1, 36)], v => '至少出現一個 6 點的機率是 ' + v, v => 'The probability of at least one 6 is ' + v),
+        R => val(R, fr(count((i, j) => (i * j) % 2 === 1), 36), [fr(1, 2), fr(1, 3)], v => '點數乘積為奇數的機率是 ' + v, v => 'The probability that the product is odd is ' + v),
+        R => val(R, fr(count((i, j) => i + j > g), 36), [fr(count((i, j) => i + j >= g), 36), fr(12 - g, 11)], v => '點數和大於 ' + g + ' 的機率是 ' + v, v => 'The probability that the sum is greater than ' + g + ' is ' + v),
+        () => claim(count((i, j) => i + j === s1) > count((i, j) => i + j === s2), '點數和為 ' + s1 + ' 的機率大於點數和為 ' + s2 + ' 的機率', 'A sum of ' + s1 + ' is more likely than a sum of ' + s2)
+      ]
+    };
+  }
+
+  function bag(R) {
+    const r = int(R, 3, 6);
+    const b = int(R, 2, 5);
+    const n = r + b;
+    const C2 = m => (m * (m - 1)) / 2;
+    const all = C2(n);
+    return {
+      q: {
+        zh: '袋中有 ' + r + ' 顆紅球、' + b + ' 顆藍球，從中同時取出兩顆球。下列哪些選項正確？',
+        en: 'A bag holds ' + r + ' red and ' + b + ' blue balls. Two balls are drawn at the same time. Which of the following are true?'
+      },
+      gens: [
+        R => val(R, fr(C2(r), all), [fr(r * r, n * n), fr(r, n)], v => '兩顆都是紅球的機率是 ' + v, v => 'The probability that both are red is ' + v),
+        R => val(R, fr(r * b, all), [fr(r * b, n * n), fr(2 * r * b, n * n)], v => '一紅一藍的機率是 ' + v, v => 'The probability of one red and one blue is ' + v),
+        R => val(R, fr(all - C2(r), all), [fr(C2(b), all), fr(b, n)], v => '至少一顆藍球的機率是 ' + v, v => 'The probability of at least one blue is ' + v),
+        R => val(R, fr(C2(r) + C2(b), all), [fr(r * r + b * b, n * n), fr(1, 2)], v => '兩顆同色的機率是 ' + v, v => 'The probability that both are the same color is ' + v),
+        () => claim(r > b, '兩顆都是紅球的機率大於兩顆都是藍球的機率', 'Two red balls are more likely than two blue balls')
+      ]
+    };
+  }
+
+  function stats(R) {
+    const n = pick(R, [5, 6, 7]);
+    const pool = shuffle(R, Array.from({ length: 20 }, (_, i) => i + 1));
+    const vals = pool.slice(0, n - 1);
+    const mode = pick(R, vals);
+    const data = shuffle(R, vals.concat([mode]));
+    const sorted = data.slice().sort((x, y) => x - y);
+    const S = data.reduce((x, y) => x + y, 0);
+    // twice the median, so it stays an integer for an even count
+    const med2 = n % 2 ? 2 * sorted[(n - 1) / 2] : sorted[n / 2 - 1] + sorted[n / 2];
+    const medTxt = fr(med2, 2);
+    const meanTxt = fr(S, n);
+    const lo = sorted[0];
+    const hi = sorted[n - 1];
+    const list = data.join('、');
+    const listEn = data.join(', ');
+    return {
+      q: { zh: '某組資料為：' + list + '。下列哪些選項正確？', en: 'A data set: ' + listEn + '. Which of the following are true?' },
+      gens: [
+        R => val(R, meanTxt, [fr(S, n - 1), medTxt], v => '平均數為 ' + v, v => 'The mean is ' + v),
+        R => val(R, medTxt, [meanTxt, String(data[Math.floor(n / 2)])], v => '中位數為 ' + v, v => 'The median is ' + v),
+        R => val(R, String(mode), [String(hi), String(lo)], v => '眾數為 ' + v, v => 'The mode is ' + v),
+        R => val(R, String(hi - lo), [String(hi), String(hi - lo + 1)], v => '全距為 ' + v, v => 'The range is ' + v),
+        R =>
+          R() < 0.5
+            ? claim(true, '每個數都加 5 之後，標準差不變', 'If 5 is added to every value, the standard deviation stays the same')
+            : claim(false, '每個數都加 5 之後，標準差也增加 5', 'If 5 is added to every value, the standard deviation also increases by 5'),
+        R => val(R, fr(2 * S, n), [fr(S + 2 * n, n), meanTxt], v => '每個數都乘以 2 之後，平均數為 ' + v, v => 'If every value is doubled, the mean becomes ' + v),
+        () => claim(2 * S > n * med2, '平均數大於中位數', 'The mean is greater than the median')
+      ]
+    };
+  }
+
+  function cubic(R) {
+    const r = pick(R, [-3, -2, -1, 1, 2, 3]);
+    const b = int(R, -4, 4);
+    const c = int(R, -6, 6);
+    const f = x => (x - r) * (x * x + b * x + c);
+    const F = 'f(x) = ' + poly([1, b - r, c - r * b, -r * c]);
+    const k = int(R, -3, 3);
+    const s = R() < 0.5 ? r : pick(R, [-3, -2, -1, 1, 2, 3]);
+    const u = int(R, 1, 3);
+    return {
+      q: { zh: '設 ' + F + '。下列哪些選項正確？', en: 'Let ' + F + '. Which of the following are true?' },
+      gens: [
+        () => claim(f(s) === 0, poly([1, -s]) + ' 是 f(x) 的因式', poly([1, -s]) + ' is a factor of f(x)'),
+        R => val(R, num(f(k)), [num(f(-k)), num(-f(k))], v => 'f(x) 除以 ' + poly([1, -k]) + ' 的餘式為 ' + v, v => 'The remainder when f(x) is divided by ' + poly([1, -k]) + ' is ' + v),
+        R => val(R, num(f(1)), [num(f(-1)), num(f(1) + 1)], v => 'f(x) 各項係數的和為 ' + v, v => 'The coefficients of f(x) add up to ' + v),
+        () => claim(b * b - 4 * c >= 0, 'f(x) = 0 的根都是實數', 'Every root of f(x) = 0 is a real number'),
+        () => claim(f(u) > f(-u), 'f(' + u + ') > f(' + num(-u) + ')'),
+        R => val(R, poly([1, -r]), [poly([1, r])], v => 'f(x) 除以 ' + poly([1, b, c]) + ' 的商式為 ' + v, v => 'Dividing f(x) by ' + poly([1, b, c]) + ' gives the quotient ' + v)
+      ]
+    };
+  }
+
+  const TYPES = [quadratic, arithmetic, geometric, line, triangle, absIneq, dice, bag, stats, cubic];
+  const LETTERS = 'ABCDE';
+
+  // seed picks the problem; order shuffles its five options for one player.
+  function make(seed, order) {
+    const R = rng(seed);
+    const type = Math.floor(R() * TYPES.length);
+    let base = null;
+    let items = null;
+    for (let tries = 0; tries < 500; tries++) {
+      base = TYPES[type](R);
+      items = shuffle(R, base.gens.slice())
+        .slice(0, 5)
+        .map(g => g(R));
+      const right = items.filter(c => c.ok).length;
+      const distinct = new Set(items.map(c => c.en)).size === 5;
+      if (right >= 1 && right <= 4 && distinct) break;
+    }
+    shuffle(rng(order || 1), items);
+    return {
+      type,
+      q: base.q,
+      opts: items.map(c => ({ zh: c.zh, en: c.en })),
+      ans: items.map((c, i) => (c.ok ? LETTERS[i] : '')).join('')
+    };
+  }
+
+  // "c a e" or "ACE" both become "ACE".
+  function norm(s) {
+    const t = String(s || '').toUpperCase();
+    return LETTERS.split('')
+      .filter(L => t.indexOf(L) >= 0)
+      .join('');
+  }
+
+  const API = { make, norm, LETTERS, count: TYPES.length };
+  if (typeof module !== 'undefined' && module.exports) module.exports = API;
+  else globalThis.PF_QUIZ = API;
 })();
 </script>
 <script>
@@ -2139,6 +2749,17 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
       fullHp: '生命已經是滿的',
       haveBag: '已經有保溫外送袋了',
       haveScope: '已經有一樣或更好的倍鏡了',
+      quizTitle: '開局數學題',
+      quizHint: '選出所有正確的選項（可能不只一個）。答對才能開始移動；越快答對，越早出發。',
+      quizSubmit: '送出答案',
+      quizPick: '請至少選一個選項',
+      quizCheck: '檢查中…',
+      quizWrong: '答錯了，{0} 秒後可以再試',
+      quizRight: '答對了！用時 {0} 秒',
+      quizSolving: '解題中…',
+      quizWaitBots: '電腦玩家會在所有人答對後出發（還有 {0} 人在解題）',
+      msg_solved: '{0} 答對了開局數學題，用時 {1} 秒',
+      msg_botsIn: '大家都答對了，電腦玩家出發！',
       driving: '駕駛 {0}，按 F 下車',
       kill_by: '{0} 用{2}擊倒了 {1}',
       kill_zone: '{0} 在退冰區倒下了',
@@ -2403,6 +3024,17 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
       fullHp: 'Already at full health',
       haveBag: 'You already have a thermal bag',
       haveScope: 'You already have this scope or a better one',
+      quizTitle: 'Math check-in',
+      quizHint: 'Choose every correct option (there may be more than one). Answer correctly to start moving; the sooner you solve it, the sooner you go.',
+      quizSubmit: 'Submit',
+      quizPick: 'Choose at least one option',
+      quizCheck: 'Checking…',
+      quizWrong: 'Not right. Try again in {0} s',
+      quizRight: 'Correct! Solved in {0} s',
+      quizSolving: 'solving…',
+      quizWaitBots: 'Bots start once everyone has solved it ({0} still solving)',
+      msg_solved: '{0} solved the math check-in in {1} s',
+      msg_botsIn: 'Everyone solved it. The bots are coming!',
       driving: 'Driving the {0}, press F to get out',
       kill_by: '{0} took out {1} · {2}',
       kill_zone: '{0} melted in the thaw zone',
@@ -2562,6 +3194,7 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
   'use strict';
   const isNode = typeof module !== 'undefined' && !!module.exports;
   const D = isNode ? require('./data.js') : globalThis.PF_DATA;
+  const Q = isNode ? require('./quiz.js') : globalThis.PF_QUIZ;
 
   const TAU = Math.PI * 2;
   const DEG = Math.PI / 180;
@@ -2813,7 +3446,7 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
   }
 
   const RANK = { fists: 0, knife: 1, pistol: 3, uzi: 4, shotgun: 4, pan: 5, cleaver: 5, rollingpin: 5, sniper: 5, rifle: 6, minigun: 6, wok: 6, chopsticks: 6, bowl: 6, harpoon: 7, swordfish: 8 };
-  const VALID_ACTIONS = { slot: 1, cycle: 1, reload: 1, interact: 1, drop: 1, jump: 1, skill: 1, heal: 1, gadget: 1, overdrive: 1 };
+  const VALID_ACTIONS = { slot: 1, cycle: 1, reload: 1, interact: 1, drop: 1, jump: 1, skill: 1, heal: 1, gadget: 1, overdrive: 1, quiz: 1 };
   const ALLY_WEAPONS = { yunwang: 'shotgun', luap: 'uzi', auhsoj: 'rifle', meibao: 'chopsticks', afeng: 'uzi', bubbles: 'shotgun', jinjin: 'pistol', bing: 'rifle' };
 
   class Sim {
@@ -2830,6 +3463,9 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
       this.size = D.MAP_SIZE;
       this.difficulty = D.diffLevel(opts.difficulty) || D.DIFF_DEFAULT;
       this.time = 0;
+      // Wall clock: keeps running while the match waits on the math problem (this.time does not).
+      this.clock = 0;
+      this.quiz = null;
       this.nextId = 1;
       this.players = [];
       this.playerMap = new Map();
@@ -3765,6 +4401,7 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
       if (!p || !act || !VALID_ACTIONS[act.a] || p.actions.length > 12) return;
       const a = { a: act.a };
       if (act.i != null) a.i = clamp(Math.floor(Number(act.i) || 0), -1, 3);
+      if (act.a === 'quiz') a.ans = String(act.ans || '').slice(0, 10);
       // A skill can carry its own aim (dragged from the skill button, or right mouse released).
       if (act.a === 'skill') {
         const aim = Number(act.aim);
@@ -4431,6 +5068,7 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
     }
 
     knock(p, ix, iy) {
+      if (this.held(p)) return;
       const m = this.massOf(p) * (p.char === 'bubbles' ? 2 : 1);
       p.kx += ix / m;
       p.ky += iy / m;
@@ -4509,6 +5147,14 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
 
     updatePlayer(p, dt) {
       if (!p.alive) return;
+      if (this.held(p)) {
+        p.actions.length = 0;
+        p.vx = 0;
+        p.vy = 0;
+        p.kx = 0;
+        p.ky = 0;
+        return;
+      }
       for (const act of p.actions) this.handleAction(p, act);
       p.actions.length = 0;
       const inp = p.input;
@@ -4745,7 +5391,7 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
     }
 
     damagePlayer(p, amt, src, cause, quiet) {
-      if (!p.alive || amt <= 0 || p.shieldT > this.time) return;
+      if (!p.alive || amt <= 0 || p.shieldT > this.time || this.held(p)) return;
       const att = src ? this.playerMap.get(src) : null;
       if (att && att !== p && !this.enemies(att, p)) return;
       if (att && att.kind !== 'player' && p.team === 1) amt *= D.BOT_SKILL[this.difficulty].foeDmg;
@@ -5063,14 +5709,81 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
       return o;
     }
 
+    // ---------- start-of-match math problem ----------
+
+    // Everyone in the match gets the same problem, each with the options in their own order. Nothing moves
+    // until somebody solves it; each person then starts as soon as they solve it, and the bots come in
+    // together with the last person to solve it.
+    startQuiz(seed) {
+      this.quiz = { seed: seed >>> 0 || 1, clock: 0, open: false, botsIn: false };
+      for (const p of this.players) this.giveQuiz(p);
+      this.checkQuiz();
+    }
+
+    giveQuiz(p) {
+      if (!this.quiz || p.bot || p.kind !== 'player') return;
+      p.quiz = { o: Math.imul(this.quiz.seed ^ 0x5bd1e995, p.id + 7) >>> 0 || 1, t0: this.quiz.clock, lock: 0, wrong: 0 };
+    }
+
+    // People still solving and bots still waiting are not in play: they cannot move, be hurt or be targeted.
+    held(p) {
+      return !!this.quiz && (!!p.quiz || (p.bot && !this.quiz.botsIn));
+    }
+
+    // Runs the problem part of a step. Returns false while the whole world is still waiting.
+    stepQuiz(dt) {
+      const qz = this.quiz;
+      qz.clock += dt;
+      for (const p of this.players) {
+        if (!p.quiz) continue;
+        for (const a of p.actions) if (a.a === 'quiz' && p.quiz) this.answerQuiz(p, a.ans);
+        p.actions.length = 0;
+      }
+      this.checkQuiz();
+      return qz.open;
+    }
+
+    checkQuiz() {
+      const qz = this.quiz;
+      if (qz.botsIn || this.players.some(p => p.quiz && p.alive)) return;
+      qz.open = true;
+      qz.botsIn = true;
+      if (this.players.some(p => p.bot && p.alive) && this.players.some(p => !p.bot)) this.ev({ e: 'msg', g: 1, k: 'msg_botsIn' });
+    }
+
+    answerQuiz(p, ans) {
+      const qz = this.quiz;
+      if (qz.clock < p.quiz.lock) return;
+      if (Q.norm(ans) !== Q.make(qz.seed, p.quiz.o).ans) {
+        p.quiz.wrong++;
+        p.quiz.lock = qz.clock + D.QUIZ_WAIT;
+        this.ev({ e: 'quiz', to: p.id, ok: 0 });
+        return;
+      }
+      const t = Math.round((qz.clock - p.quiz.t0) * 10) / 10;
+      p.quiz = null;
+      p.shieldT = this.time + 2;
+      qz.open = true;
+      this.ev({ e: 'quiz', to: p.id, ok: 1, t });
+      this.ev({ e: 'msg', g: 1, k: 'msg_solved', a: [p.name, t] });
+    }
+
+    quizHud(p) {
+      if (!p.quiz) return null;
+      const qz = this.quiz;
+      return { s: qz.seed, o: p.quiz.o, lk: Math.max(0, Math.ceil(p.quiz.lock - qz.clock)), c: Math.round((qz.clock - p.quiz.t0) * 10) / 10 };
+    }
+
     // ---------- step ----------
 
     step(dt) {
       this.events.length = 0;
+      this.clock += dt;
+      if (this.quiz && !this.stepQuiz(dt)) return;
       this.time += dt;
       this.updateZone(dt);
       for (const p of this.players) {
-        if (p.bot && p.alive) this.botUpdate(p, dt);
+        if (p.bot && p.alive && !this.held(p)) this.botUpdate(p, dt);
       }
       for (const p of this.players) this.updatePlayer(p, dt);
       this.separatePlayers();
@@ -5199,7 +5912,7 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
         let best = null;
         let bd = P ? Math.min(D.WEAPONS.turret.range, P.sight) : D.WEAPONS.turret.range;
         for (const q of this.players) {
-          if (!q.alive || q.veh || !this.enemies(owner, q)) continue;
+          if (!q.alive || q.veh || !this.enemies(owner, q) || this.held(q)) continue;
           const d = Math.hypot(q.x - t.x, q.y - t.y);
           if (d < bd && !this.losBlocked(t.x, t.y, q.x, q.y)) {
             bd = d;
@@ -5546,12 +6259,12 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
     botDecide(p, P) {
       const ai = p.ai;
       let tgt = ai.target ? this.playerMap.get(ai.target) : null;
-      if (tgt && (!tgt.alive || Math.hypot(tgt.x - p.x, tgt.y - p.y) > P.sight * 1.3)) tgt = null;
+      if (tgt && (!tgt.alive || this.held(tgt) || Math.hypot(tgt.x - p.x, tgt.y - p.y) > P.sight * 1.3)) tgt = null;
       const ramp = this.mode === 'royale' && this.time < 75 ? 0.15 + 0.85 * (this.time / 75) : 1;
       let best = null;
       let bd = Infinity;
       for (const q of this.players) {
-        if (!q.alive || !this.enemies(p, q)) continue;
+        if (!q.alive || !this.enemies(p, q) || this.held(q)) continue;
         const d = Math.hypot(q.x - p.x, q.y - p.y);
         let sight = P.sight * ramp * (ai.sightMul || 1);
         if (q.inBush && this.time - q.lastShot > 1.5) sight *= 0.35;
@@ -5680,7 +6393,7 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
         let prey = null;
         let pd = ai.hunt;
         for (const q of this.players) {
-          if (!q.alive || !this.enemies(p, q)) continue;
+          if (!q.alive || !this.enemies(p, q) || this.held(q)) continue;
           const d = Math.hypot(q.x - p.x, q.y - p.y);
           if (d < pd) {
             pd = d;
@@ -6029,6 +6742,7 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
         st: Math.round(p.stamina),
         sl: p.slots.slice(0, p.nslots).map(s => (s ? { t: s.t, m: s.m != null ? s.m : null } : null)),
         so: p.soups,
+        qz: this.quizHud(p),
         zm: p.scope,
         soc: this.soupCap(p),
         act: p.act,
@@ -6107,6 +6821,7 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
           sh: q.shieldT > this.time ? 1 : 0,
           hu: q.bot ? 0 : 1
         });
+        if (this.held(q)) pl[pl.length - 1].qz = 1;
       }
       const bu = [];
       for (const b of this.bullets) {
@@ -6158,7 +6873,9 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
       }
       const z = this.zone;
       return {
-        t: Math.round(this.time * 1000) / 1000,
+        t: Math.round(this.clock * 1000) / 1000,
+        mt: Math.round(this.time * 10) / 10,
+        qp: this.quiz && !this.quiz.botsIn ? this.players.filter(q => q.quiz && q.alive).length : 0,
         mode: this.mode,
         chap: this.chapter ? this.chapter.id : '',
         you: id,
@@ -7425,7 +8142,10 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
       for (const p of view.pl) {
         if (p.d || p.veh) continue;
         const aim = p.i === view.you && ui.aim != null ? ui.aim : p.a;
+        // Faded until they are in play (still solving the math problem, or bots waiting for everyone).
+        if (p.qz) ctx.globalAlpha = 0.45;
         this.drawPlayer(ctx, p, aim);
+        ctx.globalAlpha = 1;
       }
       for (const p of view.pl) {
         if (!p.d && !p.veh && (p.od || p.bb || p.gd)) this.drawAuras(ctx, p, p.x, p.y, p.r || PR);
@@ -9208,6 +9928,7 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
         if (p.hp >= 0 && (foe || ally) && (p.hp < 1 || p.ch === 'boss' || ally)) this.bar(ctx, p.x, p.y + R + 10, R * 2.2, p.hp, foe ? '#e8453b' : '#7ad35e');
         const enemyCol = this.tmode === 'teams' ? (p.tm === 1 ? '#ffa294' : '#a8cfff') : '#ffffff';
         if (p.hu || ally) this.outlinedText(ctx, (p.lv ? 'Lv' + p.lv + ' ' : '') + nameOf(p), p.x, p.y - R - 14, Math.max(16, 11 / (this.zoom || 1)), ally ? '#b8f5a0' : enemyCol);
+        if (p.qz && p.hu) this.outlinedText(ctx, I.t('quizSolving'), p.x, p.y - R - 34, Math.max(14, 10 / (this.zoom || 1)), '#ffe27a');
       }
     }
 
@@ -9696,6 +10417,7 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
         if (p.hp >= 0 && (foe || ally) && (p.hp < 1 || p.ch === 'boss' || ally)) this.bar(ctx, p.x, top - 8, R * 2.2, p.hp, foe ? '#e8453b' : '#7ad35e');
         const enemyCol = this.tmode === 'teams' ? (p.tm === 1 ? '#ffa294' : '#a8cfff') : '#ffffff';
         if (p.hu || ally) this.outlinedText(ctx, (p.lv ? 'Lv' + p.lv + ' ' : '') + nameOf(p), p.x, top - 16, Math.max(15, 11 / (this.zoom || 1)), ally ? '#b8f5a0' : enemyCol);
+        if (p.qz && p.hu) this.outlinedText(ctx, I.t('quizSolving'), p.x, top - 36, Math.max(14, 10 / (this.zoom || 1)), '#ffe27a');
       }
     }
 
@@ -9832,7 +10554,11 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
           continue;
         }
         const aim = p.i === view.you && ui.aim != null ? ui.aim : p.a;
-        add(p.y + 0.5, () => this.drawFigure3D(ctx, p, aim, view));
+        add(p.y + 0.5, () => {
+          if (p.qz) ctx.globalAlpha = 0.45;
+          this.drawFigure3D(ctx, p, aim, view);
+          ctx.globalAlpha = 1;
+        });
       }
       for (const v of view.ve) {
         if (vis(v.x, v.y, 90)) add(v.y + 8, () => this.drawVehicle3D(ctx, v, plMap));
@@ -10881,6 +11607,7 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
           this.sim.fillBots(o.bots + 1);
         }
       }
+      if (!this.demo) this.sim.startQuiz((Math.random() * 4294967296) >>> 0);
       this.map = this.sim.getMapData();
       this.mapVersion = 1;
       this.spec = 0;
@@ -11719,7 +12446,7 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
     $('ovTitle').textContent = won ? (last ? I.t('storyEnd') : I.t('chapterClear')) : I.t('chapterFail');
     $('ovTitle').className = won ? 'win' : '';
     $('ovSub').textContent = won ? I.pick(I.STORY.titles[D.STORY[flow.idx].id]) : view.why === 'time' ? I.t('fail_time') : I.t('fail_dead');
-    statCells([[I.t('st_kills'), view.me.k], [I.t('st_damage'), view.me.dd], [I.t('st_time'), fmt(view.t)], [I.t('heroLabel'), I.pick(D.CHARS[prefs.char].name)]]);
+    statCells([[I.t('st_kills'), view.me.k], [I.t('st_damage'), view.me.dd], [I.t('st_time'), fmt(view.mt != null ? view.mt : view.t)], [I.t('heroLabel'), I.pick(D.CHARS[prefs.char].name)]]);
     if (!flow.xpDone) {
       flow.xpDone = true;
       $('ovXp').textContent = awardXp(prefs.char, won ? 70 + view.me.k * 5 : 15);
@@ -11836,9 +12563,19 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
           const txt = I.t(e.k, ...(e.a || []));
           ui.notices.push({ txt, t: renderer.time, col: e.k === 'msg_box' ? '#9fdcff' : e.k === 'msg_zone' ? '#ffb38a' : '#ffd75e' });
           if (ui.notices.length > 3) ui.notices.shift();
-          Sound.play(e.k === 'msg_box' ? 'coldbox' : e.k === 'msg_wave' ? 'wave' : e.k === 'msg_boss' ? 'boss' : e.k === 'msg_plane' ? 'plane' : 'zone');
+          if (e.k === 'msg_botsIn') Sound.play('gong');
+          else if (e.k !== 'msg_solved') Sound.play(e.k === 'msg_box' ? 'coldbox' : e.k === 'msg_wave' ? 'wave' : e.k === 'msg_boss' ? 'boss' : e.k === 'msg_plane' ? 'plane' : 'zone');
           break;
         }
+        case 'quiz':
+          quizUi.msg = '';
+          if (e.ok) {
+            Sound.play('pickup');
+            renderer.banner(I.t('quizRight', e.t), '#ffd75e');
+          } else {
+            Sound.play('empty');
+          }
+          break;
         case 'kill': {
           let txt;
           const kn = who(e.k, e.knk);
@@ -11973,15 +12710,110 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
   }
 
   function tipFor(view) {
+    if (view.qp > 0 && !view.me.qz && view.st === 'playing') return I.t('quizWaitBots', view.qp);
     if (view.chap !== 'ch1' || !view.obj || view.st !== 'playing') return '';
     const me = view.me;
     const t = touch.on ? '_t' : '';
-    if (view.t < 6) return I.t('tip_move' + t);
+    if ((view.mt != null ? view.mt : view.t) < 6) return I.t('tip_move' + t);
     if (!me.sl.some(s => s && D.WEAPONS[s.t])) return I.t('tip_pick' + t);
     if (view.obj.cur === 0) return I.t('tip_attack' + t);
     if (me.su === 0) return I.t('tip_skill' + t);
     if (me.so > 0 && me.hp < me.mhp * 0.8) return I.t('tip_heal' + t);
     return I.t('tip_crate' + t);
+  }
+
+  // ---------- start-of-match math problem ----------
+
+  const QUIZ = globalThis.PF_QUIZ;
+  const QUIZ_KEYS = { KeyA: 'A', KeyB: 'B', KeyC: 'C', KeyD: 'D', KeyE: 'E' };
+  const quizUi = { key: '', sel: new Set(), msg: '', shown: '', auto: '' };
+  // Test pages (?debug&autoquiz) answer the problem through the real buttons as soon as it shows.
+  const AUTO_QUIZ = /[?&]debug\b/.test(window.location.search) && /[?&]autoquiz\b/.test(window.location.search);
+
+  function answerQuiz(qz) {
+    const ans = QUIZ.make(qz.s, qz.o).ans;
+    for (const L of QUIZ.LETTERS) if (quizUi.sel.has(L) !== ans.includes(L)) toggleQuiz(L);
+    submitQuiz();
+  }
+
+  // Rebuilds the problem from the seeds the game sends (same text for everyone, own option order).
+  function renderQuiz(qz) {
+    const id = qz.s + ':' + qz.o;
+    const key = id + ':' + I.lang;
+    if (quizUi.key === key) return;
+    if (quizUi.key.indexOf(id + ':') !== 0) {
+      quizUi.sel.clear();
+      quizUi.msg = '';
+    }
+    quizUi.key = key;
+    const prob = QUIZ.make(qz.s, qz.o);
+    $('quizQ').textContent = I.pick(prob.q);
+    const box = $('quizOpts');
+    box.textContent = '';
+    prob.opts.forEach((o, i) => {
+      const L = QUIZ.LETTERS[i];
+      const b = document.createElement('button');
+      b.className = 'quiz-opt';
+      b.dataset.l = L;
+      b.setAttribute('aria-pressed', quizUi.sel.has(L) ? 'true' : 'false');
+      const tag = document.createElement('b');
+      tag.textContent = L;
+      const tx = document.createElement('span');
+      tx.textContent = I.pick(o);
+      b.append(tag, tx);
+      b.addEventListener('click', () => {
+        toggleQuiz(L);
+        b.blur();
+      });
+      box.appendChild(b);
+    });
+  }
+
+  function toggleQuiz(L) {
+    if (quizUi.sel.has(L)) quizUi.sel.delete(L);
+    else quizUi.sel.add(L);
+    quizUi.msg = '';
+    const b = $('quizOpts').querySelector('[data-l="' + L + '"]');
+    if (b) b.setAttribute('aria-pressed', quizUi.sel.has(L) ? 'true' : 'false');
+  }
+
+  function submitQuiz() {
+    if (!lastView || !lastView.me.qz || lastView.me.qz.lk > 0) return;
+    if (!quizUi.sel.size) {
+      quizUi.msg = I.t('quizPick');
+      return;
+    }
+    act({ a: 'quiz', ans: Array.from(quizUi.sel).sort().join('') });
+    quizUi.msg = I.t('quizCheck');
+  }
+
+  $('quizGo').addEventListener('click', () => {
+    submitQuiz();
+    $('quizGo').blur();
+  });
+
+  function updateQuiz(view) {
+    const qz = view && session && view.st === 'playing' && !view.spec && view.me ? view.me.qz : null;
+    const on = !!qz && !dlg && $('pause').hidden && $('overlay').hidden;
+    if ($('quiz').hidden === on) {
+      $('quiz').hidden = !on;
+      if (on) blurFocus();
+    }
+    if (!qz) quizUi.key = '';
+    if (!on) return;
+    renderQuiz(qz);
+    if (AUTO_QUIZ && quizUi.auto !== quizUi.key && !qz.lk) {
+      quizUi.auto = quizUi.key;
+      answerQuiz(qz);
+    }
+    const clock = '⏱ ' + Math.floor(qz.c) + ' s';
+    const msg = qz.lk > 0 ? I.t('quizWrong', qz.lk) : quizUi.msg;
+    const shown = clock + '|' + msg + '|' + (qz.lk > 0);
+    if (shown === quizUi.shown) return;
+    quizUi.shown = shown;
+    $('quizClock').textContent = clock;
+    $('quizMsg').textContent = msg;
+    $('quizGo').disabled = qz.lk > 0;
   }
 
   // ---------- input ----------
@@ -12029,6 +12861,12 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
     }
     if (e.code === 'Escape') {
       if (session && $('overlay').hidden && $('lobby').hidden) togglePause();
+      return;
+    }
+    if (!$('quiz').hidden) {
+      const L = QUIZ_KEYS[e.code];
+      if (L && !e.repeat) toggleQuiz(L);
+      else if (e.code === 'Enter' && !e.repeat) submitQuiz();
       return;
     }
     if (!inGame()) return;
@@ -12848,6 +13686,7 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
         ctx.fillStyle = '#1d2a18';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
       }
+      updateQuiz(isDemo ? null : view);
     }
     requestAnimationFrame(frame);
   }
@@ -12960,7 +13799,14 @@ window.YW_SFX = {"win":"data:audio/mpeg;base64,SUQzBAAAAAABUlRYWFgAAAASAAADbWFqb
       },
       startChapter,
       advanceDialogue,
-      endDialogue
+      endDialogue,
+      // Answers the math problem through the real buttons. Returns false when there is none open.
+      solveQuiz() {
+        const qz = lastView && lastView.me && lastView.me.qz;
+        if (!qz || $('quiz').hidden || qz.lk) return false;
+        answerQuiz(qz);
+        return true;
+      }
     };
   }
 

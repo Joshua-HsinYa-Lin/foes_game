@@ -232,6 +232,9 @@
     scope8: { name: { zh: '8倍鏡', en: '8x Scope' }, lv: 8 }
   };
 
+  // Seconds a player must wait after a wrong answer to the start-of-match math problem.
+  D.QUIZ_WAIT = 5;
+
   // Fighting back pays: this share of the damage a fighter deals to opponents comes back as health.
   D.LIFESTEAL = 0.1;
 
