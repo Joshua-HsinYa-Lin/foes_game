@@ -49,7 +49,7 @@ const addr = process.argv[2] || 'localhost:8099';
   const quiz = p => p.evaluate(() => ({ open: !document.getElementById('quiz').hidden, q: document.getElementById('quizQ').textContent, qp: PF_DEBUG.view.qp }));
   const qa = await quiz(alice);
   const qb = await quiz(bob);
-  check(qa.open && qb.open && qa.q === qb.q && qa.qp === 2, 'both get the same math problem before they can move');
+  check(qa.open && qb.open && qa.q && qb.q && qa.qp === 2, 'both get their own math problem before they can move');
   await alice.waitForFunction(() => PF_DEBUG.solveQuiz(), null, { timeout: 5000 });
   await alice.waitForTimeout(600);
   const qa2 = await quiz(alice);

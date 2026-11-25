@@ -16,7 +16,9 @@ A browser shooter set on the opening night of 允望樓 (Yunwang Tower). Captain
 - **區網對戰 LAN battle:** free-for-all, 紅藍對戰 Red vs Blue, or 全家合作 Family co-op (everyone against bots, fallen players come back).
 - Difficulty 1 (beginner) to 5 (hard).
 
-**Math check-in:** every game starts with a grade-10 math problem: five options, A to E, and you choose every correct one (for example ACD or BE). You can only move once you answer correctly; a wrong answer locks you out for 5 seconds. In a LAN match everyone gets the same problem with the options in a different order, whoever solves it first starts first, and the bots start together with the last person to solve it. Until then, people still solving and bots that are waiting cannot be hurt.
+**Math check-in:** every game starts with a math problem: five options, A to E, and you choose every correct one (for example ACD or BE). There are 46 kinds of problem from grade 7 to grade 12, and the numbers are generated fresh each time. You can only move once you answer correctly; a wrong answer locks you out for 5 seconds, and an unsolved problem comes back the next time you play, even after closing the game. **Hint** first shows which formula or theorem to use, then a YouTube search for lessons on the topic (a hint halves the experience for that problem). A correct answer gives your character experience, more for higher grades. In a LAN match each person gets their own problem; whoever solves first starts first, and the bots start together with the last person to solve. Until then, people still solving and bots that are waiting cannot be hurt.
+
+**Accounts:** the 👤 button on the title screen holds local accounts, stored only in this browser. Each keeps its own character levels, story progress, math level and unsolved problem. The math level goes from grade 7 to 12 in half steps (default 9.5). Going below 9.5 needs a family code, and a second family code skips a problem with no experience. The codes are not written in this README, and the game keeps only hashes of them, but anyone who edits the page or clears the browser's data can get around them.
 
 ## Characters
 
@@ -71,7 +73,7 @@ Six hidden details to find (the title screen counts them), breakable wooden buil
 | `js/sim.js` | Game simulation (browser and server) |
 | `js/render.js` | 2D and 2.5D drawing, HUD |
 | `js/client.js` | Menus, input, sessions |
-| `js/quiz.js` | Start-of-match math problems (built from a seed) |
+| `js/quiz.js` | Math problems: 46 kinds, grades 7–12, rebuilt from a seed and a grade |
 | `js/i18n.js`, `js/audio.js` | Text in both languages; music and sounds |
 | `server.js` | LAN server, no dependencies |
 | `assets/` | Music and recorded sounds (originals in `assets/sfx/original/`) |

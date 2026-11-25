@@ -1209,7 +1209,10 @@
       if (!p || !act || !VALID_ACTIONS[act.a] || p.actions.length > 12) return;
       const a = { a: act.a };
       if (act.i != null) a.i = clamp(Math.floor(Number(act.i) || 0), -1, 3);
-      if (act.a === 'quiz') a.ans = String(act.ans || '').slice(0, 10);
+      if (act.a === 'quiz') {
+        a.ans = String(act.ans || '').slice(0, 10);
+        if (act.skip != null) a.skip = String(act.skip).slice(0, 20);
+      }
       // A skill can carry its own aim (dragged from the skill button, or right mouse released).
       if (act.a === 'skill') {
         const aim = Number(act.aim);
@@ -2519,18 +2522,20 @@
 
     // ---------- start-of-match math problem ----------
 
-    // Everyone in the match gets the same problem, each with the options in their own order. Nothing moves
-    // until somebody solves it; each person then starts as soon as they solve it, and the bots come in
-    // together with the last person to solve it.
-    startQuiz(seed) {
-      this.quiz = { seed: seed >>> 0 || 1, clock: 0, open: false, botsIn: false };
+    // Each person brings their own problem (seed and grade, set on their account; an unsolved one comes back
+    // until it is solved). Nothing moves until somebody solves theirs; each person starts as soon as they
+    // solve theirs, and the bots come in together with the last person to solve one.
+    startQuiz() {
+      this.quiz = { clock: 0, open: false, botsIn: false };
       for (const p of this.players) this.giveQuiz(p);
       this.checkQuiz();
     }
 
-    giveQuiz(p) {
+    giveQuiz(p, spec) {
       if (!this.quiz || p.bot || p.kind !== 'player') return;
-      p.quiz = { o: Math.imul(this.quiz.seed ^ 0x5bd1e995, p.id + 7) >>> 0 || 1, t0: this.quiz.clock, lock: 0, wrong: 0 };
+      spec = spec || p.quizSpec || {};
+      const seed = Number(spec.seed) >>> 0 || Q.newSeed();
+      p.quiz = { seed, grade: Q.normGrade(spec.grade == null ? Q.DEFAULT_GRADE : spec.grade), t0: this.quiz.clock, lock: 0, wrong: 0 };
     }
 
     // People still solving and bots still waiting are not in play: they cannot move, be hurt or be targeted.
@@ -2544,7 +2549,7 @@
       qz.clock += dt;
       for (const p of this.players) {
         if (!p.quiz) continue;
-        for (const a of p.actions) if (a.a === 'quiz' && p.quiz) this.answerQuiz(p, a.ans);
+        for (const a of p.actions) if (a.a === 'quiz' && p.quiz) this.answerQuiz(p, a);
         p.actions.length = 0;
       }
       this.checkQuiz();
@@ -2559,27 +2564,37 @@
       if (this.players.some(p => p.bot && p.alive) && this.players.some(p => !p.bot)) this.ev({ e: 'msg', g: 1, k: 'msg_botsIn' });
     }
 
-    answerQuiz(p, ans) {
+    answerQuiz(p, act) {
       const qz = this.quiz;
-      if (qz.clock < p.quiz.lock) return;
-      if (Q.norm(ans) !== Q.make(qz.seed, p.quiz.o).ans) {
-        p.quiz.wrong++;
-        p.quiz.lock = qz.clock + D.QUIZ_WAIT;
-        this.ev({ e: 'quiz', to: p.id, ok: 0 });
-        return;
+      const skip = act.skip != null;
+      if (skip) {
+        // The family skip code lets a person start without answering (and without experience).
+        if (!Q.codeOk('skip', act.skip)) {
+          this.ev({ e: 'quiz', to: p.id, ok: 0, code: 1 });
+          return;
+        }
+      } else {
+        if (qz.clock < p.quiz.lock) return;
+        if (Q.norm(act.ans) !== Q.make(p.quiz.seed, p.quiz.grade).ans) {
+          p.quiz.wrong++;
+          p.quiz.lock = qz.clock + D.QUIZ_WAIT;
+          this.ev({ e: 'quiz', to: p.id, ok: 0 });
+          return;
+        }
       }
       const t = Math.round((qz.clock - p.quiz.t0) * 10) / 10;
+      const done = p.quiz;
       p.quiz = null;
       p.shieldT = this.time + 2;
       qz.open = true;
-      this.ev({ e: 'quiz', to: p.id, ok: 1, t });
-      this.ev({ e: 'msg', g: 1, k: 'msg_solved', a: [p.name, t] });
+      this.ev({ e: 'quiz', to: p.id, ok: 1, t, s: done.seed, g: done.grade, skip: skip ? 1 : 0 });
+      this.ev({ e: 'msg', g: 1, k: skip ? 'msg_skipped' : 'msg_solved', a: [p.name, t] });
     }
 
     quizHud(p) {
       if (!p.quiz) return null;
       const qz = this.quiz;
-      return { s: qz.seed, o: p.quiz.o, lk: Math.max(0, Math.ceil(p.quiz.lock - qz.clock)), c: Math.round((qz.clock - p.quiz.t0) * 10) / 10 };
+      return { s: p.quiz.seed, g: p.quiz.grade, lk: Math.max(0, Math.ceil(p.quiz.lock - qz.clock)), c: Math.round((qz.clock - p.quiz.t0) * 10) / 10 };
     }
 
     // ---------- step ----------

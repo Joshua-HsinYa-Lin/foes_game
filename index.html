@@ -36,6 +36,7 @@
       <button id="tMusic" class="chip"></button>
       <button id="tSfx" class="chip"></button>
       <button id="tFull" class="chip" hidden data-i18n="fullscreen"></button>
+      <button id="tAcct" class="chip"></button>
     </div>
     <details id="secrets" class="controls secrets"><summary id="secretsSum"></summary><ul id="secretsList"></ul></details>
     <p id="lanNote" class="note"></p>
@@ -181,10 +182,40 @@
     <p class="note quiz-hint" data-i18n="quizHint"></p>
     <p id="quizQ" class="quiz-q"></p>
     <div id="quizOpts" class="quiz-opts"></div>
+    <div id="quizHelp" class="quiz-help" hidden>
+      <p id="quizHelpText"></p>
+      <a id="quizVideo" target="_blank" rel="noopener noreferrer" hidden></a>
+    </div>
+    <p id="quizMsg" class="quiz-msg"></p>
     <div class="quiz-foot">
-      <span id="quizMsg" class="quiz-msg"></span>
+      <button id="quizSkip" class="btn" data-i18n="quizSkip"></button>
+      <button id="quizHelpBtn" class="btn"></button>
       <button id="quizGo" class="btn primary" data-i18n="quizSubmit"></button>
     </div>
+  </div>
+</div>
+
+<div id="account" class="screen dim" hidden>
+  <div class="card acct-card">
+    <h2 data-i18n="acctTitle"></h2>
+    <p class="note" data-i18n="acctIntro"></p>
+    <p id="acctNow" class="acct-now"></p>
+    <div id="acctList" class="acct-list"></div>
+    <div class="acct-new"><input id="acctName" maxlength="16" autocomplete="off"><button id="acctAdd" class="btn" data-i18n="acctAdd"></button></div>
+    <div class="field"><span data-i18n="mathGrade"></span><div class="range"><input type="range" id="mathGrade" min="7" max="12" step="0.5"><b id="mathGradeV"></b></div></div>
+    <p class="note" data-i18n="gradeNote"></p>
+    <p id="acctPending" class="note acct-pending"></p>
+    <button id="acctDone" class="btn primary" data-i18n="acctDone"></button>
+  </div>
+</div>
+
+<div id="codeBox" class="screen dim" hidden>
+  <div class="card small">
+    <h2 id="codeTitle"></h2>
+    <p id="codeText" class="note"></p>
+    <input id="codeInput" class="code-input" type="password" inputmode="numeric" autocomplete="off" maxlength="20">
+    <p id="codeMsg" class="quiz-msg"></p>
+    <div class="btns"><button id="codeCancel" class="btn" data-i18n="codeCancel"></button><button id="codeOk" class="btn primary" data-i18n="codeOk"></button></div>
   </div>
 </div>
 

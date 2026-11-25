@@ -264,8 +264,9 @@ function startMatch() {
   }
   sim.fillBots(humans.length + matchBots());
   sim.setupTeams();
-  // Everyone starts with the same math problem; bots wait until the last person has solved it.
-  sim.startQuiz((Math.random() * 4294967296) >>> 0);
+  // Everyone starts with their own math problem; bots wait until the last person has solved theirs.
+  for (const c of humans) sim.playerMap.get(c.pid).quizSpec = c.quiz;
+  sim.startQuiz();
   mapData = sim.getMapData();
   for (const c of humans) c.send({ t: 'welcome', id: c.pid, map: mapData, match: matchNo });
   state = 'playing';
@@ -278,7 +279,7 @@ function lateJoin(c) {
   if (sim.time < 40) {
     c.pid = sim.addPlayer(c.name, false, Object.assign({ char: c.char, team: room.mode === 'teams' ? c.team || 0 : 0 }, c.lo));
     sim.joinTeam(sim.playerMap.get(c.pid));
-    sim.giveQuiz(sim.playerMap.get(c.pid));
+    sim.giveQuiz(sim.playerMap.get(c.pid), c.quiz);
     sim.setAspect(c.pid, c.aspect);
     c.spectator = false;
   } else {
@@ -328,6 +329,7 @@ function onMessage(c, raw) {
     c.char = D.CHARS[m.char] ? m.char : 'yunwang';
     c.lo = D.validLoadout(c.char, m.level, m.gadget, m.perk);
     c.aspect = Number(m.aspect) || 1.7;
+    c.quiz = m.quiz && typeof m.quiz === 'object' ? { seed: m.quiz.seed, grade: m.quiz.grade } : null;
     ensureHost();
     console.log('Player joined: ' + c.name + ' (' + c.addr + ')' + (c.cid === hostCid ? ' [host]' : ''));
     if (state === 'playing') lateJoin(c);
@@ -335,6 +337,11 @@ function onMessage(c, raw) {
     return;
   }
   if (!c.joined) return;
+  // The player's next math problem (sent again after they solve one); used when the next match starts.
+  if (m.t === 'qspec') {
+    if (m.quiz && typeof m.quiz === 'object') c.quiz = { seed: m.quiz.seed, grade: m.quiz.grade };
+    return;
+  }
   if (m.t === 'cfg') {
     if (c.cid !== hostCid || state !== 'lobby') return;
     const bots = Math.floor(Number(m.bots));

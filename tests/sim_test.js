@@ -421,21 +421,29 @@ function duel(charA, charB, opts) {
 {
   const Q = require(path.join(__dirname, '..', 'js', 'quiz.js'));
   let wellFormed = true;
-  for (let s = 1; s <= 2000; s++) {
-    const p = Q.make(s, s + 99);
+  let inGrade = true;
+  for (let s = 1; s <= 3000; s++) {
+    const g = 7 + 0.5 * (s % 11);
+    const p = Q.make(s, g);
     if (p.opts.length !== 5 || p.ans.length < 1 || p.ans.length > 4 || /NaN|undefined/.test(JSON.stringify(p))) wellFormed = false;
+    if (Math.abs(p.g - g) > 0.5) inGrade = false;
   }
-  check(wellFormed, '2000 problems all have five options and one to four right answers');
+  check(wellFormed, '3000 problems all have five options and one to four right answers');
+  check(inGrade, 'every problem comes from within half a grade of the chosen grade');
+  check(Q.make(42, 9.5).q.en === Q.make(42, 9.5).q.en && Q.make(42, 9.5).q.en !== Q.make(43, 9.5).q.en, 'the same seed gives the same problem, a new seed new numbers');
+  check(Q.sha256('abc') === 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad', 'the code check hashes correctly');
 
   const sim = new Sim({ seed: 4 });
   const a = sim.playerMap.get(sim.addPlayer('Ann', false, {}));
   const b = sim.playerMap.get(sim.addPlayer('Bob', false, {}));
   sim.fillBots(4);
   const bot = sim.players.find(p => p.bot);
-  sim.startQuiz(777);
+  a.quizSpec = { seed: 777, grade: 12 };
+  b.quizSpec = { seed: 888, grade: 7 };
+  sim.startQuiz();
   steps(sim, 30);
-  check(sim.time === 0, 'nothing moves until somebody solves the problem');
-  const ansA = Q.make(777, a.quiz.o).ans;
+  check(sim.time === 0 && a.quiz.grade === 12 && b.quiz.grade === 7, 'each person gets a problem at their own grade, and nothing moves yet');
+  const ansA = Q.make(777, 12).ans;
   sim.pushAction(a.id, { a: 'quiz', ans: ansA === 'A' ? 'B' : 'A' });
   steps(sim, 1);
   sim.pushAction(a.id, { a: 'quiz', ans: ansA });
@@ -447,9 +455,16 @@ function duel(charA, charB, opts) {
   check(!a.quiz && sim.time > 0, 'the right answer lets Ann start and the match begins');
   sim.damagePlayer(b, 40, a.id, 'gun');
   check(sim.held(b) && sim.held(bot) && b.hp === b.maxHp, 'Bob (still solving) and the bots wait and cannot be hurt');
-  sim.pushAction(b.id, { a: 'quiz', ans: Q.make(777, b.quiz.o).ans });
+  sim.pushAction(b.id, { a: 'quiz', skip: 'not the code' });
   steps(sim, 1);
-  check(!sim.held(b) && !sim.held(bot), 'the bots come in with the last person to solve it');
+  check(!!b.quiz, 'a wrong skip code does not skip');
+  // a stand-in code, so the family's codes are not written here
+  const real = Q.HASH.skip;
+  Q.HASH.skip = Q.sha256('yunwang:skip:test');
+  sim.pushAction(b.id, { a: 'quiz', skip: 'test' });
+  steps(sim, 1);
+  Q.HASH.skip = real;
+  check(!sim.held(b) && !sim.held(bot), 'the skip code lets Bob start, and the bots come in with the last person');
 }
 
 // ---------- health from damage dealt ----------

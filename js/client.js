@@ -29,14 +29,73 @@
   };
 
   I.lang = store.get('lang', 'zh') === 'en' ? 'en' : 'zh';
+  const QZ = globalThis.PF_QUIZ;
+
+  // Local accounts. Each keeps its own levels, choices, story progress, secrets and math settings in this
+  // browser; the first account keeps the keys the game used before there were accounts.
+  let accounts = [];
+  try {
+    accounts = JSON.parse(store.get('accounts', '[]'));
+  } catch (e) {
+    accounts = [];
+  }
+  if (!Array.isArray(accounts) || !accounts.length) accounts = [{ id: 'a1', name: store.get('name', '') || I.t('acctDefault', 1) }];
+  let acctId = store.get('acct', accounts[0].id);
+  if (!accounts.some(a => a.id === acctId)) acctId = accounts[0].id;
+  const ustore = {
+    get: (k, d) => store.get(acctId === 'a1' ? k : 'u.' + acctId + '.' + k, d),
+    set: (k, v) => store.set(acctId === 'a1' ? k : 'u.' + acctId + '.' + k, v)
+  };
+  function saveAccounts() {
+    store.set('accounts', JSON.stringify(accounts));
+    store.set('acct', acctId);
+  }
+  saveAccounts();
+
+  function readJson(k, d) {
+    try {
+      const v = JSON.parse(ustore.get(k, 'null'));
+      return v == null ? d : v;
+    } catch (e) {
+      return d;
+    }
+  }
+
+  function mathGrade() {
+    return QZ.normGrade(ustore.get('math.grade', QZ.DEFAULT_GRADE));
+  }
+
+  // The unsolved problem of this account ({s: seed, g: grade, h: hints used, seen}), if any.
+  function getPending() {
+    const p = readJson('math.pending', null);
+    return p && p.s ? p : null;
+  }
+
+  function setPending(p) {
+    ustore.set('math.pending', p ? JSON.stringify(p) : 'null');
+  }
+
+  function mathStats() {
+    return Object.assign({ solved: 0, skipped: 0, xp: 0 }, readJson('math.stats', {}));
+  }
+
+  // The problem for the next game: the unsolved one if there is one, otherwise a new one at this account's grade.
+  function nextProblem() {
+    let p = getPending();
+    if (!p) {
+      p = { s: QZ.newSeed(), g: mathGrade(), h: 0 };
+      setPending(p);
+    }
+    return { seed: p.s, grade: p.g };
+  }
   const prefs = {
     music: store.get('music', '1') === '1',
     sfx: store.get('sfx', '1') === '1',
-    char: D.CHARS[store.get('char', 'yunwang')] ? store.get('char', 'yunwang') : 'yunwang',
+    char: D.CHARS[ustore.get('char', 'yunwang')] ? ustore.get('char', 'yunwang') : 'yunwang',
     diff: D.diffLevel(store.get('diff', '')) || 2,
     bots: SIM.clamp(Number(store.get('bots', 13)) || 13, 1, 29),
-    progress: SIM.clamp(Number(store.get('progress', 0)) || 0, 0, D.STORY.length),
-    trial: store.get('trial', '0') === '1',
+    progress: SIM.clamp(Number(ustore.get('progress', 0)) || 0, 0, D.STORY.length),
+    trial: ustore.get('trial', '0') === '1',
     view3d: store.get('view3d', '1') === '1'
   };
   Sound.initMusic(window.YW_MUSIC || { theme: 'assets/yunwang_theme.mp3', quiet: 'assets/quiet_room.mp3' });
@@ -63,7 +122,7 @@
   let lastView = null;
   const SECRET_IDS = ['notice', 'cat', 'gold', 'log', 'recipe', 'plane'];
   const NOTE_IDS = { notice: 1, log: 1, recipe: 1 };
-  const found = new Set(String(store.get('secrets', '')).split(',').filter(k => SECRET_IDS.indexOf(k) >= 0));
+  const found = new Set(String(ustore.get('secrets', '')).split(',').filter(k => SECRET_IDS.indexOf(k) >= 0));
   let noteAt = null;
   let sfx = {};
 
@@ -104,7 +163,10 @@
           this.sim.fillBots(o.bots + 1);
         }
       }
-      if (!this.demo) this.sim.startQuiz((Math.random() * 4294967296) >>> 0);
+      if (!this.demo) {
+        this.sim.playerMap.get(this.myId).quizSpec = o.quiz;
+        this.sim.startQuiz();
+      }
       this.map = this.sim.getMapData();
       this.mapVersion = 1;
       this.spec = 0;
@@ -223,7 +285,7 @@
         setTimeout(() => this.handlers.onClose && this.handlers.onClose(this), 0);
         return;
       }
-      this.ws.onopen = () => this.send(Object.assign({ t: 'join', name: o.name, char: o.char, aspect: window.innerWidth / window.innerHeight }, loadoutOf(o.char)));
+      this.ws.onopen = () => this.send(Object.assign({ t: 'join', name: o.name, char: o.char, aspect: window.innerWidth / window.innerHeight, quiz: o.quiz }, loadoutOf(o.char)));
       this.ws.onmessage = m => {
         let msg;
         try {
@@ -358,7 +420,7 @@
 
   // ---------- screens ----------
 
-  const SCREENS = ['title', 'heroes', 'chapters', 'dialogue', 'overlay', 'pause', 'lobby'];
+  const SCREENS = ['title', 'heroes', 'chapters', 'dialogue', 'overlay', 'pause', 'lobby', 'account'];
 
   function show(id, on) {
     $(id).hidden = !on;
@@ -393,12 +455,14 @@
     if (!$('lobby').hidden) renderRoom();
     renderHeroCards();
     renderChapters();
+    updateAcctChip();
+    if (!$('account').hidden) renderAccount();
   }
 
   // ---------- character levels and loadouts ----------
 
   function xpOf(id) {
-    return Math.max(0, Number(store.get('xp.' + id, 0)) || 0);
+    return Math.max(0, Number(ustore.get('xp.' + id, 0)) || 0);
   }
 
   function levelOf(id) {
@@ -407,7 +471,7 @@
 
   function choiceOf(tbl, key, id) {
     const ids = Object.keys(tbl).filter(k => tbl[k].char === id);
-    const saved = store.get(key + id, '');
+    const saved = ustore.get(key + id, '');
     return ids.indexOf(saved) >= 0 ? saved : ids[0];
   }
 
@@ -425,7 +489,7 @@
     if (prefs.trial || !D.CHARS[id]) return '';
     const before = D.levelForXp(xpOf(id));
     const xp = xpOf(id) + gain;
-    store.set('xp.' + id, xp);
+    ustore.set('xp.' + id, xp);
     const after = D.levelForXp(xp);
     let txt = I.t('xpGain', I.pick(D.CHARS[id].name), gain);
     if (after > before) {
@@ -461,7 +525,7 @@
       b.appendChild(lv);
       b.addEventListener('click', () => {
         prefs.char = id;
-        store.set('char', id);
+        ustore.set('char', id);
         Sound.play('click');
         renderHeroCards();
       });
@@ -515,7 +579,7 @@
         b.disabled = level < need;
         b.title = I.pick(tbl[k].text);
         b.addEventListener('click', () => {
-          store.set(key + id, k);
+          ustore.set(key + id, k);
           Sound.play('click');
           renderHeroInfo();
         });
@@ -568,8 +632,8 @@
 
   function heroOpts() {
     const name = $('name').value.trim().slice(0, 16) || I.pick(D.CHARS[prefs.char].name);
-    store.set('name', $('name').value.trim().slice(0, 16));
-    return Object.assign({ name, char: prefs.char, difficulty: prefs.diff, bots: prefs.bots }, loadoutOf(prefs.char));
+    ustore.set('name', $('name').value.trim().slice(0, 16));
+    return Object.assign({ name, char: prefs.char, difficulty: prefs.diff, bots: prefs.bots, quiz: nextProblem() }, loadoutOf(prefs.char));
   }
 
   function openHeroSelect(mode) {
@@ -676,6 +740,8 @@
       demo.destroy();
       demo = null;
     }
+    // Always the account's current problem: the unsolved one, or a new one after the last was solved.
+    opts = Object.assign({}, opts, { quiz: nextProblem() });
     lastOpts = opts;
     resetUi();
     session = new OfflineSession(opts);
@@ -810,7 +876,7 @@
         b.disabled = r.state !== 'lobby';
         b.addEventListener('click', () => {
           prefs.char = id;
-          store.set('char', id);
+          ustore.set('char', id);
           Sound.play('click');
           if (session && session.kind === 'online') session.setChar(id);
         });
@@ -1065,13 +1131,9 @@
           break;
         }
         case 'quiz':
-          quizUi.msg = '';
-          if (e.ok) {
-            Sound.play('pickup');
-            renderer.banner(I.t('quizRight', e.t), '#ffd75e');
-          } else {
-            Sound.play('empty');
-          }
+          quizUi.msg = e.code ? I.t('codeWrong') : '';
+          if (e.ok) onQuizDone(e);
+          else Sound.play('empty');
           break;
         case 'kill': {
           let txt;
@@ -1116,7 +1178,7 @@
     if (SECRET_IDS.indexOf(id) < 0) return;
     if (!found.has(id)) {
       found.add(id);
-      store.set('secrets', Array.from(found).join(','));
+      ustore.set('secrets', Array.from(found).join(','));
       Sound.play('secret');
       ui.notices.push({ txt: I.t('secretFound', found.size, SECRET_IDS.length, I.t('sec_' + id)), t: renderer.time, col: '#ffe27a' });
       if (ui.notices.length > 3) ui.notices.shift();
@@ -1221,34 +1283,61 @@
 
   // ---------- start-of-match math problem ----------
 
-  const QUIZ = globalThis.PF_QUIZ;
   const QUIZ_KEYS = { KeyA: 'A', KeyB: 'B', KeyC: 'C', KeyD: 'D', KeyE: 'E' };
-  const quizUi = { key: '', sel: new Set(), msg: '', shown: '', auto: '' };
+  const quizUi = { key: '', sel: new Set(), msg: '', shown: '', auto: '', h: 0 };
   // Test pages (?debug&autoquiz) answer the problem through the real buttons as soon as it shows.
   const AUTO_QUIZ = /[?&]debug\b/.test(window.location.search) && /[?&]autoquiz\b/.test(window.location.search);
 
   function answerQuiz(qz) {
-    const ans = QUIZ.make(qz.s, qz.o).ans;
-    for (const L of QUIZ.LETTERS) if (quizUi.sel.has(L) !== ans.includes(L)) toggleQuiz(L);
+    const ans = QZ.make(qz.s, qz.g).ans;
+    for (const L of QZ.LETTERS) if (quizUi.sel.has(L) !== ans.includes(L)) toggleQuiz(L);
     submitQuiz();
   }
 
-  // Rebuilds the problem from the seeds the game sends (same text for everyone, own option order).
+  // Hints used on this problem (kept with the account's unsolved problem, so closing the game keeps them).
+  function hintsFor(qz) {
+    const p = getPending();
+    return p && p.s === qz.s ? p.h || 0 : quizUi.h;
+  }
+
+  function showHelp(qz) {
+    const prob = QZ.make(qz.s, qz.g);
+    const h = hintsFor(qz);
+    $('quizHelp').hidden = h < 1;
+    $('quizHelpText').textContent = h >= 1 ? I.pick(prob.hint) + ' ' + I.t('quizHintCost') : '';
+    const a = $('quizVideo');
+    a.hidden = h < 2;
+    if (h >= 2) {
+      a.href = QZ.videoUrl(prob, I.lang);
+      a.textContent = I.t('quizVideoLink');
+    }
+    $('quizHelpBtn').hidden = h >= 2;
+    $('quizHelpBtn').textContent = I.t(h === 0 ? 'quizHelp1' : 'quizHelp2');
+  }
+
+  // Rebuilds the problem from the seed and grade the game sends.
   function renderQuiz(qz) {
-    const id = qz.s + ':' + qz.o;
+    const id = qz.s + ':' + qz.g;
     const key = id + ':' + I.lang;
     if (quizUi.key === key) return;
     if (quizUi.key.indexOf(id + ':') !== 0) {
       quizUi.sel.clear();
       quizUi.msg = '';
+      quizUi.h = 0;
+      const p = getPending();
+      if (p && p.s === qz.s && !p.seen) {
+        p.seen = 1;
+        setPending(p);
+      }
     }
     quizUi.key = key;
-    const prob = QUIZ.make(qz.s, qz.o);
+    quizUi.shown = '';
+    const prob = QZ.make(qz.s, qz.g);
     $('quizQ').textContent = I.pick(prob.q);
     const box = $('quizOpts');
     box.textContent = '';
     prob.opts.forEach((o, i) => {
-      const L = QUIZ.LETTERS[i];
+      const L = QZ.LETTERS[i];
       const b = document.createElement('button');
       b.className = 'quiz-opt';
       b.dataset.l = L;
@@ -1264,6 +1353,7 @@
       });
       box.appendChild(b);
     });
+    showHelp(qz);
   }
 
   function toggleQuiz(L) {
@@ -1289,6 +1379,59 @@
     $('quizGo').blur();
   });
 
+  // First press: which formula or theorem to use. Second press: a YouTube search for lessons on the topic.
+  $('quizHelpBtn').addEventListener('click', () => {
+    $('quizHelpBtn').blur();
+    const qz = lastView && lastView.me && lastView.me.qz;
+    if (!qz) return;
+    const h = Math.min(2, hintsFor(qz) + 1);
+    quizUi.h = h;
+    const p = getPending();
+    if (p && p.s === qz.s) {
+      p.h = h;
+      setPending(p);
+    }
+    Sound.play('click');
+    quizUi.shown = '';
+    showHelp(qz);
+  });
+
+  $('quizSkip').addEventListener('click', () => {
+    $('quizSkip').blur();
+    askCode('skip', I.t('codeSkipTitle'), I.t('codeSkipText'), code => {
+      if (!code) return;
+      act({ a: 'quiz', skip: code });
+      quizUi.msg = I.t('quizCheck');
+    });
+  });
+
+  // The problem was solved (or skipped with the code): clear it from the account, give the experience,
+  // and in a LAN game tell the server which problem to use next time.
+  function onQuizDone(e) {
+    const p = getPending();
+    const hints = p && p.s === e.s ? p.h || 0 : quizUi.h;
+    if (!p || p.s === e.s) setPending(null);
+    const st = mathStats();
+    let txt;
+    if (e.skip) {
+      st.skipped++;
+      txt = I.t('quizSkipped');
+      Sound.play('click');
+    } else {
+      const gain = QZ.credit(e.g, hints);
+      st.solved++;
+      st.xp += gain;
+      txt = I.t('quizRight', e.t) + '  ' + awardXp(prefs.char, gain);
+      Sound.play('pickup');
+    }
+    ustore.set('math.stats', JSON.stringify(st));
+    renderer.banner(e.skip ? I.t('quizSkipped') : I.t('quizRight', e.t), '#ffd75e');
+    ui.notices.push({ txt, t: renderer.time, col: '#b8f5a0' });
+    if (ui.notices.length > 3) ui.notices.shift();
+    if (session && session.kind === 'online') session.send({ t: 'qspec', quiz: nextProblem() });
+    updateAcctChip();
+  }
+
   function updateQuiz(view) {
     const qz = view && session && view.st === 'playing' && !view.spec && view.me ? view.me.qz : null;
     const on = !!qz && !dlg && $('pause').hidden && $('overlay').hidden;
@@ -1303,16 +1446,138 @@
       quizUi.auto = quizUi.key;
       answerQuiz(qz);
     }
-    const clock = '⏱ ' + Math.floor(qz.c) + ' s';
+    const info = I.t('quizInfo', qz.g, QZ.credit(qz.g, hintsFor(qz))) + ' · ⏱ ' + Math.floor(qz.c) + ' s';
     const msg = qz.lk > 0 ? I.t('quizWrong', qz.lk) : quizUi.msg;
-    const shown = clock + '|' + msg + '|' + (qz.lk > 0);
+    const shown = info + '|' + msg + '|' + (qz.lk > 0);
     if (shown === quizUi.shown) return;
     quizUi.shown = shown;
-    $('quizClock').textContent = clock;
+    $('quizClock').textContent = info;
     $('quizMsg').textContent = msg;
     $('quizGo').disabled = qz.lk > 0;
   }
 
+  // ---------- family codes ----------
+
+  let codeCb = null;
+  let codeKind = '';
+
+  function askCode(kind, title, text, cb) {
+    codeKind = kind;
+    codeCb = cb;
+    $('codeTitle').textContent = title;
+    $('codeText').textContent = text;
+    $('codeInput').value = '';
+    $('codeMsg').textContent = '';
+    show('codeBox', true);
+    setTimeout(() => $('codeInput').focus(), 0);
+  }
+
+  function closeCode(code) {
+    const cb = codeCb;
+    codeCb = null;
+    show('codeBox', false);
+    if (cb) cb(code);
+  }
+
+  $('codeOk').addEventListener('click', () => {
+    const v = $('codeInput').value.trim();
+    if (!QZ.codeOk(codeKind, v)) {
+      $('codeMsg').textContent = I.t('codeWrong');
+      Sound.play('empty');
+      return;
+    }
+    closeCode(v);
+  });
+  $('codeCancel').addEventListener('click', () => closeCode(null));
+
+  // ---------- accounts ----------
+
+  function acctName() {
+    const a = accounts.find(x => x.id === acctId);
+    return a ? a.name : '';
+  }
+
+  function updateAcctChip() {
+    $('tAcct').textContent = I.t('acctChip', acctName(), mathGrade());
+  }
+
+  function renderAccount() {
+    const st = mathStats();
+    $('acctNow').textContent = I.t('acctNow', acctName(), st.solved, st.skipped, st.xp);
+    const box = $('acctList');
+    box.textContent = '';
+    for (const a of accounts) {
+      const b = document.createElement('button');
+      b.className = 'chip' + (a.id === acctId ? ' on' : '');
+      b.textContent = a.name;
+      b.addEventListener('click', () => switchAccount(a.id));
+      box.appendChild(b);
+    }
+    $('acctName').placeholder = I.t('acctNamePh');
+    $('mathGrade').value = String(mathGrade());
+    $('mathGradeV').textContent = I.t('gradeV', mathGrade());
+    const p = getPending();
+    $('acctPending').textContent = p && p.seen ? I.t('acctPending', p.g) : '';
+    updateAcctChip();
+  }
+
+  // Loads the switched-to account's levels, progress and settings into the menus.
+  function switchAccount(id) {
+    acctId = id;
+    saveAccounts();
+    const c = ustore.get('char', 'yunwang');
+    prefs.char = D.CHARS[c] ? c : 'yunwang';
+    prefs.progress = SIM.clamp(Number(ustore.get('progress', 0)) || 0, 0, D.STORY.length);
+    prefs.trial = ustore.get('trial', '0') === '1';
+    found.clear();
+    for (const k of String(ustore.get('secrets', '')).split(',')) if (SECRET_IDS.indexOf(k) >= 0) found.add(k);
+    $('name').value = ustore.get('name', '');
+    renderHeroCards();
+    renderChapters();
+    renderSecrets();
+    renderAccount();
+  }
+
+  function setGrade(g) {
+    ustore.set('math.grade', g);
+    // a problem nobody has seen yet follows the new grade; one already shown stays until it is solved
+    const p = getPending();
+    if (p && !p.seen) setPending(null);
+    renderAccount();
+  }
+
+  $('tAcct').addEventListener('click', () => {
+    Sound.play('click');
+    onlyScreen('account');
+    renderAccount();
+  });
+  $('acctDone').addEventListener('click', () => onlyScreen('title'));
+  $('acctAdd').addEventListener('click', () => {
+    const name = $('acctName').value.trim().slice(0, 16) || I.t('acctDefault', accounts.length + 1);
+    const id = 'a' + Date.now().toString(36) + Math.floor(Math.random() * 1296).toString(36);
+    accounts.push({ id, name });
+    $('acctName').value = '';
+    switchAccount(id);
+    ustore.set('name', name);
+    $('name').value = name;
+  });
+  $('mathGrade').addEventListener('input', () => {
+    $('mathGradeV').textContent = I.t('gradeV', QZ.normGrade($('mathGrade').value));
+  });
+  $('mathGrade').addEventListener('change', () => {
+    const g = QZ.normGrade($('mathGrade').value);
+    if (g === mathGrade()) return;
+    if (g >= QZ.DEFAULT_GRADE) {
+      setGrade(g);
+      return;
+    }
+    askCode('lower', I.t('codeLowerTitle'), I.t('codeLowerText', g), code => {
+      if (code) setGrade(g);
+      else renderAccount();
+    });
+  });
+
+  // ---------- input ----------
   // ---------- input ----------
 
   function buildInput() {
@@ -1343,7 +1608,13 @@
 
   window.addEventListener('keydown', e => {
     if (e.target && e.target.tagName === 'INPUT') {
+      if (!$('codeBox').hidden) {
+        if (e.code === 'Enter') $('codeOk').click();
+        else if (e.code === 'Escape') $('codeCancel').click();
+        return;
+      }
       if (e.code === 'Enter' && !$('heroes').hidden) $('heroGo').click();
+      if (e.code === 'Enter' && !$('account').hidden) $('acctAdd').click();
       return;
     }
     if (e.code === 'Space' || e.code === 'Tab') e.preventDefault();
@@ -1903,7 +2174,7 @@
   $('tFull').addEventListener('click', () => goFullscreen());
   $('tTrial').addEventListener('click', () => {
     prefs.trial = !prefs.trial;
-    store.set('trial', prefs.trial ? 1 : 0);
+    ustore.set('trial', prefs.trial ? 1 : 0);
     Sound.play('click');
     renderHeroCards();
   });
@@ -1922,7 +2193,7 @@
 
   // ---------- menu wiring ----------
 
-  $('name').value = store.get('name', '');
+  $('name').value = ustore.get('name', '');
   $('bots').value = String(prefs.bots);
   $('botsv').textContent = String(prefs.bots);
   $('bots').addEventListener('input', () => {
@@ -2210,7 +2481,7 @@
           if (view.res === 'win') {
             const chId = D.STORY[flow.idx].id;
             prefs.progress = Math.max(prefs.progress, flow.idx + 1);
-            store.set('progress', prefs.progress);
+            ustore.set('progress', prefs.progress);
             playDialogue(I.STORY[chId].outro, () => showStoryResult(lastView || view));
           } else {
             showStoryResult(view);
@@ -2303,7 +2574,8 @@
         if (!qz || $('quiz').hidden || qz.lk) return false;
         answerQuiz(qz);
         return true;
-      }
+      },
+      account: () => ({ id: acctId, accounts, grade: mathGrade(), pending: getPending(), stats: mathStats() })
     };
   }
 
